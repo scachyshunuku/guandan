@@ -156,11 +156,11 @@ All of these can be done in parallel. Heavy unit test coverage.
 - **Estimated**: 10 hours
 
 ### Task 3.4: Game State Query API
-- [ ] `GET /api/game/[id]` - Get current game state
+- [x] `GET /api/game/[id]` - Get current game state
   - Return games, current game_rounds, game_participants with hands
   - Return game_actions for current round (for replay)
-- [ ] `GET /api/game/[id]/history` - Get complete game history
-- [ ] Unit tests: State serialization
+- [x] `GET /api/game/[id]/history` - Get complete game history
+- [x] Unit tests: State serialization
 - **Blockers**: Task 1.2
 - **Enables**: Task 4.x
 - **Testability**: Integration tests

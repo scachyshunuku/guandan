@@ -267,9 +267,14 @@ export type ExchangeCardsResponse =
 
 export interface GameStateResponse {
   game: Game;
-  round: GameRound;
+  // null while the game is still 'waiting': the first game_rounds row isn't
+  // created until start (ARCHITECTURE.md "Start Game").
+  round: GameRound | null;
   participants: GameParticipant[];
   myHand: CardWithWild[];
+  // This round's actions only (for replaying the current trick/round), not
+  // the full game history — see GET /api/game/[code]/history for that.
+  roundActions: GameAction[];
 }
 
 export interface GameActionsResponse {
