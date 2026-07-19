@@ -67,16 +67,17 @@ A trick works as follows:
 2. **Pair**: Two cards of the same rank
 3. **Triple**: Three cards of the same rank
 4. **Full house**: Three cards of one rank + two cards of another rank (e.g., 3-3-3-7-7)
-5. **Straight**: Five or more consecutive cards in natural order (any suit)
-   - Cannot wrap around (e.g., K-A-2 is not valid)
-6. **Tube**: Three consecutive pairs (e.g., 3-3-4-4-5-5)
-7. **Plate**: Two consecutive triples (e.g., 3-3-3-4-4-4)
+5. **Straight**: Exactly five consecutive cards in natural order (any suit) — no more, no fewer
+   - Ace can play low, as the card below 2 (e.g., A-2-3-4-5 is valid)
+   - Cannot wrap around both ends at once (e.g., K-A-2 is not valid, J-Q-K-A-2 is not valid)
+6. **Tube**: Three consecutive pairs (e.g., 3-3-4-4-5-5); same ace-low/no-wraparound rules as Straight (e.g., A-A-2-2-3-3 is valid, K-K-A-A-2-2 is not)
+7. **Plate**: Two consecutive triples (e.g., 3-3-3-4-4-4); same ace-low/no-wraparound rules as Straight
 
 ### Bombs (9 types)
 Bombs are special combinations that can beat any other combination of the same type. They rank from lowest to highest:
 1. Quadruple (four of a kind)
 2. Five of a kind
-3. Straight flush (all cards of the same suit in consecutive order)
+3. Straight flush (exactly five cards of the same suit in consecutive order)
 4. Six of a kind
 5. Seven of a kind
 6. Eight of a kind

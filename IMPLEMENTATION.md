@@ -58,12 +58,12 @@ All of these can be done in parallel. Heavy unit test coverage.
 - **Estimated**: 6 hours
 
 ### Task 2.2: Combination Validation
-- [ ] Create `lib/gameRules/combinations.ts`:
+- [x] Create `lib/gameRules/combinations.ts`:
   - `isValidSingle()`, `isValidPair()`, `isValidTriple()`, `isValidFullHouse()`, `isValidStraight()`, `isValidTube()`, `isValidPlate()`
   - `getComboType()` - identify combo type from cards
   - `getComboRank()` - rank for comparison (single vs pair vs bomb)
   - All 9 bomb types validation
-- [ ] Unit tests: 200+ test cases
+- [x] Unit tests: 200+ test cases
 - **Blockers**: Task 2.1
 - **Enables**: Task 2.3, 3.x
 - **Testability**: Unit tests with Jest
