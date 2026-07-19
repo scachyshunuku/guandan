@@ -114,8 +114,7 @@ export type GameActionType =
   | "leave";
 
 export interface Game {
-  id: string;
-  code: string; // shareable 6-char code used in URLs
+  id: string; // also the shareable game code used in URLs
   status: GameStatus;
   teamALevel: number; // 2-14, 14 = Ace
   teamBLevel: number; // 2-14, 14 = Ace
@@ -205,7 +204,6 @@ export interface GameAction {
 // ---------------------------------------------------------------------------
 
 export interface CreateGameResponse {
-  code: string;
   gameId: string;
   position: PlayerPosition;
 }
