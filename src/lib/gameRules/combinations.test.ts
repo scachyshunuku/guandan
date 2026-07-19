@@ -153,15 +153,20 @@ describe("isValidFullHouse", () => {
 });
 
 describe("isValidStraight", () => {
-  for (const length of [5, 6, 7, 8, 9, 10, 11, 12, 13]) {
-    it.each(straightStarts(length))(`a ${length}-run starting at index %i is a valid straight`, (start) => {
-      expect(isValidStraight(straightFrom(start, length))).toBe(true);
-    });
-  }
+  it.each(straightStarts(5))("a 5-run starting at index %i is a valid straight", (start) => {
+    expect(isValidStraight(straightFrom(start, 5))).toBe(true);
+  });
 
   it.each([1, 2, 3, 4])("a run of length %i is too short to be a straight", (length) => {
     expect(isValidStraight(straightFrom(0, length))).toBe(false);
   });
+
+  it.each([6, 7, 8, 9, 10, 11, 12, 13])(
+    "a run of length %i is too long to be a straight — straights are exactly 5 cards",
+    (length) => {
+      expect(isValidStraight(straightFrom(0, length))).toBe(false);
+    },
+  );
 
   it("J-Q-K-A-2 does not wrap around into a valid straight (5+ cards, so length alone can't explain a false result)", () => {
     expect(
@@ -187,7 +192,7 @@ describe("isValidStraight", () => {
     ).toBe(true);
   });
 
-  it("A-2-3-4-5-6 (a longer ace-low run) is a valid straight", () => {
+  it("A-2-3-4-5-6 is NOT a valid straight — ace-low doesn't relax the exactly-5-cards rule", () => {
     expect(
       isValidStraight([
         c("ACE", "SPADES"),
@@ -197,7 +202,7 @@ describe("isValidStraight", () => {
         c("5", "SPADES"),
         c("6", "SPADES"),
       ]),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("K-A-2-3-4 does not wrap around — ace can't bridge both KING and the low end at once", () => {
@@ -337,21 +342,23 @@ describe("bomb identification", () => {
     expect(isJokerBomb([j("RED_JOKER"), j("RED_JOKER"), j("RED_JOKER"), j("BLACK_JOKER")])).toBe(false);
   });
 
-  for (const length of [5, 6, 7, 8, 9, 10]) {
-    it.each(straightStarts(length))(
-      `a same-suit ${length}-run starting at index %i is a straight flush`,
-      (start) => {
-        const cards = straightFrom(start, length, "SPADES");
-        expect(isStraightFlush(cards)).toBe(true);
-        expect(isValidBomb(cards)).toBe(true);
-        expect(getComboType(cards)).toBe("straight_flush");
-      },
-    );
-  }
+  it.each(straightStarts(5))("a same-suit 5-run starting at index %i is a straight flush", (start) => {
+    const cards = straightFrom(start, 5, "SPADES");
+    expect(isStraightFlush(cards)).toBe(true);
+    expect(isValidBomb(cards)).toBe(true);
+    expect(getComboType(cards)).toBe("straight_flush");
+  });
 
   it("mixed suits in a run is not a straight flush", () => {
     expect(isStraightFlush(straightFrom(0, 5))).toBe(false);
   });
+
+  it.each([6, 7, 8, 9, 10])(
+    "a same-suit run of length %i is too long to be a straight flush — exactly 5 cards only",
+    (length) => {
+      expect(isStraightFlush(straightFrom(0, length, "SPADES"))).toBe(false);
+    },
+  );
 
   it("A-2-3-4-5 same suit is a valid straight flush (ace-low, same as isValidStraight)", () => {
     const cards = [c("ACE", "SPADES"), c("2", "SPADES"), c("3", "SPADES"), c("4", "SPADES"), c("5", "SPADES")];

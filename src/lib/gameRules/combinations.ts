@@ -106,11 +106,12 @@ export function isValidFullHouse(cards: Card[]): boolean {
   return groupSizes.length === 2 && groupSizes[0] === 2 && groupSizes[1] === 3;
 }
 
-// Five or more consecutive, distinct, standard ranks (no jokers), any suits.
-// Ace may anchor the run as either its highest or lowest card (RULES.md
-// "Ace can play low"), but never both — see resolveConsecutiveIndices.
+// Exactly five consecutive, distinct, standard ranks (no jokers), any suits —
+// no more, no fewer (RULES.md "Straight"). Ace may anchor the run as either
+// its highest or lowest card (RULES.md "Ace can play low"), but never both —
+// see resolveConsecutiveIndices.
 export function isValidStraight(cards: Card[]): boolean {
-  if (cards.length < 5) return false;
+  if (cards.length !== 5) return false;
   if (!cards.every((c) => isStandardRank(c.rank))) return false;
 
   const ranks = cards.map((c) => c.rank as StandardRank);
@@ -168,9 +169,9 @@ export function isJokerBomb(cards: Card[]): boolean {
   return redJokers === 2 && blackJokers === 2;
 }
 
-// Five or more consecutive ranks, all the same suit.
+// Exactly five consecutive ranks, all the same suit — length is enforced by
+// isValidStraight, not duplicated here.
 export function isStraightFlush(cards: Card[]): boolean {
-  if (cards.length < 5) return false;
   if (cards.some((c) => c.suit === undefined)) return false;
   if (!cards.every((c) => c.suit === cards[0].suit)) return false;
   return isValidStraight(cards);
