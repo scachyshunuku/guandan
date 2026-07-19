@@ -45,7 +45,7 @@ export default function PlayerHand({
           <div
             key={index}
             data-testid="card-back"
-            className="h-24 w-16 rounded-lg border-2 border-gray-400 bg-blue-800"
+            className="h-24 w-16 rounded-lg border-2 border-emerald-950 bg-emerald-700"
           />
         ))}
       </div>

@@ -70,9 +70,9 @@ export default function Card({ card, selected = false, onClick }: CardComponentP
       {card.actsAs && (
         <span
           data-testid="wild-indicator"
-          className="absolute -top-2 -right-2 rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 shadow-sm"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 shadow-sm"
         >
-          ≈{rankLabel(card.actsAs.rank)}
+          as {rankLabel(card.actsAs.rank)}
           {SUIT_SYMBOLS[card.actsAs.suit]}
         </span>
       )}

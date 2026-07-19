@@ -47,7 +47,7 @@ describe("Card", () => {
       actsAs: { suit: "SPADES", rank: "QUEEN" },
     };
     render(<Card card={wildCard} />);
-    expect(screen.getByTestId("wild-indicator")).toHaveTextContent("≈Q♠");
+    expect(screen.getByTestId("wild-indicator")).toHaveTextContent("as Q♠");
   });
 
   it("omits the wild indicator when actsAs is absent", () => {
