@@ -226,12 +226,12 @@ All of these can be done in parallel. Heavy unit test coverage.
 All can be built with mocks, integrated later.
 
 ### Task 5.1: Card Component & Hand Display
-- [ ] `components/game/Card.tsx` - Single card visual
+- [x] `components/game/Card.tsx` - Single card visual
   - Display suit + rank
   - Show wild card indicator if `actsAs` present
   - Click handler for selection
   - Unit tests: Rendering, wild card display
-- [ ] `components/game/PlayerHand.tsx` - Player's hand
+- [x] `components/game/PlayerHand.tsx` - Player's hand
   - Grid of cards
   - Card selection (highlight selected)
   - Show/hide based on player position
