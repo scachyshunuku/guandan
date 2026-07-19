@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import {
   mapGameActionRow,
   mapGameParticipantRow,
@@ -14,7 +13,6 @@ describe("mapGameRow", () => {
   it("maps snake_case columns to the camelCase Game shape", () => {
     const row: GameRow = {
       id: "game-1",
-      code: "ABC123",
       status: "in_progress",
       team_a_level: 5,
       team_b_level: 2,
@@ -25,7 +23,6 @@ describe("mapGameRow", () => {
 
     expect(mapGameRow(row)).toEqual({
       id: "game-1",
-      code: "ABC123",
       status: "in_progress",
       teamALevel: 5,
       teamBLevel: 2,
@@ -38,7 +35,6 @@ describe("mapGameRow", () => {
   it("preserves a winning team of 0 rather than treating it as falsy", () => {
     const row: GameRow = {
       id: "game-1",
-      code: "ABC123",
       status: "completed",
       team_a_level: 14,
       team_b_level: 9,

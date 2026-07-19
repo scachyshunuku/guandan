@@ -21,7 +21,6 @@ import type {
 
 export interface GameRow {
   id: string;
-  code: string;
   status: string;
   team_a_level: number;
   team_b_level: number;
@@ -69,7 +68,6 @@ export interface GameActionRow {
 export function mapGameRow(row: GameRow): Game {
   return {
     id: row.id,
-    code: row.code,
     status: row.status as GameStatus,
     teamALevel: row.team_a_level,
     teamBLevel: row.team_b_level,

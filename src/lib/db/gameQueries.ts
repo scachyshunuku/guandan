@@ -1,10 +1,11 @@
-// Shared lookup used by every /api/game/[code]/** route: resolves the
-// shareable game code from the URL (ARCHITECTURE.md section 2 "Game Code")
-// to its `games` row, or null if no such game exists.
+// Shared lookup used by every /api/game/[id]/** route: resolves the game's
+// UUID from the URL (ARCHITECTURE.md section 2 "Game Code" — the `id`
+// doubles as the shareable code, there's no separate code column) to its
+// `games` row, or null if no such game exists.
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { GameRow } from "@/lib/db/mappers";
 
-export function fetchGameRowByCode(code: string) {
-  return supabaseAdmin.from("games").select("*").eq("code", code).maybeSingle<GameRow>();
+export function fetchGameRowById(id: string) {
+  return supabaseAdmin.from("games").select("*").eq("id", id).maybeSingle<GameRow>();
 }

@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import { buildGameStateResponse, redactParticipantHands } from "./gameStateResponse";
 import type { Game, GameAction, GameParticipant, GameRound } from "@/lib/types";
 
@@ -71,7 +70,6 @@ describe("redactParticipantHands", () => {
 describe("buildGameStateResponse", () => {
   const game: Game = {
     id: "game-1",
-    code: "ABC123",
     status: "in_progress",
     teamALevel: 2,
     teamBLevel: 2,
