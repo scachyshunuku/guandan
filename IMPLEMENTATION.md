@@ -171,12 +171,12 @@ All of these can be done in parallel. Heavy unit test coverage.
 ## Phase 4: Frontend State & Real-time (Week 2) - Can start in parallel with Phase 3
 
 ### Task 4.1: Zustand Store Setup
-- [ ] Create `store/gameStore.ts`:
+- [x] Create `store/gameStore.ts`:
   - gameCode, gameStatus
   - participants, myPlayerId, myPosition, spectators
   - hand, currentTrick, currentPlayerTurn, scores
   - All mutations (setHand, updateTrick, updateParticipants, etc.)
-- [ ] Unit tests: Store updates, derived state
+- [x] Unit tests: Store updates, derived state
 - **Blockers**: Task 1.3
 - **Enables**: Task 4.2, 4.3
 - **Testability**: Unit tests with mock Zustand
