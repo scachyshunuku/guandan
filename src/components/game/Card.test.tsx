@@ -6,12 +6,12 @@ import type { CardWithWild } from "@/lib/types";
 describe("Card", () => {
   it("renders a standard rank and suit", () => {
     render(<Card card={{ suit: "SPADES", rank: "KING" }} />);
-    expect(screen.getByTestId("card")).toHaveTextContent("K♠");
+    expect(screen.getByTestId("card-image")).toHaveAttribute("src", "/cards/KS.svg");
   });
 
-  it("renders numeric ranks as-is", () => {
+  it("uses the compact asset code for numeric ranks", () => {
     render(<Card card={{ suit: "DIAMONDS", rank: "10" }} />);
-    expect(screen.getByTestId("card")).toHaveTextContent("10♦");
+    expect(screen.getByTestId("card-image")).toHaveAttribute("src", "/cards/10D.svg");
   });
 
   it("colors hearts and diamonds red", () => {
@@ -24,16 +24,20 @@ describe("Card", () => {
     expect(screen.getByTestId("card")).not.toHaveClass("text-red-600");
   });
 
-  it("renders jokers without a suit symbol", () => {
+  it("renders the red joker SVG", () => {
     render(<Card card={{ rank: "RED_JOKER" }} />);
     const card = screen.getByTestId("card");
-    expect(card).toHaveTextContent("JOKER");
+    expect(card).toHaveAttribute("aria-label", "red joker");
     expect(card).toHaveClass("text-red-600");
+    expect(screen.getByTestId("card-image")).toHaveAttribute("src", "/cards/RJ.svg");
   });
 
-  it("renders the black joker without red styling", () => {
+  it("renders the black joker SVG", () => {
     render(<Card card={{ rank: "BLACK_JOKER" }} />);
-    expect(screen.getByTestId("card")).not.toHaveClass("text-red-600");
+    const card = screen.getByTestId("card");
+    expect(card).toHaveAttribute("aria-label", "black joker");
+    expect(card).not.toHaveClass("text-red-600");
+    expect(screen.getByTestId("card-image")).toHaveAttribute("src", "/cards/BJ.svg");
   });
 
   it("shows a wild indicator when actsAs is present", () => {
@@ -43,7 +47,7 @@ describe("Card", () => {
       actsAs: { suit: "SPADES", rank: "QUEEN" },
     };
     render(<Card card={wildCard} />);
-    expect(screen.getByTestId("wild-indicator")).toHaveTextContent("as Q♠");
+    expect(screen.getByTestId("wild-indicator")).toHaveTextContent("≈Q♠");
   });
 
   it("omits the wild indicator when actsAs is absent", () => {
