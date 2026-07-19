@@ -40,18 +40,34 @@ function groupByRank(cards: Card[]): Map<Rank, Card[]> {
   return groups;
 }
 
-// Index within STANDARD_RANK_ORDER, ignoring level-rank elevation — used to
-// judge consecutiveness for straights/tubes/plates.
-function naturalRankIndex(card: Card): number {
-  return STANDARD_RANK_ORDER.indexOf(card.rank as StandardRank);
-}
-
-// True if `ranks` (already unique) form one unbroken ascending run.
+// True if `sortedIndices` (already unique) form one unbroken ascending run.
 function isConsecutiveRun(sortedIndices: number[]): boolean {
   for (let i = 1; i < sortedIndices.length; i++) {
     if (sortedIndices[i] !== sortedIndices[i - 1] + 1) return false;
   }
   return true;
+}
+
+// One below "2" (STANDARD_RANK_ORDER index 0) — lets Ace anchor a straight/
+// tube/plate as the *low* card (RULES.md: "Ace can play low", A-2-3-4-5 is
+// valid), without ever letting it bridge both ends of the order at once.
+const ACE_LOW_INDEX = -1;
+
+// Resolves `ranks` (assumed unique, no jokers) to per-rank indices under
+// whichever ordering makes them one consecutive run: normal (Ace high, after
+// KING) tried first, then Ace-low (Ace before "2") if Ace is present. Returns
+// null if neither ordering is consecutive. At most one ordering can ever
+// succeed — a run reaching both KING (Ace-high's neighbor) and "2" (Ace-low's
+// neighbor) spans 13 ranks and can't be a single run of 5-13 unique ranks
+// while also touching both ends — so there's no ambiguity to resolve, and
+// this is exactly what makes K-A-2 / J-Q-K-A-2 style wraparounds invalid.
+function resolveConsecutiveIndices(ranks: StandardRank[]): number[] | null {
+  const aceHigh = ranks.map((r) => STANDARD_RANK_ORDER.indexOf(r));
+  if (isConsecutiveRun([...aceHigh].sort((a, b) => a - b))) return aceHigh;
+
+  if (!ranks.includes("ACE")) return null;
+  const aceLow = ranks.map((r) => (r === "ACE" ? ACE_LOW_INDEX : STANDARD_RANK_ORDER.indexOf(r)));
+  return isConsecutiveRun([...aceLow].sort((a, b) => a - b)) ? aceLow : null;
 }
 
 // Shared shape check for tubes (groupCount=3, groupSize=2) and plates
@@ -65,8 +81,7 @@ function isConsecutiveGroupsOfN(cards: Card[], groupCount: number, groupSize: nu
 
   const ranks = [...groups.keys()];
   if (!ranks.every(isStandardRank)) return false;
-  const sorted = ranks.map((r) => STANDARD_RANK_ORDER.indexOf(r as StandardRank)).sort((a, b) => a - b);
-  return isConsecutiveRun(sorted);
+  return resolveConsecutiveIndices(ranks as StandardRank[]) !== null;
 }
 
 // ---------------------------------------------------------------------------
@@ -92,16 +107,16 @@ export function isValidFullHouse(cards: Card[]): boolean {
 }
 
 // Five or more consecutive, distinct, standard ranks (no jokers), any suits.
+// Ace may anchor the run as either its highest or lowest card (RULES.md
+// "Ace can play low"), but never both — see resolveConsecutiveIndices.
 export function isValidStraight(cards: Card[]): boolean {
   if (cards.length < 5) return false;
   if (!cards.every((c) => isStandardRank(c.rank))) return false;
 
-  const indices = cards.map(naturalRankIndex);
-  const uniqueIndices = new Set(indices);
-  if (uniqueIndices.size !== cards.length) return false; // one card per rank
+  const ranks = cards.map((c) => c.rank as StandardRank);
+  if (new Set(ranks).size !== ranks.length) return false; // one card per rank
 
-  const sorted = [...uniqueIndices].sort((a, b) => a - b);
-  return isConsecutiveRun(sorted);
+  return resolveConsecutiveIndices(ranks) !== null;
 }
 
 // Three consecutive pairs, e.g. 3-3-4-4-5-5.
@@ -204,11 +219,16 @@ export function getComboType(cards: Card[]): ComboType | null {
   return null;
 }
 
-// Highest natural-order rank index across a straight/tube/plate — deliberately
-// *not* level-elevated (see file header): the run's strength is about which
-// ranks it spans, not whether one member happens to be the level card.
-function highestNaturalRankIndex(cards: Card[]): number {
-  return Math.max(...cards.map(naturalRankIndex));
+// Highest rank index across a straight/tube/plate, resolved under whichever
+// ordering (Ace-high or Ace-low) made it a valid run — so an Ace-low run's
+// "top" is its highest non-Ace member, e.g. A-2-3-4-5 tops at "5", not Ace.
+// Deliberately *not* level-elevated (see file header): the run's strength is
+// about which ranks it spans, not whether one member happens to be the level
+// card. `cards` is assumed already valid (getComboType confirmed it), so
+// resolveConsecutiveIndices can't return null here.
+function highestRunRankIndex(cards: Card[]): number {
+  const ranks = [...new Set(cards.map((c) => c.rank as StandardRank))];
+  return Math.max(...resolveConsecutiveIndices(ranks)!);
 }
 
 function comboValue(cards: Card[], type: ComboType, levelRank: StandardRank): number {
@@ -223,7 +243,7 @@ function comboValue(cards: Card[], type: ComboType, levelRank: StandardRank): nu
     case "straight_flush":
     case "tube":
     case "plate":
-      return highestNaturalRankIndex(cards);
+      return highestRunRankIndex(cards);
     default:
       // single, pair, triple, bomb_4..bomb_10 — every card shares one rank.
       return getCardRank(cards[0], levelRank);

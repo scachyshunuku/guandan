@@ -175,7 +175,7 @@ describe("isValidStraight", () => {
     ).toBe(false);
   });
 
-  it("A-2-3-4-5 does not wrap around low either — ace is always high, never low", () => {
+  it("A-2-3-4-5 is a valid straight — ace can anchor a run as its lowest card", () => {
     expect(
       isValidStraight([
         c("ACE", "SPADES"),
@@ -183,6 +183,31 @@ describe("isValidStraight", () => {
         c("3", "SPADES"),
         c("4", "SPADES"),
         c("5", "SPADES"),
+      ]),
+    ).toBe(true);
+  });
+
+  it("A-2-3-4-5-6 (a longer ace-low run) is a valid straight", () => {
+    expect(
+      isValidStraight([
+        c("ACE", "SPADES"),
+        c("2", "SPADES"),
+        c("3", "SPADES"),
+        c("4", "SPADES"),
+        c("5", "SPADES"),
+        c("6", "SPADES"),
+      ]),
+    ).toBe(true);
+  });
+
+  it("K-A-2-3-4 does not wrap around — ace can't bridge both KING and the low end at once", () => {
+    expect(
+      isValidStraight([
+        c("KING", "SPADES"),
+        c("ACE", "SPADES"),
+        c("2", "SPADES"),
+        c("3", "SPADES"),
+        c("4", "SPADES"),
       ]),
     ).toBe(false);
   });
@@ -254,6 +279,14 @@ describe("isValidTube", () => {
       false,
     );
   });
+
+  it("A-A-2-2-3-3 is a valid tube — ace can anchor it low, same as a straight", () => {
+    expect(isValidTube([...nOfRank("ACE", 2), ...nOfRank("2", 2), ...nOfRank("3", 2)])).toBe(true);
+  });
+
+  it("K-K-A-A-2-2 does not wrap around into a valid tube", () => {
+    expect(isValidTube([...nOfRank("KING", 2), ...nOfRank("ACE", 2), ...nOfRank("2", 2)])).toBe(false);
+  });
 });
 
 describe("isValidPlate", () => {
@@ -271,6 +304,17 @@ describe("isValidPlate", () => {
 
   it("three consecutive pairs (a tube) is not a valid plate", () => {
     expect(isValidPlate(tubeFrom(0))).toBe(false);
+  });
+
+  it("A-A-A-2-2-2 is a valid plate — ace can anchor it low, same as a straight", () => {
+    expect(isValidPlate([...nOfRank("ACE", 3), ...nOfRank("2", 3)])).toBe(true);
+  });
+
+  it("K-K-K-A-A-A (ace-high) is still a valid plate alongside ace-low support", () => {
+    // A plate only ever spans 2 ranks, so — unlike a straight or tube — it
+    // can never reach both KING and "2" at once; there's no wraparound shape
+    // to test here, just confirming ace-high still works post ace-low support.
+    expect(isValidPlate([...nOfRank("KING", 3), ...nOfRank("ACE", 3)])).toBe(true);
   });
 });
 
@@ -307,6 +351,12 @@ describe("bomb identification", () => {
 
   it("mixed suits in a run is not a straight flush", () => {
     expect(isStraightFlush(straightFrom(0, 5))).toBe(false);
+  });
+
+  it("A-2-3-4-5 same suit is a valid straight flush (ace-low, same as isValidStraight)", () => {
+    const cards = [c("ACE", "SPADES"), c("2", "SPADES"), c("3", "SPADES"), c("4", "SPADES"), c("5", "SPADES")];
+    expect(isStraightFlush(cards)).toBe(true);
+    expect(getComboType(cards)).toBe("straight_flush");
   });
 
   it("11 of a kind is not a recognized bomb", () => {
@@ -478,5 +528,14 @@ describe("getComboRank", () => {
     const containsLevelCard = rank(tubeFrom(STANDARD_RANK_ORDER.indexOf("4")), level); // 4-5-6
     const topsHigherNoLevelCard = rank(tubeFrom(STANDARD_RANK_ORDER.indexOf("7")), level); // 7-8-9
     expect(topsHigherNoLevelCard).toBeGreaterThan(containsLevelCard);
+  });
+
+  it("an ace-low straight's strength comes from its highest non-ace card, not the ace", () => {
+    const aceLow = rank(
+      [c("ACE", "SPADES"), c("2", "CLUBS"), c("3", "HEARTS"), c("4", "DIAMONDS"), c("5", "SPADES")],
+      LEVEL,
+    ); // A-2-3-4-5, tops at "5"
+    const topsAtSeven = rank(straightFrom(STANDARD_RANK_ORDER.indexOf("3"), 5), LEVEL); // 3-4-5-6-7
+    expect(topsAtSeven).toBeGreaterThan(aceLow);
   });
 });
