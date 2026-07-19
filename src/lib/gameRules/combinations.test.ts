@@ -163,8 +163,40 @@ describe("isValidStraight", () => {
     expect(isValidStraight(straightFrom(0, length))).toBe(false);
   });
 
-  it("K-A-2 does not wrap around into a valid straight", () => {
-    expect(isValidStraight([c("KING", "SPADES"), c("ACE", "SPADES"), c("2", "SPADES")])).toBe(false);
+  it("J-Q-K-A-2 does not wrap around into a valid straight (5+ cards, so length alone can't explain a false result)", () => {
+    expect(
+      isValidStraight([
+        c("JACK", "SPADES"),
+        c("QUEEN", "SPADES"),
+        c("KING", "SPADES"),
+        c("ACE", "SPADES"),
+        c("2", "SPADES"),
+      ]),
+    ).toBe(false);
+  });
+
+  it("A-2-3-4-5 does not wrap around low either — ace is always high, never low", () => {
+    expect(
+      isValidStraight([
+        c("ACE", "SPADES"),
+        c("2", "SPADES"),
+        c("3", "SPADES"),
+        c("4", "SPADES"),
+        c("5", "SPADES"),
+      ]),
+    ).toBe(false);
+  });
+
+  it("10-J-Q-K-A is a valid straight (the highest one — ace high, no wraparound)", () => {
+    expect(
+      isValidStraight([
+        c("10", "SPADES"),
+        c("JACK", "SPADES"),
+        c("QUEEN", "SPADES"),
+        c("KING", "SPADES"),
+        c("ACE", "SPADES"),
+      ]),
+    ).toBe(true);
   });
 
   it("a gap in the run is not a valid straight", () => {
