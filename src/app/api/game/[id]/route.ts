@@ -13,12 +13,17 @@ import { fetchGameRowById } from "@/lib/db/gameQueries";
 import { unwrapSupabaseResult, withApiErrorHandling } from "@/lib/api/errorHandling";
 import { buildGameStateResponse } from "@/lib/gameStateResponse";
 
-// GET /api/game/[id]?playerId=... — current game state (IMPLEMENTATION.md
-// Task 3.4). `id` is the game's UUID, which doubles as its shareable code
-// (ARCHITECTURE.md section 2 "Game Code" — there's no separate code column).
-// `playerId` scopes which participant's hand is revealed; every other
-// participant's hand is redacted since game_participants isn't publicly
-// readable (see migration RLS notes).
+// GET /api/game/[id]?playerId=...
+//
+// Takes a game UUID/shareable code in `id` and an optional session `playerId`
+// query parameter. Returns the current GameStateResponse: the game, current
+// round (or null before the game starts), participants, the requesting
+// player's hand, and actions from the current round. It returns 404 when the
+// game does not exist.
+//
+// Used to hydrate the game screen when a player or spectator opens, refreshes,
+// or reconnects to a game. `playerId` determines which hand is returned;
+// every other participant's hand is redacted.
 export const GET = withApiErrorHandling<{ id: string }>(async (request, { params }) => {
   const { id } = await params;
   const requestingPlayerId = request.nextUrl.searchParams.get("playerId");
