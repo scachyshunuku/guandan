@@ -538,4 +538,13 @@ describe("getComboRank", () => {
     const topsAtSeven = rank(straightFrom(STANDARD_RANK_ORDER.indexOf("3"), 5), LEVEL); // 3-4-5-6-7
     expect(topsAtSeven).toBeGreaterThan(aceLow);
   });
+
+  it("A-2-3-4-5 is the lowest possible straight — no run can anchor any lower than ace-low", () => {
+    const aceLow = rank(
+      [c("ACE", "SPADES"), c("2", "CLUBS"), c("3", "HEARTS"), c("4", "DIAMONDS"), c("5", "SPADES")],
+      LEVEL,
+    );
+    const nextLowest = rank(straightFrom(STANDARD_RANK_ORDER.indexOf("2"), 5), LEVEL); // 2-3-4-5-6
+    expect(nextLowest).toBeGreaterThan(aceLow);
+  });
 });
