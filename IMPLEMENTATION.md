@@ -46,12 +46,12 @@ These tasks must be completed first as they unblock other work.
 All of these can be done in parallel. Heavy unit test coverage.
 
 ### Task 2.1: Card Utilities
-- [ ] Create `lib/cardUtils.ts`:
+- [x] Create `lib/cardUtils.ts`:
   - Card ranking comparison
   - Card sorting by rank/suit
   - Get card rank as number (for comparisons)
   - Encode/decode card string representation
-- [ ] Unit tests: 100+ test cases (all combinations)
+- [x] Unit tests: 100+ test cases (all combinations)
 - **Blockers**: Task 1.3
 - **Enables**: Tasks 2.2, 2.3, 3.x
 - **Testability**: Unit tests with Jest
