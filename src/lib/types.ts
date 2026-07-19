@@ -205,7 +205,6 @@ export interface GameAction {
 
 export interface CreateGameResponse {
   gameId: string;
-  position: PlayerPosition;
 }
 
 export interface JoinGameRequest {

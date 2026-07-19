@@ -96,22 +96,30 @@ All of these can be done in parallel. Heavy unit test coverage.
 
 ## Phase 3: Backend / API (Week 2) - Can start after Phase 1.2 & 2.x
 
-### Task 3.1: Game Creation & Join API
-- [ ] `POST /api/game/create` - Create new game
-  - Generate UUID as game code
-  - Initialize game_rounds (round 1)
-  - Shuffle & deal cards
-  - Store in database
-  - Return game code + initial state
-- [ ] `POST /api/game/[id]/join` - Join existing game
+### Task 3.1: Game Creation, Join & Start API
+- [x] `POST /api/game/create` - Create new game
+  - Generate UUID as game code (`games.id`)
+  - Initialize game_rounds (round 1, empty state, no cards dealt yet)
+  - Store in database with status='waiting'
+  - Return game code
+- [x] `POST /api/game/[id]/join` - Join existing game
   - Add to game_participants
   - Assign position (0-3) or mark as spectator
   - Return current game state
-- [ ] Unit tests: Create game, join as player, join as spectator, full game setup
+- [x] `POST /api/game/[id]/start` - Start the game once all 4 seats are filled
+  - Validate all 4 positions are occupied and game is still 'waiting'
+  - Shuffle 108 cards, deal 27 to each seated participant, store in game_participants.hand
+  - Randomly select the first leader; set game_rounds.leader_position / current_player_turn
+  - Set games.status = 'in_progress'
+  - Return the caller's own hand (broadcasting the new state to other
+    players is Task 4.2's realtimeSync/useGameRealtimeSync responsibility,
+    not this route's — hands must never go out on the public `games:[id]`
+    channel unscoped, see ARCHITECTURE.md RLS notes)
+- [x] Unit tests: Create game, join as player, join as spectator, start requires 4 players, full game setup
 - **Blockers**: Tasks 1.2, 1.3, 2.1
 - **Enables**: Task 3.2, 4.x
 - **Testability**: Integration tests with mock Supabase
-- **Estimated**: 6 hours
+- **Estimated**: 8 hours
 
 ### Task 3.2: Play Card API
 - [ ] `POST /api/game/[id]/play-cards`
