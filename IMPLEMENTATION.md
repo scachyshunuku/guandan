@@ -9,27 +9,27 @@ Breaking down the build into independently testable tasks with maximum paralleli
 These tasks must be completed first as they unblock other work.
 
 ### Task 1.1: Project Setup
-- [ ] Create Next.js 14+ project with TypeScript
-- [ ] Configure Supabase client
-- [ ] Set up environment variables
-- [ ] Configure Vercel deployment
+- [x] Create Next.js 14+ project with TypeScript
+- [x] Configure Supabase client
+- [x] Set up environment variables
+- [x] Configure Vercel deployment
 - **Blockers**: None
 - **Enables**: All other tasks
 - **Testability**: Manual only
 - **Estimated**: 2 hours
 
 ### Task 1.2: Database Schema & Migrations
-- [ ] Create Supabase project
-- [ ] Write initial schema migration (games, game_rounds, game_participants, game_actions tables)
-- [ ] Create indexes
-- [ ] Set up RLS policies
+- [x] Create Supabase project
+- [x] Write initial schema migration (games, game_rounds, game_participants, game_actions tables)
+- [x] Create indexes
+- [x] Set up RLS policies
 - **Blockers**: Task 1.1
 - **Enables**: Tasks 2.x (API routes)
 - **Testability**: Manual verification in Supabase
 - **Estimated**: 4 hours
 
 ### Task 1.3: Type Definitions
-- [ ] Create `lib/types.ts` with TypeScript interfaces:
+- [x] Create `lib/types.ts` with TypeScript interfaces:
   - Game, GameRound, GameParticipant, GameAction
   - Card, CardWithWild
   - GameState, CurrentTrick

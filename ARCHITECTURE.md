@@ -27,7 +27,7 @@ A real-time multiplayer Guandan card game using Supabase and Vercel. Private gam
 ```sql
 games (overall game state)
 ├── id (UUID, PK) -- game code/ID (shareable)
-├── status (ENUM: 'waiting', 'in_progress', 'completed')
+├── status (TEXT: 'waiting', 'in_progress', 'completed'; validated in app code)
 ├── team_a_level (INT) -- current level for team A (2-14, where 14=Ace)
 ├── team_b_level (INT) -- current level for team B (2-14)
 ├── winning_team (INT) -- 0 (team A) or 1 (team B), null if in_progress
@@ -41,7 +41,7 @@ game_rounds (per-round state, one per hand)
 ├── game_state (JSONB) -- {playedCards: {}, playedThisTrick: {...}, trickCount: int, ...}
 ├── current_player_turn (INT: 0-3) -- whose turn it is
 ├── leader_position (INT: 0-3) -- who led current trick
-├── status (ENUM: 'in_progress', 'card_exchange', 'completed')
+├── status (TEXT: 'in_progress', 'card_exchange', 'completed'; validated in app code)
 ├── finishing_positions (INT[]) -- [p0_finish, p1_finish, p2_finish, p3_finish] e.g. [1, 4, 2, 3]
 ├── created_at
 └── updated_at
@@ -63,7 +63,7 @@ game_actions (event log)
 ├── game_id (UUID, FK -> games.id)
 ├── round_id (UUID, FK -> game_rounds.id)
 ├── player_id (VARCHAR)
-├── action_type (ENUM: 'card_played', 'pass', 'card_exchange', 'join', 'leave')
+├── action_type (TEXT: 'card_played', 'pass', 'card_exchange', 'join', 'leave'; validated in app code)
 ├── action_data (JSONB) -- varies by action_type:
 │                         --   card_played: {cards: [{suit, rank}, ...], position: int}
 │                         --   card_exchange: {from: int, to: int, card: {suit, rank}, type: 'initial'|'return'}
@@ -88,12 +88,12 @@ Cards are objects with string suit and rank:
   {
     "currentTrick": [
       [{"suit": "CLUBS", "rank": "ACE"}],
-      null,
+      "PASS",
       [{"suit": "HEARTS", "rank": "KING"}]
     ]
   }
   ```
-  Array indices 0-3 represent player positions. `null` = passed, card array = played, missing index = hasn't played yet.
+  Entries are in turn order starting from the trick leader (`leader_position`), one per action taken so far. `"PASS"` = passed, card array = played. Position for entry `n` = `(leader_position + n) % 4`; a player who hasn't acted yet simply has no entry.
 - **action_data** (JSONB in game_actions): Flexible structure for different action types:
   - card_played: `{cards: [{suit, rank}, ...]}`
   - pass: `{}`
