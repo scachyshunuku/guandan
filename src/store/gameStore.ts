@@ -13,7 +13,9 @@ import type {
 } from "@/lib/types";
 
 export interface GameStoreState {
-  gameCode: string | null;
+  // Also the shareable code used in URLs - Game.id doubles as the game code
+  // (ARCHITECTURE.md "Game Code"), there's no separate short-code column.
+  gameId: string | null;
   gameStatus: GameStatus;
 
   // All rows from game_participants, seated players and spectators alike
@@ -31,7 +33,7 @@ export interface GameStoreState {
   // Indexed by Team (0 = team A, 1 = team B), mirrors Game.teamALevel/teamBLevel.
   teamLevels: [number, number];
 
-  setGame: (gameCode: string, myPlayerId: string) => void;
+  setGame: (gameId: string, myPlayerId: string) => void;
   setGameStatus: (status: GameStatus) => void;
   setMyPosition: (position: PlayerPosition | null) => void;
   setHand: (hand: CardWithWild[]) => void;
@@ -43,7 +45,7 @@ export interface GameStoreState {
 }
 
 const initialState = {
-  gameCode: null,
+  gameId: null,
   gameStatus: "waiting" as GameStatus,
   participants: [],
   myPlayerId: null,
@@ -57,7 +59,7 @@ const initialState = {
 export const useGameStore = create<GameStoreState>((set) => ({
   ...initialState,
 
-  setGame: (gameCode, myPlayerId) => set({ gameCode, myPlayerId }),
+  setGame: (gameId, myPlayerId) => set({ gameId, myPlayerId }),
   setGameStatus: (gameStatus) => set({ gameStatus }),
   setMyPosition: (myPosition) => set({ myPosition }),
   setHand: (hand) => set({ hand }),

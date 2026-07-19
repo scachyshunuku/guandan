@@ -33,7 +33,7 @@ describe("gameStore", () => {
 
   it("starts in the initial waiting state", () => {
     const state = useGameStore.getState();
-    expect(state.gameCode).toBeNull();
+    expect(state.gameId).toBeNull();
     expect(state.gameStatus).toBe("waiting");
     expect(state.participants).toEqual([]);
     expect(state.myPlayerId).toBeNull();
@@ -44,10 +44,10 @@ describe("gameStore", () => {
     expect(state.teamLevels).toEqual([2, 2]);
   });
 
-  it("setGame stores the game code and player id", () => {
-    useGameStore.getState().setGame("ABC123", "player-1");
+  it("setGame stores the game id and player id", () => {
+    useGameStore.getState().setGame("game-1", "player-1");
     const state = useGameStore.getState();
-    expect(state.gameCode).toBe("ABC123");
+    expect(state.gameId).toBe("game-1");
     expect(state.myPlayerId).toBe("player-1");
   });
 
@@ -94,7 +94,7 @@ describe("gameStore", () => {
 
   it("reset restores the initial state after mutations", () => {
     const store = useGameStore.getState();
-    store.setGame("ABC123", "player-1");
+    store.setGame("game-1", "player-1");
     store.setMyPosition(1);
     store.setHand([{ suit: "CLUBS", rank: "3" }]);
     store.setTeamLevels(10, 12);
@@ -102,7 +102,7 @@ describe("gameStore", () => {
     useGameStore.getState().reset();
 
     expect(useGameStore.getState()).toMatchObject({
-      gameCode: null,
+      gameId: null,
       myPlayerId: null,
       myPosition: null,
       hand: [],
