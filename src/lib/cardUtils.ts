@@ -40,12 +40,14 @@ export function isStandardRank(rank: Rank): rank is StandardRank {
   return rank !== "BLACK_JOKER" && rank !== "RED_JOKER";
 }
 
-// Numeric rank for comparisons; higher is stronger. `levelRank`, if given,
-// elevates matching cards to sit just below the jokers.
-export function getCardRank(card: Card, levelRank?: StandardRank): number {
+// Numeric rank for comparisons; higher is stronger. Every round has a level
+// (RULES.md "Level Cards & Wild Cards"), so `levelRank` is required rather
+// than optional — an omitted level would silently rank that round's level
+// cards as plain standard-rank cards instead of raising a type error.
+export function getCardRank(card: Card, levelRank: StandardRank): number {
   if (card.rank === "RED_JOKER") return RED_JOKER_VALUE;
   if (card.rank === "BLACK_JOKER") return BLACK_JOKER_VALUE;
-  if (levelRank !== undefined && card.rank === levelRank) return LEVEL_CARD_VALUE;
+  if (card.rank === levelRank) return LEVEL_CARD_VALUE;
   return STANDARD_RANK_VALUE[card.rank];
 }
 
@@ -55,7 +57,12 @@ export function getCardRank(card: Card, levelRank?: StandardRank): number {
 
 // Arbitrary but fixed, only used to break ties between same-rank cards (e.g.
 // duplicate suits across the two decks, or jokers) so sorting is stable.
-const SUIT_ORDER: Suit[] = ["CLUBS", "DIAMONDS", "SPADES", "HEARTS"];
+export const SUIT_ORDER: readonly Suit[] = Object.freeze([
+  "DIAMONDS",
+  "CLUBS",
+  "HEARTS",
+  "SPADES",
+]);
 
 function getSuitOrder(suit?: Suit): number {
   return suit === undefined ? -1 : SUIT_ORDER.indexOf(suit);
@@ -63,18 +70,14 @@ function getSuitOrder(suit?: Suit): number {
 
 // Ascending comparator (lowest rank first), for use with Array.sort / as a
 // building block for other comparisons.
-export function compareCards(
-  a: Card,
-  b: Card,
-  levelRank?: StandardRank,
-): number {
+export function compareCards(a: Card, b: Card, levelRank: StandardRank): number {
   const rankDiff = getCardRank(a, levelRank) - getCardRank(b, levelRank);
   if (rankDiff !== 0) return rankDiff;
   return getSuitOrder(a.suit) - getSuitOrder(b.suit);
 }
 
 // Returns a new array sorted ascending by rank (then suit).
-export function sortCards(cards: Card[], levelRank?: StandardRank): Card[] {
+export function sortCards(cards: Card[], levelRank: StandardRank): Card[] {
   return [...cards].sort((a, b) => compareCards(a, b, levelRank));
 }
 

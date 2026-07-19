@@ -1,5 +1,6 @@
 import type { Card, StandardRank, Suit } from "./types";
 import {
+  SUIT_ORDER,
   STANDARD_RANK_ORDER,
   compareCards,
   decodeCard,
@@ -9,13 +10,12 @@ import {
   sortCards,
 } from "./cardUtils";
 
-const SUITS: Suit[] = ["CLUBS", "DIAMONDS", "SPADES", "HEARTS"];
 const JOKER_RANKS = ["BLACK_JOKER", "RED_JOKER"] as const;
 
 function fullDeck(): Card[] {
   const deck: Card[] = [];
   for (const rank of STANDARD_RANK_ORDER) {
-    for (const suit of SUITS) {
+    for (const suit of SUIT_ORDER) {
       deck.push({ rank, suit });
     }
   }
@@ -23,6 +23,13 @@ function fullDeck(): Card[] {
     deck.push({ rank });
   }
   return deck;
+}
+
+// A level rank guaranteed not to match any of the given ranks, so a test can
+// assert on un-elevated ("no level card in play") behavior even though
+// getCardRank/compareCards/sortCards always require a level rank.
+function levelRankExcluding(...ranks: StandardRank[]): StandardRank {
+  return STANDARD_RANK_ORDER.find((r) => !ranks.includes(r))!;
 }
 
 describe("isStandardRank", () => {
@@ -37,22 +44,23 @@ describe("isStandardRank", () => {
 
 describe("getCardRank", () => {
   it.each(STANDARD_RANK_ORDER.map((rank, i) => [rank, i + 2] as const))(
-    "%s has base rank value %d (no level)",
+    "%s has base rank value %d (no level card in play)",
     (rank, expected) => {
-      expect(getCardRank({ rank, suit: "SPADES" })).toBe(expected);
+      const levelRank = levelRankExcluding(rank);
+      expect(getCardRank({ rank, suit: "SPADES" }, levelRank)).toBe(expected);
     },
   );
 
   it("black joker outranks every standard rank", () => {
-    const blackJoker = getCardRank({ rank: "BLACK_JOKER" });
+    const blackJoker = getCardRank({ rank: "BLACK_JOKER" }, "2");
     for (const rank of STANDARD_RANK_ORDER) {
-      expect(blackJoker).toBeGreaterThan(getCardRank({ rank, suit: "CLUBS" }));
+      expect(blackJoker).toBeGreaterThan(getCardRank({ rank, suit: "CLUBS" }, "2"));
     }
   });
 
   it("red joker outranks the black joker", () => {
-    expect(getCardRank({ rank: "RED_JOKER" })).toBeGreaterThan(
-      getCardRank({ rank: "BLACK_JOKER" }),
+    expect(getCardRank({ rank: "RED_JOKER" }, "2")).toBeGreaterThan(
+      getCardRank({ rank: "BLACK_JOKER" }, "2"),
     );
   });
 
@@ -78,22 +86,21 @@ describe("getCardRank", () => {
     (levelRank) => {
       for (const rank of STANDARD_RANK_ORDER) {
         if (rank === levelRank) continue;
-        expect(getCardRank({ rank, suit: "CLUBS" }, levelRank)).toBe(
-          getCardRank({ rank, suit: "CLUBS" }),
-        );
+        const expected = STANDARD_RANK_ORDER.indexOf(rank) + 2;
+        expect(getCardRank({ rank, suit: "CLUBS" }, levelRank)).toBe(expected);
       }
     },
   );
 
   it("jokers are unaffected by level rank", () => {
-    for (const levelRank of STANDARD_RANK_ORDER) {
-      expect(getCardRank({ rank: "BLACK_JOKER" }, levelRank)).toBe(
-        getCardRank({ rank: "BLACK_JOKER" }),
-      );
-      expect(getCardRank({ rank: "RED_JOKER" }, levelRank)).toBe(
-        getCardRank({ rank: "RED_JOKER" }),
-      );
-    }
+    const blackJokerValues = STANDARD_RANK_ORDER.map((levelRank) =>
+      getCardRank({ rank: "BLACK_JOKER" }, levelRank),
+    );
+    const redJokerValues = STANDARD_RANK_ORDER.map((levelRank) =>
+      getCardRank({ rank: "RED_JOKER" }, levelRank),
+    );
+    expect(new Set(blackJokerValues).size).toBe(1);
+    expect(new Set(redJokerValues).size).toBe(1);
   });
 });
 
@@ -106,7 +113,12 @@ describe("compareCards", () => {
   }
 
   it.each(rankPairs)("orders %s vs %s correctly", (a, b) => {
-    const result = compareCards({ rank: a, suit: "CLUBS" }, { rank: b, suit: "CLUBS" });
+    const levelRank = levelRankExcluding(a, b);
+    const result = compareCards(
+      { rank: a, suit: "CLUBS" },
+      { rank: b, suit: "CLUBS" },
+      levelRank,
+    );
     const expectedSign = Math.sign(
       STANDARD_RANK_ORDER.indexOf(a) - STANDARD_RANK_ORDER.indexOf(b),
     );
@@ -114,15 +126,16 @@ describe("compareCards", () => {
   });
 
   const suitPairs: Array<[Suit, Suit]> = [];
-  for (const a of SUITS) {
-    for (const b of SUITS) {
+  for (const a of SUIT_ORDER) {
+    for (const b of SUIT_ORDER) {
       suitPairs.push([a, b]);
     }
   }
 
   it.each(suitPairs)("breaks ties between same-rank %s vs %s consistently", (a, b) => {
-    const result = compareCards({ rank: "7", suit: a }, { rank: "7", suit: b });
-    const expectedSign = Math.sign(SUITS.indexOf(a) - SUITS.indexOf(b));
+    const levelRank = levelRankExcluding("7");
+    const result = compareCards({ rank: "7", suit: a }, { rank: "7", suit: b }, levelRank);
+    const expectedSign = Math.sign(SUIT_ORDER.indexOf(a) - SUIT_ORDER.indexOf(b));
     expect(Math.sign(result)).toBe(expectedSign);
   });
 
@@ -131,7 +144,11 @@ describe("compareCards", () => {
       compareCards({ rank: "5", suit: "HEARTS" }, { rank: "ACE", suit: "SPADES" }, "5"),
     ).toBeGreaterThan(0);
     expect(
-      compareCards({ rank: "5", suit: "HEARTS" }, { rank: "ACE", suit: "SPADES" }),
+      compareCards(
+        { rank: "5", suit: "HEARTS" },
+        { rank: "ACE", suit: "SPADES" },
+        levelRankExcluding("5", "ACE"),
+      ),
     ).toBeLessThan(0);
   });
 
@@ -152,10 +169,13 @@ describe("sortCards", () => {
     const deck = fullDeck();
     // Deterministic "shuffle": reverse plus a rotation.
     const shuffled = [...deck.slice(54), ...deck.slice(0, 54)].reverse();
-    const sorted = sortCards(shuffled);
+    const levelRank = "2";
+    const sorted = sortCards(shuffled, levelRank);
 
     for (let i = 1; i < sorted.length; i++) {
-      expect(getCardRank(sorted[i])).toBeGreaterThanOrEqual(getCardRank(sorted[i - 1]));
+      expect(getCardRank(sorted[i], levelRank)).toBeGreaterThanOrEqual(
+        getCardRank(sorted[i - 1], levelRank),
+      );
     }
     expect(sorted).toHaveLength(deck.length);
   });
@@ -163,7 +183,7 @@ describe("sortCards", () => {
   it("does not mutate the input array", () => {
     const input: Card[] = [{ rank: "ACE", suit: "SPADES" }, { rank: "2", suit: "CLUBS" }];
     const copy = [...input];
-    sortCards(input);
+    sortCards(input, "5");
     expect(input).toEqual(copy);
   });
 
@@ -191,7 +211,7 @@ describe("sortCards", () => {
       { rank: "2", suit: "CLUBS" },
       { rank: "KING", suit: "HEARTS" },
     ];
-    const sorted = sortCards(cards);
+    const sorted = sortCards(cards, levelRankExcluding("KING", "2"));
     expect(sorted).toEqual([
       { rank: "2", suit: "CLUBS" },
       { rank: "KING", suit: "HEARTS" },
