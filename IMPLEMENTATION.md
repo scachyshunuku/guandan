@@ -249,13 +249,13 @@ All can be built with mocks, integrated later.
 - **Estimated**: 6 hours
 
 ### Task 5.2: Game Table Layout
-- [ ] `components/game/GameTable.tsx` - Main board
+- [x] `components/game/GameTable.tsx` - Main board
   - 4 player positions (north, south, east, west)
   - Center area for current trick
   - Score display
   - Current player indicator
   - Unit tests: Layout, rendering players
-- [ ] `components/game/PlayerCard.tsx` - Player bubble
+- [x] `components/game/PlayerCard.tsx` - Player bubble
   - Player name, position, connected status
   - Card count in hand
   - Unit tests: State rendering
