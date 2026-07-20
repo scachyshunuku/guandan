@@ -70,12 +70,12 @@ All of these can be done in parallel. Heavy unit test coverage.
 - **Estimated**: 8 hours
 
 ### Task 2.3: Play Validation
-- [ ] Create `lib/gameRules/validation.ts`:
+- [x] Create `lib/gameRules/validation.ts`:
   - `canPlayCards(cardsToPlay, hand, currentTrick, levelRank)` → boolean + reason
   - `isBeatingStraight(combo1, combo2)` → boolean
   - `beatsTrick(combo1, leadCombo, levelRank)` → boolean
   - Handle wild card logic (hearts of level rank)
-- [ ] Unit tests: 150+ test cases
+- [x] Unit tests: 150+ test cases
 - **Blockers**: Tasks 2.1, 2.2
 - **Enables**: Task 3.1, 3.2
 - **Testability**: Unit tests with Jest
