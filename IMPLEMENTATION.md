@@ -204,13 +204,13 @@ All of these can be done in parallel. Heavy unit test coverage.
 - **Estimated**: 5 hours
 
 ### Task 4.3: API Mutation Hooks
-- [ ] Create `hooks/useGameActions.ts`:
+- [x] Create `hooks/useGameActions.ts`:
   - `playCards(cards)` - POST to play-cards
   - `pass()` - POST to pass
   - `joinGame(playerName)` - POST to join
   - `exchangeCards(cardToGive)` - POST to exchange
   - Error handling, loading states
-- [ ] Unit tests: Mutation calls, error handling
+- [x] Unit tests: Mutation calls, error handling
 - **Blockers**: Task 4.1, 3.x
 - **Enables**: Task 5.x
 - **Testability**: Unit tests with mock fetch
