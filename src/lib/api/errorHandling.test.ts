@@ -1,3 +1,9 @@
+/**
+ * @jest-environment node
+ */
+// next/server needs the Fetch API's Request/Response globals, which jsdom
+// (this repo's default test environment, for React component/hook tests)
+// doesn't provide.
 import { NextRequest, NextResponse } from "next/server";
 import { unwrapSupabaseResult, withApiErrorHandling } from "./errorHandling";
 

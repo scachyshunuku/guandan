@@ -1,6 +1,21 @@
+/**
+ * @jest-environment node
+ */
+// route.ts imports NextResponse from next/server, which needs the Fetch
+// API's Request/Response globals - jsdom (this repo's default test
+// environment) doesn't provide them.
 import type { FakeSupabaseClient } from "@/testUtils/fakeSupabase";
 
 jest.mock("@/lib/supabaseAdmin");
+// SWC compiles gameDb's named exports to non-configurable getters on the
+// module namespace object, which jest.spyOn can't redefine ("Cannot
+// redefine property"). Re-exporting through a plain object literal here
+// gives spyOn a normal, configurable data property to replace instead,
+// while every export still delegates to the real implementation by default.
+jest.mock("@/lib/gameDb", () => ({
+  __esModule: true,
+  ...jest.requireActual("@/lib/gameDb"),
+}));
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import * as gameDb from "@/lib/gameDb";
