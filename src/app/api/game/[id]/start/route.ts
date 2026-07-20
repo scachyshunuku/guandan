@@ -7,6 +7,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { dealHands } from "@/lib/deck";
 import { getGame, getLatestRound, getParticipants } from "@/lib/gameDb";
 import { parseJsonBody } from "@/lib/http";
+import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import type {
   PlayerPosition,
   StartGameRequest,
@@ -82,7 +83,7 @@ export async function POST(
     .update({ status: "in_progress" })
     .eq("id", gameId)
     .eq("status", "waiting")
-    .select("id");
+    .select("*");
   if (claimError) {
     console.error("Failed to claim game start", claimError);
     return NextResponse.json(
@@ -100,18 +101,23 @@ export async function POST(
   const hands = dealHands();
   const leader = Math.floor(Math.random() * 4) as PlayerPosition;
 
-  const results = await Promise.all([
+  const roundUpdate = supabaseAdmin
+    .from("game_rounds")
+    .update({ leader_position: leader, current_player_turn: leader })
+    .eq("id", round.id)
+    .select("*")
+    .single();
+
+  const [...results] = await Promise.all([
     ...ALL_POSITIONS.map((position) =>
       supabaseAdmin
         .from("game_participants")
         .update({ hand: hands[position] })
         .eq("id", seated.get(position)!.id),
     ),
-    supabaseAdmin
-      .from("game_rounds")
-      .update({ leader_position: leader, current_player_turn: leader })
-      .eq("id", round.id),
+    roundUpdate,
   ]);
+  const roundUpdateResult = results[results.length - 1];
   const failure = results.find((r) => r.error);
   if (failure) {
     console.error("Failed to persist deal after claiming start", failure.error);
@@ -147,6 +153,17 @@ export async function POST(
       { status: 500 },
     );
   }
+
+  // Broadcast the new game/round state so other players' and spectators'
+  // useGameRealtimeSync picks up the deal (see ARCHITECTURE.md section 10 —
+  // hands are never included, only the public games/game_rounds fields).
+  // Best-effort: broadcastToGame logs and swallows send failures rather than
+  // throwing, so a dropped broadcast doesn't fail a start that already
+  // succeeded — a client that misses it still catches up on refresh/rejoin.
+  await Promise.all([
+    broadcastToGame(gameId, "game_updated", claimed[0]),
+    broadcastToGame(gameId, "round_updated", roundUpdateResult.data),
+  ]);
 
   const response: StartGameResponse = {
     success: true,

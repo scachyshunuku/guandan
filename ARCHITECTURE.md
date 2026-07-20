@@ -549,17 +549,39 @@ Response: { actions: [...] }
 
 ## 10. Real-time Channels
 
-All players in a game subscribe to the channel: `games:[code]`
+All players in a game subscribe to the channel: `games:[code]` (implemented
+in `hooks/useGameRealtimeSync.ts`, Task 4.2).
 
-### Broadcast Events
+Everything is delivered via **`broadcast`**, not `postgres_changes` —
+`postgres_changes` requires each table to be added to the
+`supabase_realtime` publication, a manual per-project setup step this app
+doesn't assume is done, so API routes explicitly broadcast after every write
+instead (via `lib/realtimeBroadcast.ts`'s `broadcastToGame(gameId, event,
+payload)`, which uses `channel.httpSend` — a REST call, no `subscribe()`
+handshake needed for a one-off server-side send). This also sidesteps having
+to reason about the `game_participants`/`game_actions` RLS policies (see the
+migration's "Row-Level Security" section) for real-time delivery, since
+`broadcast` doesn't go through table RLS at all — the API route decides
+exactly what's in the payload (e.g. never a player's hand).
 
-- `player_joined` → New participant joined
-- `player_left` → Participant disconnected/left
-- `game_started` → Game begins (cards dealt)
-- `card_played` → Player played cards
-- `trick_result` → Trick winner + points
-- `round_end` → Round completed (13 tricks)
-- `game_end` → Game finished (all rounds)
+### Broadcast events
+
+- `game_updated`, payload = the updated `games` row — sent after any write
+  to `games` (currently: `POST /api/game/[id]/start` flipping `status` to
+  `in_progress`). Synced to `gameStatus`/`teamLevels` in the store.
+- `round_updated`, payload = the updated `game_rounds` row — sent after any
+  write to `game_rounds` (currently: `start`, setting `leader_position`/
+  `current_player_turn`). Synced to `currentTrick`/`currentPlayerTurn`.
+- `game_action`, payload = the inserted `game_actions` row — sent by
+  whichever route inserts one (`play-cards`, `pass`, `exchange-cards`,
+  `join`, `leave` — Tasks 3.2/3.3, not yet implemented). No store field
+  holds raw action history, so `useGameRealtimeSync` forwards the mapped
+  `GameAction` to an `onGameAction` callback instead of syncing it directly.
+
+As of Task 4.2, only `start` sends broadcasts (`game_updated` +
+`round_updated`); `game_action` is a contract Tasks 3.2/3.3 must satisfy,
+and `join`/`leave` don't yet broadcast participant changes (no store field
+for the participants list is wired to real-time sync yet either).
 
 ---
 
