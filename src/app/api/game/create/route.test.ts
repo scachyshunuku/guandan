@@ -1,3 +1,9 @@
+/**
+ * @jest-environment node
+ */
+// route.ts imports NextResponse from next/server, which needs the Fetch
+// API's Request/Response globals - jsdom (this repo's default test
+// environment) doesn't provide them.
 import type { FakeSupabaseClient } from "@/testUtils/fakeSupabase";
 
 jest.mock("@/lib/supabaseAdmin");

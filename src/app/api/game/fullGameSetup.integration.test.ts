@@ -1,9 +1,15 @@
+/**
+ * @jest-environment node
+ */
 // Exercises create -> join x4 (+1 spectator) -> start end-to-end against the
 // same fake Supabase instance, per IMPLEMENTATION.md Task 3.1's "full game
-// setup" test bullet.
+// setup" test bullet. Runs in the node environment (rather than this
+// repo's default jsdom) because the routes it calls import NextResponse
+// from next/server, which needs the Fetch API's Request/Response globals.
 import type { FakeSupabaseClient } from "@/testUtils/fakeSupabase";
 
 jest.mock("@/lib/supabaseAdmin");
+jest.mock("@/lib/realtimeBroadcast");
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type {

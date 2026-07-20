@@ -70,12 +70,12 @@ All of these can be done in parallel. Heavy unit test coverage.
 - **Estimated**: 8 hours
 
 ### Task 2.3: Play Validation
-- [ ] Create `lib/gameRules/validation.ts`:
+- [x] Create `lib/gameRules/validation.ts`:
   - `canPlayCards(cardsToPlay, hand, currentTrick, levelRank)` → boolean + reason
   - `isBeatingStraight(combo1, combo2)` → boolean
   - `beatsTrick(combo1, leadCombo, levelRank)` → boolean
   - Handle wild card logic (hearts of level rank)
-- [ ] Unit tests: 150+ test cases
+- [x] Unit tests: 150+ test cases
 - **Blockers**: Tasks 2.1, 2.2
 - **Enables**: Task 3.1, 3.2
 - **Testability**: Unit tests with Jest
@@ -204,13 +204,13 @@ All of these can be done in parallel. Heavy unit test coverage.
 - **Estimated**: 5 hours
 
 ### Task 4.3: API Mutation Hooks
-- [ ] Create `hooks/useGameActions.ts`:
+- [x] Create `hooks/useGameActions.ts`:
   - `playCards(cards)` - POST to play-cards
   - `pass()` - POST to pass
   - `joinGame(playerName)` - POST to join
   - `exchangeCards(cardToGive)` - POST to exchange
   - Error handling, loading states
-- [ ] Unit tests: Mutation calls, error handling
+- [x] Unit tests: Mutation calls, error handling
 - **Blockers**: Task 4.1, 3.x
 - **Enables**: Task 5.x
 - **Testability**: Unit tests with mock fetch
@@ -249,13 +249,13 @@ All can be built with mocks, integrated later.
 - **Estimated**: 6 hours
 
 ### Task 5.2: Game Table Layout
-- [ ] `components/game/GameTable.tsx` - Main board
+- [x] `components/game/GameTable.tsx` - Main board
   - 4 player positions (north, south, east, west)
   - Center area for current trick
   - Score display
   - Current player indicator
   - Unit tests: Layout, rendering players
-- [ ] `components/game/PlayerCard.tsx` - Player bubble
+- [x] `components/game/PlayerCard.tsx` - Player bubble
   - Player name, position, connected status
   - Card count in hand
   - Unit tests: State rendering
