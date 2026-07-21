@@ -68,7 +68,10 @@ describe("gameStore", () => {
   });
 
   it("updateTrick replaces the current trick", () => {
-    const trick: CurrentTrick = [[{ suit: "HEARTS", rank: "5" }], "PASS"];
+    const trick: CurrentTrick = [
+      { position: 0, play: [{ suit: "HEARTS", rank: "5" }] },
+      { position: 1, play: "PASS" },
+    ];
     useGameStore.getState().updateTrick(trick);
     expect(useGameStore.getState().currentTrick).toEqual(trick);
   });

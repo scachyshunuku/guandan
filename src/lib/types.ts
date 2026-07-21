@@ -87,13 +87,21 @@ export type Pass = typeof PASS;
 export type TrickPlay = CardWithWild[] | Pass;
 
 // One entry per action taken so far this trick, in turn order starting from
-// the leader (a trick is always exactly one rotation: each position acts
-// once, and passing is final for the trick). Entry `n` was made by position
-// `(leaderPosition + n) % 4`, where leaderPosition is GameRound.leaderPosition.
-// Empty right after a round is dealt or right after a trick resolves and the
-// next one hasn't started yet. The lead combo type the trick must beat is
-// derived from the last non-PASS entry (there's no play before it to beat).
-export type CurrentTrick = TrickPlay[];
+// the leader. Each entry records which position acted *explicitly*, rather
+// than being derived from array index + leaderPosition: once a player has
+// gone out (emptied their hand) mid-round, they take no further turns, so a
+// trick's rotation no longer necessarily visits every position, and if the
+// trick winner has gone out their partner leads next rather than the next
+// seat in line (RULES.md "Leader Selection") — either of which breaks
+// `(leaderPosition + n) % 4` as a way to recover who acted. Empty right after
+// a round is dealt or right after a trick resolves and the next one hasn't
+// started yet. The lead combo type the trick must beat is derived from the
+// last non-PASS entry (there's no play before it to beat).
+export interface TrickEntry {
+  position: PlayerPosition;
+  play: TrickPlay;
+}
+export type CurrentTrick = TrickEntry[];
 
 export interface GameState {
   currentTrick: CurrentTrick;

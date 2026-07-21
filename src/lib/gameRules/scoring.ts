@@ -23,37 +23,73 @@ import { PASS } from "../types";
 
 const ALL_POSITIONS: readonly PlayerPosition[] = [0, 1, 2, 3];
 
+// Team A = positions 0 & 2, Team B = positions 1 & 3 (RULES.md "Players &
+// Teams"); partners always sit exactly two seats apart.
+function positionTeam(position: PlayerPosition): Team {
+  return (position % 2) as Team;
+}
+
 // The winner of a trick is whoever made the last non-PASS play (RULES.md:
-// "The player who played the last card(s) wins the trick"). Entry `n` of
-// currentTrick was made by position (leaderPosition + n) % 4 (see CurrentTrick
-// in types.ts), so the winner is found by walking backward from the most
-// recent entry to the most recent play. Works whether the trick has fully
-// resolved (three trailing passes) or is still mid-flight (in which case this
-// is "whoever's currently winning") — callers decide when a trick is over.
-export function calculateTrickWinner(
-  currentTrick: CurrentTrick,
-  leaderPosition: PlayerPosition,
-): PlayerPosition {
+// "The player who played the last card(s) wins the trick"), found by walking
+// backward from the most recent entry to the most recent play. Reads each
+// entry's own `position` rather than deriving it from array index +
+// leaderPosition (see the CurrentTrick comment in types.ts for why that
+// derivation can't be trusted once a player has gone out mid-round). Works
+// whether the trick has fully resolved (three trailing passes) or is still
+// mid-flight (in which case this is "whoever's currently winning") —
+// callers decide when a trick is over.
+export function calculateTrickWinner(currentTrick: CurrentTrick): PlayerPosition {
   for (let i = currentTrick.length - 1; i >= 0; i--) {
-    if (currentTrick[i] !== PASS) {
-      return ((leaderPosition + i) % 4) as PlayerPosition;
+    if (currentTrick[i].play !== PASS) {
+      return currentTrick[i].position;
     }
   }
   throw new Error("calculateTrickWinner: currentTrick has no plays to determine a winner from");
+}
+
+// Who leads the next trick: normally the trick winner (RULES.md "Leader
+// Selection"), but if the winner's winning play emptied their hand, they
+// have no cards to lead with — their partner leads instead (RULES.md
+// "Leader Selection": "Winner out of cards"). `winnerHasCards` reflects the
+// winner's hand *after* their winning play, which callers must check
+// themselves (this module has no access to hands).
+//
+// This deliberately doesn't handle "the partner is also already out": that
+// would require the winner and their partner to be exactly the round's 1st
+// and 2nd finishers (any later pair of finishers already hits three total
+// finishers, which ends the round via detectRoundEnd before a next leader is
+// needed), and RULES.md's "Round End" rule ends the round the moment partners
+// take 1st and 2nd — so as long as callers check detectRoundEnd first (which
+// they must, to know whether there's a next trick at all), this function is
+// never asked to place a lead for a team that's entirely out of cards.
+export function calculateNextLeader(
+  trickWinner: PlayerPosition,
+  winnerHasCards: boolean,
+): PlayerPosition {
+  return winnerHasCards ? trickWinner : (((trickWinner + 2) % 4) as PlayerPosition);
 }
 
 // ---------------------------------------------------------------------------
 // Round end detection (RULES.md "End Hand / Level")
 // ---------------------------------------------------------------------------
 
+// True only when exactly the round's 1st and 2nd finishers are partners
+// (RULES.md "Round End": a 1-2 finish locks in the maximum promotion right
+// away, so the hand doesn't need a 3rd finisher to conclude).
+function topTwoArePartners(finishOrder: readonly PlayerPosition[]): boolean {
+  return finishOrder.length === 2 && positionTeam(finishOrder[0]) === positionTeam(finishOrder[1]);
+}
+
 // Whether the round has concluded given the order players have gone out so
 // far, and if so, the complete finishing-position array (1-4, one entry per
 // player position — mirrors GameRound.finishingPositions / ARCHITECTURE.md's
 // `[1, 4, 2, 3]` example). A round concludes once three players have emptied
-// their hands: the fourth is placed last automatically, since RULES.md never
-// requires them to actually finish playing (nothing left to contest once
-// only one player has cards). Returns null while fewer than three positions
-// are known, meaning the round is still in progress.
+// their hands (the 4th is placed last automatically — nothing left to
+// contest once only one player has cards), or as soon as the top two
+// finishers turn out to be partners, i.e. a 1-2 finish (RULES.md "Round
+// End"): whichever two positions haven't finished are assigned the remaining
+// ranks in position order, since which of them is 3rd vs. 4th can't change
+// the outcome either way. Returns null while the round is still undecided.
 export function detectRoundEnd(finishOrder: readonly PlayerPosition[]): number[] | null {
   if (new Set(finishOrder).size !== finishOrder.length) {
     throw new Error(`detectRoundEnd: finishOrder has a duplicate position: ${finishOrder.join(",")}`);
@@ -61,16 +97,18 @@ export function detectRoundEnd(finishOrder: readonly PlayerPosition[]): number[]
   if (finishOrder.some((p) => !ALL_POSITIONS.includes(p))) {
     throw new Error(`detectRoundEnd: finishOrder has an out-of-range position: ${finishOrder.join(",")}`);
   }
-  if (finishOrder.length < 3) return null;
+  if (finishOrder.length < 3 && !topTwoArePartners(finishOrder)) return null;
 
   const finishingPositions = new Array<number>(4).fill(0);
   finishOrder.forEach((position, i) => {
     finishingPositions[position] = i + 1;
   });
 
-  if (finishOrder.length === 3) {
-    const lastPosition = ALL_POSITIONS.find((p) => !finishOrder.includes(p))!;
-    finishingPositions[lastPosition] = 4;
+  let nextRank = finishOrder.length + 1;
+  for (const position of ALL_POSITIONS) {
+    if (finishingPositions[position] === 0) {
+      finishingPositions[position] = nextRank++;
+    }
   }
 
   return finishingPositions;
@@ -82,12 +120,6 @@ export function detectRoundEnd(finishOrder: readonly PlayerPosition[]): number[]
 
 export const STARTING_LEVEL = 2;
 export const ACE_LEVEL = 14;
-
-// Team A = positions 0 & 2, Team B = positions 1 & 3 (RULES.md "Players &
-// Teams"); partners always sit exactly two seats apart.
-function positionTeam(position: PlayerPosition): Team {
-  return (position % 2) as Team;
-}
 
 export type FinishCombo = "1-2" | "1-3" | "1-4";
 

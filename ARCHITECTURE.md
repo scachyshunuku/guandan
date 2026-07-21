@@ -87,13 +87,13 @@ Cards are objects with string suit and rank:
   ```json
   {
     "currentTrick": [
-      [{"suit": "CLUBS", "rank": "ACE"}],
-      "PASS",
-      [{"suit": "HEARTS", "rank": "KING"}]
+      {"position": 0, "play": [{"suit": "CLUBS", "rank": "ACE"}]},
+      {"position": 1, "play": "PASS"},
+      {"position": 2, "play": [{"suit": "HEARTS", "rank": "KING"}]}
     ]
   }
   ```
-  Entries are in turn order starting from the trick leader (`leader_position`), one per action taken so far. `"PASS"` = passed, card array = played. Position for entry `n` = `(leader_position + n) % 4`; a player who hasn't acted yet simply has no entry.
+  Entries are in turn order starting from the trick leader (`leader_position`), one per action taken so far; a player who hasn't acted yet simply has no entry. Each entry records its own `position` explicitly rather than leaving it to be derived from `(leader_position + n) % 4`: once a player has gone out mid-round they take no further turns, and if the trick winner has gone out their partner leads next instead of the next seat in line (RULES.md "Leader Selection") — either of which means a trick's rotation doesn't necessarily visit every position in seat order, so the index can't be trusted to recover who acted. `"play": "PASS"` = passed, card array = played.
 - **action_data** (JSONB in game_actions): Flexible structure for different action types:
   - card_played: `{cards: [{suit, rank}, ...]}`
   - pass: `{}`

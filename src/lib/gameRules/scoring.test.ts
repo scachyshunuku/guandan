@@ -4,6 +4,7 @@ import {
   ACE_LEVEL,
   STARTING_LEVEL,
   calculateLevelPromotion,
+  calculateNextLeader,
   calculateTrickWinner,
   detectRoundEnd,
   getFinishResult,
@@ -16,6 +17,18 @@ function play(): TrickPlay {
 }
 
 const POSITIONS: readonly PlayerPosition[] = [0, 1, 2, 3];
+
+// Builds a CurrentTrick for a normal, contiguous rotation starting at
+// leaderPosition -- entry i is position (leaderPosition + i) % 4. Only valid
+// when nobody's gone out mid-round; the "non-contiguous rotation" tests below
+// construct CurrentTrick by hand instead, since calculateTrickWinner must not
+// rely on this arithmetic (see types.ts's CurrentTrick comment).
+function contiguousTrick(leaderPosition: PlayerPosition, plays: TrickPlay[]): CurrentTrick {
+  return plays.map((trickPlay, i) => ({
+    position: ((leaderPosition + i) % 4) as PlayerPosition,
+    play: trickPlay,
+  }));
+}
 
 function permutations<T>(items: readonly T[]): T[][] {
   if (items.length <= 1) return [items.slice()];
@@ -49,20 +62,85 @@ describe("calculateTrickWinner", () => {
   for (const leaderPosition of POSITIONS) {
     for (const shape of shapes) {
       it(`leader at ${leaderPosition}: ${shape.name}`, () => {
-        const currentTrick: CurrentTrick = shape.entries;
+        const currentTrick = contiguousTrick(leaderPosition, shape.entries);
         const expected = ((leaderPosition + shape.winnerOffset) % 4) as PlayerPosition;
-        expect(calculateTrickWinner(currentTrick, leaderPosition)).toBe(expected);
+        expect(calculateTrickWinner(currentTrick)).toBe(expected);
       });
     }
   }
 
   it("throws when the trick has no entries at all", () => {
-    expect(() => calculateTrickWinner([], 0)).toThrow();
+    expect(() => calculateTrickWinner([])).toThrow();
   });
 
   it("throws when every entry is somehow a pass (leader must always open with a play)", () => {
-    expect(() => calculateTrickWinner([PASS, PASS, PASS], 1)).toThrow();
+    expect(() => calculateTrickWinner(contiguousTrick(1, [PASS, PASS, PASS]))).toThrow();
   });
+
+  // The whole point of tracking `position` explicitly on each entry (rather
+  // than deriving it from array index + leaderPosition) is that a trick's
+  // rotation doesn't have to be contiguous once a player has gone out
+  // mid-round -- these cases hand-build a CurrentTrick that skips a position
+  // entirely and confirm calculateTrickWinner still reads the right one.
+  describe("non-contiguous rotation (a player has already gone out)", () => {
+    it("skips the out player's seat entirely and still finds the real winner", () => {
+      // Leader is 0; position 2 is out and never gets an entry. Position 3
+      // beats the lead, position 1 passes.
+      const currentTrick: CurrentTrick = [
+        { position: 0, play: play() },
+        { position: 1, play: PASS },
+        { position: 3, play: play() },
+      ];
+      expect(calculateTrickWinner(currentTrick)).toBe(3);
+    });
+
+    it("the out player's seat is skipped even when it falls in the middle of the rotation", () => {
+      // Leader is 1; position 2 is out. Position 3 beats, position 0 passes.
+      const currentTrick: CurrentTrick = [
+        { position: 1, play: play() },
+        { position: 3, play: play() },
+        { position: 0, play: PASS },
+      ];
+      expect(calculateTrickWinner(currentTrick)).toBe(3);
+    });
+
+    it("two players are out: only the two remaining active seats ever act", () => {
+      const currentTrick: CurrentTrick = [
+        { position: 2, play: play() },
+        { position: 0, play: PASS },
+      ];
+      expect(calculateTrickWinner(currentTrick)).toBe(2);
+    });
+
+    it("would give the wrong answer under the old index-derived-position assumption (sanity check on the fix)", () => {
+      // Under (leaderPosition + i) % 4 with leaderPosition=0, entry index 1
+      // would derive position 1 -- but this entry was actually made by
+      // position 3, because position 1 already went out and was skipped.
+      const currentTrick: CurrentTrick = [
+        { position: 0, play: PASS },
+        { position: 3, play: play() },
+      ];
+      expect(calculateTrickWinner(currentTrick)).toBe(3);
+      expect(calculateTrickWinner(currentTrick)).not.toBe(1);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// calculateNextLeader
+// ---------------------------------------------------------------------------
+
+describe("calculateNextLeader", () => {
+  for (const winner of POSITIONS) {
+    it(`winner ${winner} leads next when they still have cards`, () => {
+      expect(calculateNextLeader(winner, true)).toBe(winner);
+    });
+
+    it(`winner ${winner}'s partner leads next when the winner just went out`, () => {
+      const expectedPartner = ((winner + 2) % 4) as PlayerPosition;
+      expect(calculateNextLeader(winner, false)).toBe(expectedPartner);
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -82,7 +160,7 @@ describe("detectRoundEnd", () => {
     expect(() => detectRoundEnd([0, 1, 5 as PlayerPosition])).toThrow();
   });
 
-  describe("fewer than 3 finishers: round continues (null)", () => {
+  describe("fewer than 3 finishers, top two not partners: round continues (null)", () => {
     for (const position of POSITIONS) {
       it(`only position ${position} has finished`, () => {
         expect(detectRoundEnd([position])).toBeNull();
@@ -97,10 +175,42 @@ describe("detectRoundEnd", () => {
       const key = pair.join(",");
       if (seenPairs.has(key)) continue;
       seenPairs.add(key);
+      if (pair[0] % 2 === pair[1] % 2) continue; // partners: covered below instead
+
       it(`positions ${key} have finished, in that order`, () => {
         expect(detectRoundEnd(pair)).toBeNull();
       });
     }
+  });
+
+  describe("top two finishers are partners: round ends immediately on a 1-2 finish", () => {
+    // Partner pairs: {0,2} and {1,3}, in either order.
+    const partnerPairs: [PlayerPosition, PlayerPosition][] = [
+      [0, 2],
+      [2, 0],
+      [1, 3],
+      [3, 1],
+    ];
+
+    for (const [first, second] of partnerPairs) {
+      it(`${first} finishes 1st, partner ${second} finishes 2nd -- remaining two get 3rd/4th in position order`, () => {
+        const result = detectRoundEnd([first, second]);
+        expect(result).not.toBeNull();
+
+        const expected = new Array<number>(4).fill(0);
+        expected[first] = 1;
+        expected[second] = 2;
+        let nextRank = 3;
+        for (const position of POSITIONS) {
+          if (expected[position] === 0) expected[position] = nextRank++;
+        }
+        expect(result).toEqual(expected);
+      });
+    }
+
+    it("does NOT end early when the top two finishers are opponents, even with only 2 known", () => {
+      expect(detectRoundEnd([0, 1])).toBeNull();
+    });
   });
 
   describe("exactly 3 finishers: 4th is auto-placed last", () => {

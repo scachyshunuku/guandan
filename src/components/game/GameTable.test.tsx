@@ -142,7 +142,10 @@ describe("GameTable", () => {
         round={round({
           leaderPosition: 0,
           gameState: {
-            currentTrick: [[{ suit: "CLUBS", rank: "3" }], PASS],
+            currentTrick: [
+              { position: 0, play: [{ suit: "CLUBS", rank: "3" }] },
+              { position: 1, play: PASS },
+            ],
             trickCount: 0,
           },
         })}
