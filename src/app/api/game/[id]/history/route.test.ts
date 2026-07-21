@@ -48,9 +48,9 @@ describe("GET /api/game/[id]/history", () => {
     expect(await response.json()).toEqual({ actions: [] });
   });
 
-  it("returns an empty list (not a 500) for a malformed game id", async () => {
+  it("400s (not a 500, and not a silently-empty 200) for a malformed game id", async () => {
     const response = await callHistory("does-not-exist");
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ actions: [] });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Invalid game id" });
   });
 });

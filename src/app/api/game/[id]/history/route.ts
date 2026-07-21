@@ -18,21 +18,23 @@ import type { GameActionsResponse } from "@/lib/types";
 export const GET = withApiErrorHandling<{ id: string }>(async (_request, { params }) => {
   const { id } = await params;
 
-  // A malformed id (not a syntactically valid UUID) can never match a row,
-  // same as a well-formed-but-nonexistent one — this route doesn't check
-  // game existence either way, it just returns whatever actions match.
-  // Skipping the query for a malformed id avoids a Postgres 22P02 error
-  // that would otherwise surface as an unhandled exception (see
-  // isValidUuid's doc comment in lib/http.ts).
-  const actionRows = isValidUuid(id)
-    ? (unwrapSupabaseResult(
-        await supabaseAdmin
-          .from("game_actions")
-          .select("*")
-          .eq("game_id", id)
-          .order("created_at", { ascending: true })
-      ) as GameActionRow[] | null)
-    : null;
+  // A malformed id (not a syntactically valid UUID) is a bad request, not
+  // "a game with no actions" — returning 200 with an empty list would mask
+  // a client bug (e.g. a typo'd URL) as if it were legitimate empty state.
+  // This also sidesteps a Postgres 22P02 error the query would otherwise
+  // throw for a non-UUID value against a uuid column (see isValidUuid's doc
+  // comment in lib/http.ts).
+  if (!isValidUuid(id)) {
+    return NextResponse.json({ error: "Invalid game id" }, { status: 400 });
+  }
+
+  const actionRows = unwrapSupabaseResult(
+    await supabaseAdmin
+      .from("game_actions")
+      .select("*")
+      .eq("game_id", id)
+      .order("created_at", { ascending: true })
+  ) as GameActionRow[] | null;
 
   const response: GameActionsResponse = {
     actions: (actionRows ?? []).map(mapGameActionRow),
