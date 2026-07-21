@@ -117,6 +117,28 @@ describe("useGameRealtimeSync", () => {
     expect(state.currentPlayerTurn).toBe(2);
   });
 
+  it("syncs participant_joined broadcasts by appending to participants", () => {
+    renderHook(() => useGameRealtimeSync("game-1"));
+
+    channels[0].fire("participant_joined", {
+      id: "participant-1",
+      game_id: "game-1",
+      player_name: "Alice",
+      player_id: "alice",
+      position: 0,
+      hand: [],
+      is_connected: true,
+      connected_at: "2026-01-01T00:00:00.000Z",
+      last_heartbeat: "2026-01-01T00:00:00.000Z",
+      created_at: "2026-01-01T00:00:00.000Z",
+    });
+
+    const state = useGameStore.getState();
+    expect(state.participants).toEqual([
+      expect.objectContaining({ id: "participant-1", playerName: "Alice", position: 0 }),
+    ]);
+  });
+
   it("relays game_action broadcasts to onGameAction", () => {
     const onGameAction = jest.fn();
     renderHook(() => useGameRealtimeSync("game-1", onGameAction));

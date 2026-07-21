@@ -4,19 +4,27 @@
 // for the store shape this feeds.
 //
 // Everything arrives via `broadcast`, not `postgres_changes` — this app
-// doesn't assume `games`/`game_rounds`/`game_actions` have been added to the
-// `supabase_realtime` publication (a manual, per-project setup step), so API
-// routes explicitly call `lib/realtimeBroadcast.ts` after each write instead.
-// There's no store field for raw actions, so `game_action` events are handed
-// to the caller via `onGameAction` rather than synced directly.
+// doesn't assume `games`/`game_rounds`/`game_actions`/`game_participants`
+// have been added to the `supabase_realtime` publication (a manual,
+// per-project setup step), so API routes explicitly call
+// `lib/realtimeBroadcast.ts` after each write instead. There's no store
+// field for raw actions, so `game_action` events are handed to the caller
+// via `onGameAction` rather than synced directly.
+//
+// No `participant_left` event yet — there's no `leave` route (or
+// disconnect/heartbeat detection) in the codebase at all; that's
+// IMPLEMENTATION.md Task 6.2 ("Player disconnects/reconnects"), still
+// blocked on Phase 3-5. `participant_joined` only covers the join half.
 import { useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useGameStore } from "@/store/gameStore";
 import {
   mapGameActionRow,
+  mapGameParticipantRow,
   mapGameRoundRow,
   mapGameRow,
   type GameActionRow,
+  type GameParticipantRow,
   type GameRoundRow,
   type GameRow,
 } from "@/lib/db/mappers";
@@ -46,6 +54,13 @@ export function useGameRealtimeSync(
         useGameStore.getState().updateTrick(round.gameState.currentTrick);
         useGameStore.getState().setCurrentPlayerTurn(round.currentPlayerTurn);
       })
+      .on(
+        "broadcast",
+        { event: "participant_joined" },
+        ({ payload }: { payload: GameParticipantRow }) => {
+          useGameStore.getState().addParticipant(mapGameParticipantRow(payload));
+        },
+      )
       .on("broadcast", { event: "game_action" }, ({ payload }: { payload: GameActionRow }) => {
         onGameActionRef.current?.(mapGameActionRow(payload));
       })

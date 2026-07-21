@@ -7,6 +7,7 @@
 import type { FakeSupabaseClient } from "@/testUtils/fakeSupabase";
 
 jest.mock("@/lib/supabaseAdmin");
+jest.mock("@/lib/realtimeBroadcast");
 // SWC compiles gameDb's named exports to non-configurable getters on the
 // module namespace object, which jest.spyOn can't redefine ("Cannot
 // redefine property"). Re-exporting through a plain object literal here
@@ -18,14 +19,19 @@ jest.mock("@/lib/gameDb", () => ({
 }));
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import * as gameDb from "@/lib/gameDb";
 import type { JoinGameResponse } from "@/lib/types";
 import { POST } from "./route";
 
 const fake = supabaseAdmin as unknown as FakeSupabaseClient;
+const mockBroadcastToGame = broadcastToGame as jest.MockedFunction<
+  typeof broadcastToGame
+>;
 
 beforeEach(() => {
   fake._reset();
+  mockBroadcastToGame.mockClear();
   jest.restoreAllMocks();
 });
 
@@ -91,6 +97,7 @@ describe("POST /api/game/[id]/join", () => {
   it("is idempotent for a rejoin with the same playerId", async () => {
     const gameId = await seedGame();
     await callJoin(gameId, { playerName: "Alice", playerId: "alice" });
+    mockBroadcastToGame.mockClear();
 
     const response = await callJoin(gameId, {
       playerName: "Alice",
@@ -103,6 +110,26 @@ describe("POST /api/game/[id]/join", () => {
       hand: [],
     });
     expect(fake._tables.game_participants).toHaveLength(1);
+    // A rejoin short-circuits before the insert, so there's nothing new to
+    // announce.
+    expect(mockBroadcastToGame).not.toHaveBeenCalled();
+  });
+
+  it("broadcasts participant_joined with the new participant, hand always redacted", async () => {
+    const gameId = await seedGame();
+    await callJoin(gameId, { playerName: "Alice", playerId: "alice" });
+
+    expect(mockBroadcastToGame).toHaveBeenCalledWith(
+      gameId,
+      "participant_joined",
+      expect.objectContaining({
+        game_id: gameId,
+        player_name: "Alice",
+        player_id: "alice",
+        position: 0,
+        hand: [],
+      }),
+    );
   });
 
   it("assigns everyone as a spectator once the game has started", async () => {

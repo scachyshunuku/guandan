@@ -87,6 +87,26 @@ describe("gameStore", () => {
     expect(useGameStore.getState().participants).toEqual(participants);
   });
 
+  it("addParticipant appends a new participant", () => {
+    const existing = makeParticipant({ id: "p0", position: 0 });
+    useGameStore.getState().updateParticipants([existing]);
+
+    const joined = makeParticipant({ id: "p1", position: 1 });
+    useGameStore.getState().addParticipant(joined);
+
+    expect(useGameStore.getState().participants).toEqual([existing, joined]);
+  });
+
+  it("addParticipant replaces an existing participant with the same id", () => {
+    const original = makeParticipant({ id: "p0", position: 0, playerName: "Old Name" });
+    useGameStore.getState().updateParticipants([original]);
+
+    const updated = makeParticipant({ id: "p0", position: 0, playerName: "New Name" });
+    useGameStore.getState().addParticipant(updated);
+
+    expect(useGameStore.getState().participants).toEqual([updated]);
+  });
+
   it("setTeamLevels updates both team levels", () => {
     useGameStore.getState().setTeamLevels(5, 8);
     expect(useGameStore.getState().teamLevels).toEqual([5, 8]);

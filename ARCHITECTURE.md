@@ -572,16 +572,30 @@ exactly what's in the payload (e.g. never a player's hand).
 - `round_updated`, payload = the updated `game_rounds` row — sent after any
   write to `game_rounds` (currently: `start`, setting `leader_position`/
   `current_player_turn`). Synced to `currentTrick`/`currentPlayerTurn`.
+- `participant_joined`, payload = the new `game_participants` row, `hand`
+  always forced to `[]` regardless of the row's actual value (defense in
+  depth — a fresh join always has an empty hand anyway, but this is
+  player-identifying data going out unscoped, so it's never trusted to the
+  DB value) — sent by `POST /api/game/[id]/join` on a genuine new join (not
+  the idempotent-rejoin path, which returns early and announces nothing new).
+  Synced via `addParticipant` in the store, which upserts by id rather than
+  blindly appending, since a rejoin after a brief disconnect reuses the same
+  participant id.
 - `game_action`, payload = the inserted `game_actions` row — sent by
-  whichever route inserts one (`play-cards`, `pass`, `exchange-cards`,
-  `join`, `leave` — Tasks 3.2/3.3, not yet implemented). No store field
+  whichever route inserts one (`play-cards`, `pass`, `exchange-cards` —
+  Tasks 3.2/3.3, not yet implemented; `join` inserts a `game_actions` row
+  too but broadcasts `participant_joined` instead, not this). No store field
   holds raw action history, so `useGameRealtimeSync` forwards the mapped
   `GameAction` to an `onGameAction` callback instead of syncing it directly.
 
-As of Task 4.2, only `start` sends broadcasts (`game_updated` +
-`round_updated`); `game_action` is a contract Tasks 3.2/3.3 must satisfy,
-and `join`/`leave` don't yet broadcast participant changes (no store field
-for the participants list is wired to real-time sync yet either).
+No `participant_left` event: there's no `leave` route, or disconnect/
+heartbeat detection, anywhere in the codebase yet — that's
+IMPLEMENTATION.md Task 6.2 ("Player disconnects/reconnects"), still blocked
+on all of Phase 3-5. Real-time participant sync currently only covers joins.
+
+As of Task 4.2, `start` sends `game_updated`/`round_updated` and `join`
+sends `participant_joined`; `game_action` remains a contract Tasks 3.2/3.3
+must satisfy.
 
 ---
 
