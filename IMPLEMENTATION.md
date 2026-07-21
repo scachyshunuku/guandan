@@ -82,11 +82,11 @@ All of these can be done in parallel. Heavy unit test coverage.
 - **Estimated**: 8 hours
 
 ### Task 2.4: Trick & Round Scoring
-- [ ] Create `lib/gameRules/scoring.ts`:
+- [x] Create `lib/gameRules/scoring.ts`:
   - `calculateTrickWinner(currentTrick, leadPosition)` → position
   - `detectRoundEnd(participants)` → finishing positions
   - `calculateLevelPromotion(finishingPositions, currentTeamLevel)` → new level
-- [ ] Unit tests: 100+ test cases
+- [x] Unit tests: 100+ test cases
 - **Blockers**: Tasks 2.1, 2.3
 - **Enables**: Task 3.2
 - **Testability**: Unit tests with Jest
