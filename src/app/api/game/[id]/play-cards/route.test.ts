@@ -7,17 +7,21 @@
 import type { FakeSupabaseClient } from "@/testUtils/fakeSupabase";
 
 jest.mock("@/lib/supabaseAdmin");
+jest.mock("@/lib/realtimeBroadcast");
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import type { CardWithWild, GameState, PlayCardsResponse } from "@/lib/types";
 import { PASS } from "@/lib/types";
 import { POST } from "./route";
 
 const fake = supabaseAdmin as unknown as FakeSupabaseClient;
+const mockBroadcastToGame = broadcastToGame as jest.MockedFunction<typeof broadcastToGame>;
 
 beforeEach(() => {
   fake._reset();
   jest.restoreAllMocks();
+  mockBroadcastToGame.mockClear();
 });
 
 async function seedGame(overrides: Record<string, unknown> = {}): Promise<string> {
@@ -224,6 +228,17 @@ describe("POST /api/game/[id]/play-cards", () => {
       action_type: "card_played",
       action_data: { cards: [{ rank: "7", suit: "CLUBS" }], position: 0 },
     });
+
+    expect(mockBroadcastToGame).toHaveBeenCalledWith(
+      gameId,
+      "round_updated",
+      expect.objectContaining({ id: roundId, current_player_turn: 1 }),
+    );
+    expect(mockBroadcastToGame).toHaveBeenCalledWith(
+      gameId,
+      "game_action",
+      expect.objectContaining({ action_type: "card_played", player_id: "p0" }),
+    );
   });
 
   it("resolves the trick once all 4 positions have acted, crediting the last non-PASS play", async () => {
@@ -374,6 +389,8 @@ describe("POST /api/game/[id]/play-cards", () => {
       { rank: "7", suit: "CLUBS" },
       { rank: "8", suit: "HEARTS" },
     ]);
+
+    expect(mockBroadcastToGame).not.toHaveBeenCalled();
 
     // A retry after the rollback plays cleanly.
     const retry = await callPlayCards(gameId, {

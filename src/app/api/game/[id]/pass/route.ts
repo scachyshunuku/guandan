@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { isPlayerPosition, resolveTurn, type ActiveRoundRow } from "@/lib/gameDb";
 import { parseJsonBody } from "@/lib/http";
+import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import { PASS } from "@/lib/types";
 import type { PassRequest, PassResponse, PlayerPosition } from "@/lib/types";
 import { advanceTrick } from "@/lib/gameRules/scoring";
@@ -60,7 +61,7 @@ export async function POST(
     })
     .eq("id", round.id)
     .eq("current_player_turn", position)
-    .select("id");
+    .select("*");
   if (claimError) {
     console.error("Failed to claim pass turn", claimError);
     return NextResponse.json({ error: "Failed to pass" }, { status: 500 });
@@ -72,18 +73,29 @@ export async function POST(
     );
   }
 
-  const { error: actionError } = await supabaseAdmin.from("game_actions").insert({
-    game_id: gameId,
-    round_id: round.id,
-    player_id: playerId,
-    action_type: "pass",
-    action_data: {},
-  });
+  const { data: actionRow, error: actionError } = await supabaseAdmin
+    .from("game_actions")
+    .insert({
+      game_id: gameId,
+      round_id: round.id,
+      player_id: playerId,
+      action_type: "pass",
+      action_data: {},
+    })
+    .select("*")
+    .single();
   if (actionError) {
     console.error("Failed to log pass game_action after claiming the turn; rolling back", actionError);
     await rollbackRoundClaim(round, advanced.currentPlayerTurn);
     return NextResponse.json({ error: "Failed to pass" }, { status: 500 });
   }
+
+  // Broadcast the new round state and the pass itself — see
+  // play-cards/route.ts for why this is best-effort and non-fatal.
+  await Promise.all([
+    broadcastToGame(gameId, "round_updated", claimed[0]),
+    broadcastToGame(gameId, "game_action", actionRow),
+  ]);
 
   const response: PassResponse = { success: true };
   return NextResponse.json(response);

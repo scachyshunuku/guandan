@@ -7,16 +7,20 @@
 import type { FakeSupabaseClient } from "@/testUtils/fakeSupabase";
 
 jest.mock("@/lib/supabaseAdmin");
+jest.mock("@/lib/realtimeBroadcast");
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import type { GameState } from "@/lib/types";
 import { PASS } from "@/lib/types";
 import { POST } from "./route";
 
 const fake = supabaseAdmin as unknown as FakeSupabaseClient;
+const mockBroadcastToGame = broadcastToGame as jest.MockedFunction<typeof broadcastToGame>;
 
 beforeEach(() => {
   fake._reset();
+  mockBroadcastToGame.mockClear();
 });
 
 async function seedGame(overrides: Record<string, unknown> = {}): Promise<string> {
@@ -152,6 +156,17 @@ describe("POST /api/game/[id]/pass", () => {
       player_id: "p1",
       action_type: "pass",
     });
+
+    expect(mockBroadcastToGame).toHaveBeenCalledWith(
+      gameId,
+      "round_updated",
+      expect.objectContaining({ id: roundId, current_player_turn: 2 }),
+    );
+    expect(mockBroadcastToGame).toHaveBeenCalledWith(
+      gameId,
+      "game_action",
+      expect.objectContaining({ action_type: "pass", player_id: "p1" }),
+    );
   });
 
   it("resolves the trick to its leader when the 3rd consecutive pass completes the rotation", async () => {
@@ -208,6 +223,8 @@ describe("POST /api/game/[id]/pass", () => {
     expect((round?.game_state as GameState).currentTrick).toEqual([
       [{ rank: "7", suit: "CLUBS" }],
     ]);
+
+    expect(mockBroadcastToGame).not.toHaveBeenCalled();
 
     // A retry after the rollback passes cleanly.
     const retry = await callPass(gameId, { playerId: "p1", position: 1 });
