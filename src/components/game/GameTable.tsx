@@ -1,9 +1,10 @@
 "use client";
 
 import { pluralize } from "@/lib/format";
+import { type SeatLabel, seatLabelFor } from "@/lib/seating";
 import { PASS } from "@/lib/types";
 import type { Game, GameParticipant, GameRound, PlayerPosition } from "@/lib/types";
-import PlayerCard, { type SeatLabel } from "./PlayerCard";
+import PlayerCard from "./PlayerCard";
 
 export interface GameTableProps {
   game: Game;
@@ -14,23 +15,15 @@ export interface GameTableProps {
   myPosition: PlayerPosition | null;
 }
 
-// Seats laid out so turn order matches RULES.md ("Play moves
-// counterclockwise"): the viewer always sits south, their partner (always
-// the opposite seat) sits north, and turn order proceeds south -> east ->
-// north -> west -> south.
-const SEAT_LABELS: readonly SeatLabel[] = ["south", "east", "north", "west"];
-
-function seatLabelFor(position: PlayerPosition, anchor: PlayerPosition): SeatLabel {
-  const relative = (position - anchor + 4) % 4;
-  return SEAT_LABELS[relative];
-}
-
 const SEAT_POSITIONS: readonly PlayerPosition[] = [0, 1, 2, 3];
 
-// Main game board: 4 seats around a center trick area, plus the team score
-// display. Doesn't render the viewer's own hand (PlayerHand, shown
-// separately) or the full trick history (TrickDisplay, Task 5.3) — just
-// enough of the current trick to show who's played what this round.
+// Main game board: 4 seats around a center trick area, plus a minimal team
+// level readout. Doesn't render the viewer's own hand (PlayerHand, shown
+// separately) or the detailed trick/score views (TrickDisplay and
+// ScoreBoard, Task 5.3) — just enough of the current trick and levels to
+// show table state at a glance. The page that composes GameTable with
+// TrickDisplay/ScoreBoard (Task 5.6) should prefer those over this
+// component's inline score-display/trick-area for anything beyond that.
 export default function GameTable({ game, round, participants, myPosition }: GameTableProps) {
   const anchor = myPosition ?? 0;
   const byPosition = new Map(
