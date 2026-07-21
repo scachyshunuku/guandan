@@ -90,6 +90,8 @@ export async function getLatestRound(
   return data;
 }
 
+const ALL_POSITIONS = [0, 1, 2, 3] as const;
+
 // `position` comes from an untrusted request body typed only as
 // `PlayerPosition | undefined` by the caller's `Partial<...Request>` cast —
 // that cast is compile-time only, so a malicious/malformed body (e.g.
@@ -98,7 +100,7 @@ export async function getLatestRound(
 // `caller.position !== position` comparison by matching a spectator's
 // `position: null` row.
 export function isPlayerPosition(value: unknown): value is PlayerPosition {
-  return value === 0 || value === 1 || value === 2 || value === 3;
+  return (ALL_POSITIONS as readonly unknown[]).includes(value);
 }
 
 // GameRoundRow with leader_position/current_player_turn narrowed to non-null
