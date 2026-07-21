@@ -108,4 +108,15 @@ describe("TrickDisplay", () => {
     );
     expect(screen.getAllByTestId("trick-display-player")[0]).toHaveTextContent("—");
   });
+
+  it("gives every row the same fixed height regardless of content", () => {
+    // A card row, a pass row, and a not-yet-acted row all present at once.
+    const trick: CurrentTrick = [[{ suit: "CLUBS", rank: "3" }], PASS];
+    render(<TrickDisplay trick={trick} leaderPosition={0} participants={PARTICIPANTS} />);
+
+    const rows = screen.getAllByTestId("trick-display-player");
+    for (const row of rows) {
+      expect(row).toHaveClass("h-24");
+    }
+  });
 });

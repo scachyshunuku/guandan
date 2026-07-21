@@ -47,7 +47,9 @@ export default function TrickDisplay({ trick, leaderPosition, participants }: Tr
             key={position}
             data-testid="trick-display-player"
             data-position={position}
-            className="flex items-center gap-4"
+            // Fixed to Card's height so every row takes up the same space
+            // whether the player played cards, passed, or hasn't acted yet.
+            className="flex h-24 items-center gap-4"
           >
             <span
               data-testid="trick-display-name"
