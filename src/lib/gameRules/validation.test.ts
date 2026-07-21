@@ -1,4 +1,4 @@
-import type { CardWithWild, CurrentTrick, StandardRank, Suit, TrickPlay } from "../types";
+import type { CardWithWild, CurrentTrick, PlayerPosition, StandardRank, Suit, TrickPlay } from "../types";
 import { PASS } from "../types";
 import { STANDARD_RANK_ORDER, SUIT_ORDER } from "../cardUtils";
 import { beatsTrick, canPlayCards, resolveCard, resolveCards } from "./validation";
@@ -28,6 +28,12 @@ function straightFrom(startIndex: number, length = 5): CardWithWild[] {
 // plain (non-wild, non-elevated) cards.
 function levelRankExcluding(...ranks: StandardRank[]): StandardRank {
   return STANDARD_RANK_ORDER.find((r) => !ranks.includes(r))!;
+}
+
+// A single-entry trick: just a lead, nothing beating it yet. Position is
+// arbitrary (position 0) since beatsTrick/canPlayCards never look at it.
+function lead(play: TrickPlay): CurrentTrick {
+  return [{ position: 0, play }];
 }
 
 const NO_LEAD: CurrentTrick = [];
@@ -177,8 +183,11 @@ describe("canPlayCards / beatsTrick: leading an empty trick", () => {
 describe("canPlayCards / beatsTrick: responding to a lead", () => {
   const levelRank = levelRankExcluding("7", "8", "9", "10");
 
+  // Position is irrelevant to beatsTrick/canPlayCards (they only ever look at
+  // the most recent play), so these helpers assign positions arbitrarily
+  // just to satisfy CurrentTrick's shape.
   function trickWith(...plays: TrickPlay[]): CurrentTrick {
-    return plays;
+    return plays.map((play, i) => ({ position: (i % 4) as PlayerPosition, play }));
   }
 
   it("a higher single beats a lower single", () => {
@@ -256,12 +265,12 @@ describe("canPlayCards / beatsTrick: bombs", () => {
   const levelRank = levelRankExcluding("7", "8", "9", "10");
 
   it("any bomb beats any ordinary combination", () => {
-    const trick: CurrentTrick = [straightFrom(0)]; // an ordinary straight lead
+    const trick: CurrentTrick = lead(straightFrom(0)); // an ordinary straight lead
     expect(beatsTrick(nOfRank("9", 4), trick, levelRank)).toEqual({ valid: true });
   });
 
   it("an ordinary combination cannot beat a bomb", () => {
-    const trick: CurrentTrick = [nOfRank("9", 4)];
+    const trick: CurrentTrick = lead(nOfRank("9", 4));
     const result = beatsTrick(straightFrom(0), trick, levelRank);
     expect(result.valid).toBe(false);
   });
@@ -269,36 +278,36 @@ describe("canPlayCards / beatsTrick: bombs", () => {
   it("a higher-tier bomb beats a lower-tier bomb regardless of rank", () => {
     // straight_flush (tier 3) should beat bomb_4 (tier 1) even with a lower
     // face rank.
-    const trick: CurrentTrick = [nOfRank("10", 4)];
+    const trick: CurrentTrick = lead(nOfRank("10", 4));
     const straightFlush = straightFrom(0).map((card) => ({ ...card, suit: "CLUBS" as const }));
     expect(beatsTrick(straightFlush, trick, levelRank)).toEqual({ valid: true });
   });
 
   it("within the same bomb tier, higher rank wins", () => {
-    const trick: CurrentTrick = [nOfRank("7", 4)];
+    const trick: CurrentTrick = lead(nOfRank("7", 4));
     expect(beatsTrick(nOfRank("8", 4), trick, levelRank)).toEqual({ valid: true });
   });
 
   it("within the same bomb tier, a lower rank does not win", () => {
-    const trick: CurrentTrick = [nOfRank("8", 4)];
+    const trick: CurrentTrick = lead(nOfRank("8", 4));
     const result = beatsTrick(nOfRank("7", 4), trick, levelRank);
     expect(result.valid).toBe(false);
   });
 
   it("a same-rank same-tier bomb (duplicate from the second deck) does not beat it", () => {
-    const trick: CurrentTrick = [nOfRank("7", 4)];
+    const trick: CurrentTrick = lead(nOfRank("7", 4));
     const result = beatsTrick(nOfRank("7", 4), trick, levelRank);
     expect(result.valid).toBe(false);
   });
 
   it("the joker bomb beats every other bomb", () => {
-    const trick: CurrentTrick = [nOfRank("10", 10)]; // bomb_10, second-highest tier
+    const trick: CurrentTrick = lead(nOfRank("10", 10)); // bomb_10, second-highest tier
     const jokerBomb = [j("RED_JOKER"), j("RED_JOKER"), j("BLACK_JOKER"), j("BLACK_JOKER")];
     expect(beatsTrick(jokerBomb, trick, levelRank)).toEqual({ valid: true });
   });
 
   it("a bigger bomb can respond even when the lead was an ordinary combo of a different type", () => {
-    const trick: CurrentTrick = [nOfRank("7", 2)]; // a pair lead
+    const trick: CurrentTrick = lead(nOfRank("7", 2)); // a pair lead
     expect(beatsTrick(nOfRank("9", 5), trick, levelRank)).toEqual({ valid: true }); // bomb_5
   });
 });
@@ -308,7 +317,7 @@ describe("canPlayCards: end-to-end", () => {
 
   it("rejects a play that isn't in hand even if it would otherwise beat the trick", () => {
     const hand = [c("8", "SPADES")];
-    const trick: CurrentTrick = [[c("7", "CLUBS")]];
+    const trick: CurrentTrick = lead([c("7", "CLUBS")]);
     const result = canPlayCards([c("9", "SPADES")], hand, trick, levelRank);
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/not in hand/);
@@ -317,7 +326,7 @@ describe("canPlayCards: end-to-end", () => {
   it("accepts a wild card used to beat the lead", () => {
     const wild: CardWithWild = { rank: "5", suit: "HEARTS", actsAs: { rank: "9", suit: "SPADES" } };
     const hand = [wild];
-    const trick: CurrentTrick = [[c("7", "CLUBS")]];
+    const trick: CurrentTrick = lead([c("7", "CLUBS")]);
     expect(canPlayCards([wild], hand, trick, levelRank)).toEqual({ valid: true });
   });
 
@@ -344,7 +353,7 @@ describe("canPlayCards: exhaustive single-vs-single sweep", () => {
       const levelRank = levelRankExcluding(leadRank, responseRank);
 
       it(`${responseRank} vs lead ${leadRank}: ${shouldBeat ? "beats" : "does not beat"}`, () => {
-        const trick: CurrentTrick = [[c(leadRank, "CLUBS")]];
+        const trick: CurrentTrick = lead([c(leadRank, "CLUBS")]);
         const hand = [c(responseRank, "SPADES")];
         const result = canPlayCards([c(responseRank, "SPADES")], hand, trick, levelRank);
         expect(result.valid).toBe(shouldBeat);

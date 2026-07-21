@@ -124,8 +124,8 @@ function validateCardsToPlay(
 // trick hasn't had a play yet, i.e. this play would be the opening lead.
 function lastPlayedCombo(currentTrick: CurrentTrick): CardWithWild[] | null {
   for (let i = currentTrick.length - 1; i >= 0; i--) {
-    const entry = currentTrick[i];
-    if (entry !== PASS) return entry;
+    const { play } = currentTrick[i];
+    if (play !== PASS) return play;
   }
   return null;
 }

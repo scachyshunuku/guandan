@@ -42,6 +42,7 @@ Each round:
 - **First round**: A random player is chosen to lead the first trick
 - **Subsequent rounds**: The player who finished 1st in the previous round leads the first trick
 - **Within a round**: After each trick ends, the player who won that trick leads the next trick
+- **Winner out of cards**: If the trick winner has no cards left after their winning play (that play was their last), their partner leads the next trick instead — the round continues with the remaining active players until the round ends (see "Scoring" → "Round End")
 
 ## Play Structure
 
@@ -110,6 +111,11 @@ Bombs are special combinations that can beat any other combination of the same t
 ## Scoring
 
 Teams earn **level promotions** based on their finishing position and whether they were "declarers" (the team that played at that level):
+
+### Round End
+A hand ends as soon as its outcome is fully determined — there's no need for the remaining players to keep playing once nothing left to play can change the result:
+- **Three players have finished**: the 4th is automatically placed last; their remaining cards don't matter
+- **The first two to finish are partners (a 1-2 finish)**: the hand ends immediately, even before a 3rd player finishes — 1-2 is already the maximum promotion (see below), and the relative order of the remaining two players (3rd vs. 4th) can't change the outcome, so they're simply assigned 3rd and 4th
 
 ### Promotion Rules (per hand)
 - **1-4 finish**: Go up **1 level**

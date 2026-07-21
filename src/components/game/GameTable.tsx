@@ -102,7 +102,6 @@ function renderSeat(
 
 function renderTrickArea(round: GameRound | null, anchor: PlayerPosition) {
   const trick = round?.gameState.currentTrick ?? [];
-  const leaderPosition = round?.leaderPosition ?? 0;
 
   if (trick.length === 0) {
     return <span data-testid="trick-empty">No cards played yet</span>;
@@ -110,8 +109,7 @@ function renderTrickArea(round: GameRound | null, anchor: PlayerPosition) {
 
   return (
     <>
-      {trick.map((play, i) => {
-        const position = ((leaderPosition + i) % 4) as PlayerPosition;
+      {trick.map(({ position, play }, i) => {
         const seatLabel = seatLabelFor(position, anchor);
         return (
           <div key={i} data-testid="trick-play" data-position={position}>
