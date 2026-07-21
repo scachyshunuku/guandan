@@ -1,4 +1,4 @@
-import type { Card, StandardRank, Suit } from "./types";
+import type { Card, CardWithWild, StandardRank, Suit } from "./types";
 import {
   SUIT_ORDER,
   STANDARD_RANK_ORDER,
@@ -7,6 +7,7 @@ import {
   encodeCard,
   getCardRank,
   isStandardRank,
+  removeCardsFromHand,
   sortCards,
 } from "./cardUtils";
 
@@ -242,5 +243,46 @@ describe("encodeCard / decodeCard", () => {
 
   it("rejects encoding a standard-rank card with a missing suit", () => {
     expect(() => encodeCard({ rank: "ACE" } as Card)).toThrow();
+  });
+});
+
+describe("removeCardsFromHand", () => {
+  it("removes the played cards, leaving the rest untouched", () => {
+    const hand: CardWithWild[] = [
+      { rank: "3", suit: "CLUBS" },
+      { rank: "7", suit: "HEARTS" },
+      { rank: "ACE", suit: "SPADES" },
+    ];
+    const result = removeCardsFromHand(hand, [{ rank: "7", suit: "HEARTS" }]);
+    expect(result).toEqual([
+      { rank: "3", suit: "CLUBS" },
+      { rank: "ACE", suit: "SPADES" },
+    ]);
+  });
+
+  it("only removes as many copies as were played from a duplicated (rank, suit)", () => {
+    const hand: CardWithWild[] = [
+      { rank: "KING", suit: "HEARTS" },
+      { rank: "KING", suit: "HEARTS" },
+      { rank: "2", suit: "CLUBS" },
+    ];
+    const result = removeCardsFromHand(hand, [{ rank: "KING", suit: "HEARTS" }]);
+    expect(result).toEqual([
+      { rank: "KING", suit: "HEARTS" },
+      { rank: "2", suit: "CLUBS" },
+    ]);
+  });
+
+  it("matches by physical identity, ignoring a wild card's actsAs claim", () => {
+    const hand: CardWithWild[] = [{ rank: "5", suit: "HEARTS" }];
+    const played: CardWithWild[] = [
+      { rank: "5", suit: "HEARTS", actsAs: { rank: "KING", suit: "SPADES" } },
+    ];
+    expect(removeCardsFromHand(hand, played)).toEqual([]);
+  });
+
+  it("leaves the hand unchanged when nothing is played", () => {
+    const hand: CardWithWild[] = [{ rank: "9", suit: "DIAMONDS" }];
+    expect(removeCardsFromHand(hand, [])).toEqual(hand);
   });
 });

@@ -122,7 +122,7 @@ All of these can be done in parallel. Heavy unit test coverage.
 - **Estimated**: 8 hours
 
 ### Task 3.2: Play Card API
-- [ ] `POST /api/game/[id]/play-cards`
+- [x] `POST /api/game/[id]/play-cards`
   - Validate combination using Task 2.3
   - Validate it beats lead (if applicable)
   - Update game_rounds.game_state.currentTrick
@@ -130,12 +130,12 @@ All of these can be done in parallel. Heavy unit test coverage.
   - Check if trick ends (3 passes)
   - Check if hand ends (player out of cards)
   - Broadcast via Realtime
-- [ ] `POST /api/game/[id]/pass`
+- [x] `POST /api/game/[id]/pass`
   - Increment pass counter
   - Check if trick ends
   - Move to next player
   - Broadcast
-- [ ] Integration tests: Valid plays, invalid plays, trick ending, hand ending
+- [x] Integration tests: Valid plays, invalid plays, trick ending, hand ending
 - **Blockers**: Tasks 1.2, 1.3, 2.3, 3.1
 - **Enables**: Task 3.3
 - **Testability**: Integration tests

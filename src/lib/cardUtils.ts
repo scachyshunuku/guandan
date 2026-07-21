@@ -3,7 +3,7 @@
 // standing in for another card) is a play-validation concern handled in
 // lib/gameRules/validation.ts, not here.
 
-import type { Card, Rank, StandardRank, Suit } from "./types";
+import type { Card, CardWithWild, Rank, StandardRank, Suit } from "./types";
 
 // ---------------------------------------------------------------------------
 // Rank values
@@ -127,6 +127,36 @@ export function encodeCard(card: Card): string {
     throw new Error(`Card is missing a suit: ${JSON.stringify(card)}`);
   }
   return `${rankCode}${SUIT_CODES[card.suit]}`;
+}
+
+// Removes `cardsToRemove` from `hand` by physical card identity (rank +
+// suit, ignoring any wild-card `actsAs` claim — same semantics
+// gameRules/validation.ts uses to check ownership), a multiset match rather
+// than `.filter` so a duplicate (rank, suit) from the double deck only drops
+// as many copies as were actually played. Callers must have already
+// validated (e.g. via canPlayCards) that every card in cardsToRemove is
+// physically present in hand.
+export function removeCardsFromHand(
+  hand: CardWithWild[],
+  cardsToRemove: CardWithWild[],
+): CardWithWild[] {
+  const remainingToRemove = new Map<string, number>();
+  for (const card of cardsToRemove) {
+    const key = encodeCard(card);
+    remainingToRemove.set(key, (remainingToRemove.get(key) ?? 0) + 1);
+  }
+
+  const remainingHand: CardWithWild[] = [];
+  for (const card of hand) {
+    const key = encodeCard(card);
+    const count = remainingToRemove.get(key) ?? 0;
+    if (count > 0) {
+      remainingToRemove.set(key, count - 1);
+    } else {
+      remainingHand.push(card);
+    }
+  }
+  return remainingHand;
 }
 
 export function decodeCard(code: string): Card {
