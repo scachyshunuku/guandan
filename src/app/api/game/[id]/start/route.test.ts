@@ -7,15 +7,21 @@
 import type { FakeSupabaseClient } from "@/testUtils/fakeSupabase";
 
 jest.mock("@/lib/supabaseAdmin");
+jest.mock("@/lib/realtimeBroadcast");
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import type { StartGameResponse } from "@/lib/types";
 import { POST } from "./route";
 
 const fake = supabaseAdmin as unknown as FakeSupabaseClient;
+const mockBroadcastToGame = broadcastToGame as jest.MockedFunction<
+  typeof broadcastToGame
+>;
 
 beforeEach(() => {
   fake._reset();
+  mockBroadcastToGame.mockClear();
 });
 
 async function seedGame(overrides: Record<string, unknown> = {}): Promise<string> {
@@ -100,6 +106,21 @@ describe("POST /api/game/[id]/start", () => {
     const uniqueCardKeys = new Set(allCards.map((c) => JSON.stringify(c)));
     // 108 cards is 2 copies each of 54 distinct cards.
     expect(uniqueCardKeys.size).toBe(54);
+
+    expect(mockBroadcastToGame).toHaveBeenCalledWith(
+      gameId,
+      "game_updated",
+      expect.objectContaining({ id: gameId, status: "in_progress" }),
+    );
+    expect(mockBroadcastToGame).toHaveBeenCalledWith(
+      gameId,
+      "round_updated",
+      expect.objectContaining({
+        id: round?.id,
+        leader_position: round?.leader_position,
+        current_player_turn: round?.current_player_turn,
+      }),
+    );
   });
 
   it("rejects starting a game that already started", async () => {
@@ -149,6 +170,7 @@ describe("POST /api/game/[id]/start", () => {
 
     const response = await callStart(gameId, { playerId: "p0" });
     expect(response.status).toBe(500);
+    expect(mockBroadcastToGame).not.toHaveBeenCalled();
 
     const gameRow = fake._tables.games.find((g) => g.id === gameId);
     expect(gameRow?.status).toBe("waiting");

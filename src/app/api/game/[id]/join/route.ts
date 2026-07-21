@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getGame, getLatestRound, getParticipants } from "@/lib/gameDb";
 import { parseJsonBody } from "@/lib/http";
+import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import type {
   JoinActionData,
   JoinGameRequest,
@@ -73,7 +74,7 @@ export async function POST(
       player_id: playerId,
       position,
     })
-    .select("position, hand")
+    .select("*")
     .single();
 
   if (insertError || !inserted) {
@@ -107,6 +108,13 @@ export async function POST(
       console.error("Failed to log join game_action", actionError);
     }
   }
+
+  // Broadcast so other connected clients' useGameRealtimeSync picks up the
+  // new participant (see ARCHITECTURE.md section 10). hand is explicitly
+  // zeroed rather than trusting the inserted row's value, since a hand must
+  // never leave the server on this channel — even though a freshly inserted
+  // participant always has an empty one today.
+  await broadcastToGame(gameId, "participant_joined", { ...inserted, hand: [] });
 
   const response: JoinGameResponse =
     inserted.position === null

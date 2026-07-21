@@ -40,6 +40,7 @@ export interface GameStoreState {
   updateTrick: (currentTrick: CurrentTrick) => void;
   setCurrentPlayerTurn: (position: PlayerPosition | null) => void;
   updateParticipants: (participants: GameParticipant[]) => void;
+  addParticipant: (participant: GameParticipant) => void;
   setTeamLevels: (teamALevel: number, teamBLevel: number) => void;
   reset: () => void;
 }
@@ -66,6 +67,18 @@ export const useGameStore = create<GameStoreState>((set) => ({
   updateTrick: (currentTrick) => set({ currentTrick }),
   setCurrentPlayerTurn: (currentPlayerTurn) => set({ currentPlayerTurn }),
   updateParticipants: (participants) => set({ participants }),
+  // Upserts by id rather than always appending, since a rejoin (e.g. after a
+  // brief disconnect) broadcasts the same participant id again.
+  addParticipant: (participant) =>
+    set((state) => {
+      const existingIndex = state.participants.findIndex((p) => p.id === participant.id);
+      if (existingIndex === -1) {
+        return { participants: [...state.participants, participant] };
+      }
+      const participants = [...state.participants];
+      participants[existingIndex] = participant;
+      return { participants };
+    }),
   setTeamLevels: (teamALevel, teamBLevel) =>
     set({ teamLevels: [teamALevel, teamBLevel] }),
   reset: () => set(initialState),

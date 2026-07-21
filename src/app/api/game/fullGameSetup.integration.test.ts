@@ -9,6 +9,7 @@
 import type { FakeSupabaseClient } from "@/testUtils/fakeSupabase";
 
 jest.mock("@/lib/supabaseAdmin");
+jest.mock("@/lib/realtimeBroadcast");
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type {

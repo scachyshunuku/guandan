@@ -549,17 +549,53 @@ Response: { actions: [...] }
 
 ## 10. Real-time Channels
 
-All players in a game subscribe to the channel: `games:[code]`
+All players in a game subscribe to the channel: `games:[code]` (implemented
+in `hooks/useGameRealtimeSync.ts`, Task 4.2).
 
-### Broadcast Events
+Everything is delivered via **`broadcast`**, not `postgres_changes` —
+`postgres_changes` requires each table to be added to the
+`supabase_realtime` publication, a manual per-project setup step this app
+doesn't assume is done, so API routes explicitly broadcast after every write
+instead (via `lib/realtimeBroadcast.ts`'s `broadcastToGame(gameId, event,
+payload)`, which uses `channel.httpSend` — a REST call, no `subscribe()`
+handshake needed for a one-off server-side send). This also sidesteps having
+to reason about the `game_participants`/`game_actions` RLS policies (see the
+migration's "Row-Level Security" section) for real-time delivery, since
+`broadcast` doesn't go through table RLS at all — the API route decides
+exactly what's in the payload (e.g. never a player's hand).
 
-- `player_joined` → New participant joined
-- `player_left` → Participant disconnected/left
-- `game_started` → Game begins (cards dealt)
-- `card_played` → Player played cards
-- `trick_result` → Trick winner + points
-- `round_end` → Round completed (13 tricks)
-- `game_end` → Game finished (all rounds)
+### Broadcast events
+
+- `game_updated`, payload = the updated `games` row — sent after any write
+  to `games` (currently: `POST /api/game/[id]/start` flipping `status` to
+  `in_progress`). Synced to `gameStatus`/`teamLevels` in the store.
+- `round_updated`, payload = the updated `game_rounds` row — sent after any
+  write to `game_rounds` (currently: `start`, setting `leader_position`/
+  `current_player_turn`). Synced to `currentTrick`/`currentPlayerTurn`.
+- `participant_joined`, payload = the new `game_participants` row, `hand`
+  always forced to `[]` regardless of the row's actual value (defense in
+  depth — a fresh join always has an empty hand anyway, but this is
+  player-identifying data going out unscoped, so it's never trusted to the
+  DB value) — sent by `POST /api/game/[id]/join` on a genuine new join (not
+  the idempotent-rejoin path, which returns early and announces nothing new).
+  Synced via `addParticipant` in the store, which upserts by id rather than
+  blindly appending, since a rejoin after a brief disconnect reuses the same
+  participant id.
+- `game_action`, payload = the inserted `game_actions` row — sent by
+  whichever route inserts one (`play-cards`, `pass`, `exchange-cards` —
+  Tasks 3.2/3.3, not yet implemented; `join` inserts a `game_actions` row
+  too but broadcasts `participant_joined` instead, not this). No store field
+  holds raw action history, so `useGameRealtimeSync` forwards the mapped
+  `GameAction` to an `onGameAction` callback instead of syncing it directly.
+
+No `participant_left` event: there's no `leave` route, or disconnect/
+heartbeat detection, anywhere in the codebase yet — that's
+IMPLEMENTATION.md Task 6.2 ("Player disconnects/reconnects"), still blocked
+on all of Phase 3-5. Real-time participant sync currently only covers joins.
+
+As of Task 4.2, `start` sends `game_updated`/`round_updated` and `join`
+sends `participant_joined`; `game_action` remains a contract Tasks 3.2/3.3
+must satisfy.
 
 ---
 

@@ -191,13 +191,13 @@ All of these can be done in parallel. Heavy unit test coverage.
 - **Estimated**: 5 hours
 
 ### Task 4.2: Supabase Real-time Hook
-- [ ] Create `hooks/useGameRealtimeSync.ts`:
+- [x] Create `hooks/useGameRealtimeSync.ts`:
   - Subscribe to games:[gameId] channel
   - Listen to game_rounds updates
   - Listen to game_actions inserts
   - Sync to Zustand store
   - Unsubscribe on unmount
-- [ ] Mock tests: Subscription setup, message handling
+- [x] Mock tests: Subscription setup, message handling
 - **Blockers**: Tasks 4.1, 3.4
 - **Enables**: Task 4.4
 - **Testability**: Unit tests with mock Supabase
