@@ -264,13 +264,13 @@ All can be built with mocks, integrated later.
 - **Estimated**: 6 hours
 
 ### Task 5.3: Trick Display
-- [ ] `components/game/TrickDisplay.tsx` - Show current trick plays
+- [x] `components/game/TrickDisplay.tsx` - Show current trick plays
   - Render `currentTrick` array
   - Show plays in order (player position)
   - Display pass vs cards played
   - Show wild card `actsAs` notation
   - Unit tests: Array rendering, wild cards
-- [ ] `components/game/ScoreBoard.tsx` - Level & score display
+- [x] `components/game/ScoreBoard.tsx` - Level & score display
   - Team A/B levels
   - Team A/B scores
   - Level progression visual

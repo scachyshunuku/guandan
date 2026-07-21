@@ -1,9 +1,8 @@
 "use client";
 
 import { pluralize } from "@/lib/format";
+import type { SeatLabel } from "@/lib/seating";
 import type { PlayerPosition } from "@/lib/types";
-
-export type SeatLabel = "north" | "south" | "east" | "west";
 
 export interface PlayerCardProps {
   playerName: string;
