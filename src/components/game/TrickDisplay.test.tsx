@@ -32,47 +32,47 @@ describe("TrickDisplay", () => {
     expect(screen.getByTestId("trick-display-empty")).toBeInTheDocument();
   });
 
-  it("renders one column per player, in player-position order, by name", () => {
+  it("renders one row per player, in player-position order, by name", () => {
     const trick: CurrentTrick = [[{ suit: "CLUBS", rank: "3" }], PASS];
     render(<TrickDisplay trick={trick} leaderPosition={0} participants={PARTICIPANTS} />);
 
-    const columns = screen.getAllByTestId("trick-display-player");
-    expect(columns).toHaveLength(4);
-    expect(columns[0]).toHaveAttribute("data-position", "0");
-    expect(columns[0]).toHaveTextContent("Alice");
-    expect(columns[1]).toHaveAttribute("data-position", "1");
-    expect(columns[1]).toHaveTextContent("Bob");
+    const rows = screen.getAllByTestId("trick-display-player");
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toHaveAttribute("data-position", "0");
+    expect(rows[0]).toHaveTextContent("Alice");
+    expect(rows[1]).toHaveAttribute("data-position", "1");
+    expect(rows[1]).toHaveTextContent("Bob");
   });
 
-  it("shows each player's play right below their name", () => {
+  it("shows each player's play to the right of their name", () => {
     const trick: CurrentTrick = [[{ suit: "CLUBS", rank: "3" }], PASS];
     render(<TrickDisplay trick={trick} leaderPosition={0} participants={PARTICIPANTS} />);
 
-    const columns = screen.getAllByTestId("trick-display-player");
-    expect(columns[0]).toHaveTextContent("Alice");
-    expect(columns[0].querySelector('[data-testid="card"]')).toBeInTheDocument();
-    expect(columns[1]).toHaveTextContent("Bob");
-    expect(columns[1]).toHaveTextContent("Pass");
+    const rows = screen.getAllByTestId("trick-display-player");
+    expect(rows[0]).toHaveTextContent("Alice");
+    expect(rows[0].querySelector('[data-testid="card"]')).toBeInTheDocument();
+    expect(rows[1]).toHaveTextContent("Bob");
+    expect(rows[1].querySelector('[data-testid="trick-display-pass"]')).toBeInTheDocument();
   });
 
   it("shows a waiting placeholder for players who haven't acted yet this trick", () => {
     const trick: CurrentTrick = [[{ suit: "CLUBS", rank: "3" }]];
     render(<TrickDisplay trick={trick} leaderPosition={0} participants={PARTICIPANTS} />);
 
-    const columns = screen.getAllByTestId("trick-display-player");
-    expect(columns[1].querySelector('[data-testid="trick-display-waiting"]')).toBeInTheDocument();
+    const rows = screen.getAllByTestId("trick-display-player");
+    expect(rows[1].querySelector('[data-testid="trick-display-waiting"]')).toBeInTheDocument();
   });
 
   it("attributes plays to the right player when the leader isn't position 0", () => {
     const trick: CurrentTrick = [[{ suit: "CLUBS", rank: "3" }], PASS];
     render(<TrickDisplay trick={trick} leaderPosition={2} participants={PARTICIPANTS} />);
 
-    const columns = screen.getAllByTestId("trick-display-player");
+    const rows = screen.getAllByTestId("trick-display-player");
     // Leader (position 2, Carol) acted first; position 3 (Dave) passed next.
-    expect(columns[2]).toHaveTextContent("Carol");
-    expect(columns[2].querySelector('[data-testid="card"]')).toBeInTheDocument();
-    expect(columns[3]).toHaveTextContent("Dave");
-    expect(columns[3]).toHaveTextContent("Pass");
+    expect(rows[2]).toHaveTextContent("Carol");
+    expect(rows[2].querySelector('[data-testid="card"]')).toBeInTheDocument();
+    expect(rows[3]).toHaveTextContent("Dave");
+    expect(rows[3].querySelector('[data-testid="trick-display-pass"]')).toBeInTheDocument();
   });
 
   it("renders the actual cards played, not just a count", () => {
@@ -84,6 +84,13 @@ describe("TrickDisplay", () => {
     ];
     render(<TrickDisplay trick={trick} leaderPosition={0} participants={PARTICIPANTS} />);
     expect(screen.getAllByTestId("card")).toHaveLength(2);
+  });
+
+  it("shows a distinct card-shaped placeholder for a pass", () => {
+    render(<TrickDisplay trick={[PASS]} leaderPosition={0} participants={PARTICIPANTS} />);
+    const pass = screen.getByTestId("trick-display-pass");
+    expect(pass).toHaveTextContent("PASS");
+    expect(screen.queryByTestId("card")).not.toBeInTheDocument();
   });
 
   it("shows the wild card actsAs notation", () => {
