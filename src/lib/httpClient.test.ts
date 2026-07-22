@@ -46,9 +46,16 @@ describe("postJson", () => {
     await expect(postJson("/api/thing")).rejects.toThrow("Game not found");
   });
 
-  it("falls back to a generic message when the error response isn't valid JSON", async () => {
-    mockFetch(502, () => Promise.reject(new SyntaxError("Unexpected token <")));
+  it("falls back to a generic message and logs when the error response isn't valid JSON", async () => {
+    const parseError = new SyntaxError("Unexpected token <");
+    mockFetch(502, () => Promise.reject(parseError));
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
 
     await expect(postJson("/api/thing")).rejects.toThrow("Request failed");
+
+    expect(consoleError).toHaveBeenCalledWith(
+      "Failed to parse response from /api/thing (status 502)",
+      parseError,
+    );
   });
 });

@@ -14,8 +14,12 @@ export async function postJson<TResponse>(
   // A non-2xx response isn't guaranteed to be our own JSON error shape (a
   // proxy/gateway failure can return an HTML error page), so a parse
   // failure here falls back to a generic message instead of surfacing a
-  // raw "Unexpected token <" to the user.
-  const data = await res.json().catch(() => null);
+  // raw "Unexpected token <" to the user. Logged since that fallback
+  // message alone gives a developer nothing to debug from.
+  const data = await res.json().catch((parseError) => {
+    console.error(`Failed to parse response from ${url} (status ${res.status})`, parseError);
+    return null;
+  });
   if (!res.ok) {
     const message = typeof data?.error === "string" ? data.error : "Request failed";
     throw new Error(message);
