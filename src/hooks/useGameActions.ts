@@ -7,6 +7,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
+import { postJson } from "@/lib/httpClient";
 import type {
   CardWithWild,
   ExchangeCardsRequest,
@@ -16,23 +17,6 @@ import type {
   PlayCardsResponse,
   PlayerPosition,
 } from "@/lib/types";
-
-async function postJson<TResponse>(
-  url: string,
-  body: unknown,
-): Promise<TResponse> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    const message = typeof data?.error === "string" ? data.error : "Request failed";
-    throw new Error(message);
-  }
-  return data as TResponse;
-}
 
 // PlayCardsResponse/ExchangeCardsResponse can report a rule rejection
 // (invalid combo, doesn't beat lead, wrong card to give back, ...) as

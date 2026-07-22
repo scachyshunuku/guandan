@@ -299,15 +299,15 @@ All can be built with mocks, integrated later.
 - **Estimated**: 7 hours
 
 ### Task 5.5: Lobby & Game Creation
-- [ ] `components/lobby/CreateGameForm.tsx`
+- [x] `components/lobby/CreateGameForm.tsx`
   - Button to create game
   - Copy game code link
   - Unit tests: Form submission
-- [ ] `components/lobby/JoinGameForm.tsx`
+- [x] `components/lobby/JoinGameForm.tsx`
   - Input: game code, player name
   - Submit to join
   - Unit tests: Validation, submission
-- [ ] `app/page.tsx` - Home page
+- [x] `app/page.tsx` - Home page
   - Create or join game
   - Unit tests: Navigation
 - **Blockers**: Task 1.3

@@ -1,63 +1,80 @@
-import Image from "next/image";
+"use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import CreateGameForm from "@/components/lobby/CreateGameForm";
+import JoinGameForm from "@/components/lobby/JoinGameForm";
+import { postJson } from "@/lib/httpClient";
+import { getOrCreatePlayerId } from "@/lib/playerId";
+import type { CreateGameResponse, JoinGameResponse } from "@/lib/types";
+
+// Home page (ARCHITECTURE.md section 7 "Create Game"/"Join Game", Task 5.5).
+// Owns the network calls and navigation for both lobby forms - the forms
+// themselves stay presentational (see CreateGameForm.tsx/JoinGameForm.tsx).
 export default function Home() {
+  const router = useRouter();
+
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createdGameId, setCreatedGameId] = useState<string | null>(null);
+
+  const [isJoining, setIsJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+
+  const handleCreateGame = async () => {
+    setIsCreating(true);
+    setCreateError(null);
+    try {
+      const { gameId } = await postJson<CreateGameResponse>("/api/game/create");
+      setCreatedGameId(gameId);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Failed to create game");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleJoinGame = async (gameId: string, playerName: string) => {
+    setIsJoining(true);
+    setJoinError(null);
+    try {
+      const playerId = getOrCreatePlayerId();
+      await postJson<JoinGameResponse>(`/api/game/${encodeURIComponent(gameId)}/join`, {
+        playerName,
+        playerId,
+      });
+      router.push(`/game/${encodeURIComponent(gameId)}`);
+    } catch (err) {
+      setJoinError(err instanceof Error ? err.message : "Failed to join game");
+      setIsJoining(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="flex flex-1 items-center justify-center bg-slate-100 px-6 py-16">
+      <main className="flex w-full max-w-3xl flex-col gap-10">
+        <header className="text-center">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600">
+            Guandan
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+          <h1 className="mt-2 text-3xl font-bold text-slate-900">Play with friends</h1>
+        </header>
+
+        <div className="grid gap-6 sm:grid-cols-2">
+          <section className="rounded-2xl bg-white p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-slate-900">Create a game</h2>
+            <CreateGameForm
+              onCreateGame={handleCreateGame}
+              isCreating={isCreating}
+              error={createError}
+              gameId={createdGameId}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+          </section>
+
+          <section className="rounded-2xl bg-white p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-slate-900">Join a game</h2>
+            <JoinGameForm onJoinGame={handleJoinGame} isJoining={isJoining} error={joinError} />
+          </section>
         </div>
       </main>
     </div>
