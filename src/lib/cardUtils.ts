@@ -26,6 +26,33 @@ export const STANDARD_RANK_ORDER: readonly StandardRank[] = Object.freeze([
   "ACE",
 ] as const);
 
+// Short display label for each standard rank, e.g. JACK -> "J". The single
+// shared source for every component that renders a rank (Card, ScoreBoard,
+// WildCardSelector, ...) rather than each defining its own copy.
+export const RANK_LABELS: Record<StandardRank, string> = {
+  "2": "2",
+  "3": "3",
+  "4": "4",
+  "5": "5",
+  "6": "6",
+  "7": "7",
+  "8": "8",
+  "9": "9",
+  "10": "10",
+  JACK: "J",
+  QUEEN: "Q",
+  KING: "K",
+  ACE: "A",
+};
+
+// Single shared source for the suit glyphs used in Card and WildCardSelector.
+export const SUIT_SYMBOLS: Record<Suit, string> = {
+  CLUBS: "♣",
+  HEARTS: "♥",
+  SPADES: "♠",
+  DIAMONDS: "♦",
+};
+
 const STANDARD_RANK_VALUE: Record<StandardRank, number> = Object.fromEntries(
   STANDARD_RANK_ORDER.map((rank, i) => [rank, i + 2]),
 ) as Record<StandardRank, number>;
