@@ -28,13 +28,16 @@ const PARTICIPANTS: GameParticipant[] = [
 
 describe("TrickDisplay", () => {
   it("shows a placeholder when no trick has started", () => {
-    render(<TrickDisplay trick={[]} leaderPosition={0} participants={PARTICIPANTS} />);
+    render(<TrickDisplay trick={[]} participants={PARTICIPANTS} />);
     expect(screen.getByTestId("trick-display-empty")).toBeInTheDocument();
   });
 
   it("renders one row per player, in player-position order, by name", () => {
-    const trick: CurrentTrick = [[{ suit: "CLUBS", rank: "3" }], PASS];
-    render(<TrickDisplay trick={trick} leaderPosition={0} participants={PARTICIPANTS} />);
+    const trick: CurrentTrick = [
+      { position: 0, play: [{ suit: "CLUBS", rank: "3" }] },
+      { position: 1, play: PASS },
+    ];
+    render(<TrickDisplay trick={trick} participants={PARTICIPANTS} />);
 
     const rows = screen.getAllByTestId("trick-display-player");
     expect(rows).toHaveLength(4);
@@ -45,8 +48,11 @@ describe("TrickDisplay", () => {
   });
 
   it("shows each player's play to the right of their name", () => {
-    const trick: CurrentTrick = [[{ suit: "CLUBS", rank: "3" }], PASS];
-    render(<TrickDisplay trick={trick} leaderPosition={0} participants={PARTICIPANTS} />);
+    const trick: CurrentTrick = [
+      { position: 0, play: [{ suit: "CLUBS", rank: "3" }] },
+      { position: 1, play: PASS },
+    ];
+    render(<TrickDisplay trick={trick} participants={PARTICIPANTS} />);
 
     const rows = screen.getAllByTestId("trick-display-player");
     expect(rows[0]).toHaveTextContent("Alice");
@@ -56,16 +62,19 @@ describe("TrickDisplay", () => {
   });
 
   it("shows a waiting placeholder for players who haven't acted yet this trick", () => {
-    const trick: CurrentTrick = [[{ suit: "CLUBS", rank: "3" }]];
-    render(<TrickDisplay trick={trick} leaderPosition={0} participants={PARTICIPANTS} />);
+    const trick: CurrentTrick = [{ position: 0, play: [{ suit: "CLUBS", rank: "3" }] }];
+    render(<TrickDisplay trick={trick} participants={PARTICIPANTS} />);
 
     const rows = screen.getAllByTestId("trick-display-player");
     expect(rows[1].querySelector('[data-testid="trick-display-waiting"]')).toBeInTheDocument();
   });
 
   it("attributes plays to the right player when the leader isn't position 0", () => {
-    const trick: CurrentTrick = [[{ suit: "CLUBS", rank: "3" }], PASS];
-    render(<TrickDisplay trick={trick} leaderPosition={2} participants={PARTICIPANTS} />);
+    const trick: CurrentTrick = [
+      { position: 2, play: [{ suit: "CLUBS", rank: "3" }] },
+      { position: 3, play: PASS },
+    ];
+    render(<TrickDisplay trick={trick} participants={PARTICIPANTS} />);
 
     const rows = screen.getAllByTestId("trick-display-player");
     // Leader (position 2, Carol) acted first; position 3 (Dave) passed next.
@@ -75,19 +84,40 @@ describe("TrickDisplay", () => {
     expect(rows[3].querySelector('[data-testid="trick-display-pass"]')).toBeInTheDocument();
   });
 
+  it("attributes plays correctly when a position was skipped (gone out mid-round)", () => {
+    // Position 1 has gone out and takes no turns; the trick only visits
+    // positions 0, 2, 3 (see the CurrentTrick type comment in lib/types.ts).
+    const trick: CurrentTrick = [
+      { position: 0, play: [{ suit: "CLUBS", rank: "3" }] },
+      { position: 2, play: PASS },
+      { position: 3, play: PASS },
+    ];
+    render(<TrickDisplay trick={trick} participants={PARTICIPANTS} />);
+
+    const rows = screen.getAllByTestId("trick-display-player");
+    expect(rows[0].querySelector('[data-testid="card"]')).toBeInTheDocument();
+    expect(rows[1].querySelector('[data-testid="trick-display-waiting"]')).toBeInTheDocument();
+    expect(rows[2].querySelector('[data-testid="trick-display-pass"]')).toBeInTheDocument();
+    expect(rows[3].querySelector('[data-testid="trick-display-pass"]')).toBeInTheDocument();
+  });
+
   it("renders the actual cards played, not just a count", () => {
     const trick: CurrentTrick = [
-      [
-        { suit: "CLUBS", rank: "3" },
-        { suit: "DIAMONDS", rank: "3" },
-      ],
+      {
+        position: 0,
+        play: [
+          { suit: "CLUBS", rank: "3" },
+          { suit: "DIAMONDS", rank: "3" },
+        ],
+      },
     ];
-    render(<TrickDisplay trick={trick} leaderPosition={0} participants={PARTICIPANTS} />);
+    render(<TrickDisplay trick={trick} participants={PARTICIPANTS} />);
     expect(screen.getAllByTestId("card")).toHaveLength(2);
   });
 
   it("shows a distinct card-shaped placeholder for a pass", () => {
-    render(<TrickDisplay trick={[PASS]} leaderPosition={0} participants={PARTICIPANTS} />);
+    const trick: CurrentTrick = [{ position: 0, play: PASS }];
+    render(<TrickDisplay trick={trick} participants={PARTICIPANTS} />);
     const pass = screen.getByTestId("trick-display-pass");
     expect(pass).toHaveTextContent("PASS");
     expect(screen.queryByTestId("card")).not.toBeInTheDocument();
@@ -95,24 +125,28 @@ describe("TrickDisplay", () => {
 
   it("shows the wild card actsAs notation", () => {
     const trick: CurrentTrick = [
-      [{ suit: "HEARTS", rank: "5", actsAs: { suit: "SPADES", rank: "QUEEN" } }],
+      {
+        position: 0,
+        play: [{ suit: "HEARTS", rank: "5", actsAs: { suit: "SPADES", rank: "QUEEN" } }],
+      },
     ];
-    render(<TrickDisplay trick={trick} leaderPosition={0} participants={PARTICIPANTS} />);
+    render(<TrickDisplay trick={trick} participants={PARTICIPANTS} />);
     expect(screen.getByTestId("wild-indicator")).toHaveTextContent("as Q♠");
   });
 
   it("falls back to a placeholder name for an unfilled seat", () => {
-    const trick: CurrentTrick = [PASS];
-    render(
-      <TrickDisplay trick={trick} leaderPosition={0} participants={PARTICIPANTS.slice(1)} />,
-    );
+    const trick: CurrentTrick = [{ position: 0, play: PASS }];
+    render(<TrickDisplay trick={trick} participants={PARTICIPANTS.slice(1)} />);
     expect(screen.getAllByTestId("trick-display-player")[0]).toHaveTextContent("—");
   });
 
   it("gives every row the same fixed height regardless of content", () => {
     // A card row, a pass row, and a not-yet-acted row all present at once.
-    const trick: CurrentTrick = [[{ suit: "CLUBS", rank: "3" }], PASS];
-    render(<TrickDisplay trick={trick} leaderPosition={0} participants={PARTICIPANTS} />);
+    const trick: CurrentTrick = [
+      { position: 0, play: [{ suit: "CLUBS", rank: "3" }] },
+      { position: 1, play: PASS },
+    ];
+    render(<TrickDisplay trick={trick} participants={PARTICIPANTS} />);
 
     const rows = screen.getAllByTestId("trick-display-player");
     for (const row of rows) {

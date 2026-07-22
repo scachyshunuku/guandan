@@ -14,13 +14,16 @@ import { removeCardsFromHand } from "@/lib/cardUtils";
 import { parseJsonBody } from "@/lib/http";
 import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import { canPlayCards } from "@/lib/gameRules/validation";
-import { advanceTrick } from "@/lib/gameRules/scoring";
+import { detectRoundEnd } from "@/lib/gameRules/scoring";
+import { advanceTrick, toGameState } from "@/lib/gameRules/turnAdvance";
 import type {
   CardPlayedActionData,
   CardWithWild,
+  GameState,
   PlayCardsRequest,
   PlayCardsResponse,
   PlayerPosition,
+  TrickEntry,
 } from "@/lib/types";
 
 function invalidPlayResponse(reason: string, status = 400) {
@@ -66,20 +69,32 @@ export async function POST(
   const remainingHand = removeCardsFromHand(originalHand, cards);
   const handEnded = remainingHand.length === 0;
 
+  // A player going out takes no further turns (RULES.md), but the round
+  // itself continues with whoever's still active — it doesn't freeze just
+  // because one player finished. `newFinishOrder` feeds both this trick's
+  // completion check (advanceTrick skips finished positions) and the
+  // round-end check below.
+  const newFinishOrder = handEnded ? [...round.game_state.finishOrder, position] : round.game_state.finishOrder;
+
+  const entry: TrickEntry = { position, play: cards };
   const advanced = advanceTrick(
     round.game_state.currentTrick,
-    cards,
+    entry,
+    newFinishOrder,
     round.leader_position,
-    position,
     round.game_state.trickCount,
   );
-  // A player going out ends their participation in the hand; halt turn
-  // advancement here (even if they also just won the trick) rather than
-  // handing play to someone else out of turn. Determining finishing
-  // positions and resuming the hand (or moving to card exchange) once
-  // everyone's had a chance to finish this trick is Task 3.3's end-hand
-  // endpoint, not this route's.
-  const newCurrentPlayerTurn = handEnded ? null : advanced.currentPlayerTurn;
+
+  // The round ends once its outcome is fully determined (three finishers,
+  // or a 1-2 finish — RULES.md "Round End"), not merely when someone goes
+  // out. Once that happens, halt turn advancement here rather than handing
+  // play to anyone else — determining the exact finishing-position array and
+  // moving to card exchange is Task 3.3's end-hand endpoint, not this
+  // route's. detectRoundEnd only needs consulting when this play grew
+  // finishOrder; it can't newly conclude the round otherwise.
+  const roundEnded = handEnded && detectRoundEnd(newFinishOrder) !== null;
+  const newCurrentPlayerTurn = roundEnded ? null : advanced.currentPlayerTurn;
+  const newGameState: GameState = toGameState(advanced, newFinishOrder);
 
   // Compare-and-swap on current_player_turn: if another request already
   // resolved this same turn (a double-submit, or two racing requests that
@@ -88,7 +103,7 @@ export async function POST(
   const { data: claimed, error: claimError } = await supabaseAdmin
     .from("game_rounds")
     .update({
-      game_state: advanced.gameState,
+      game_state: newGameState,
       leader_position: advanced.leaderPosition,
       current_player_turn: newCurrentPlayerTurn,
     })
@@ -156,9 +171,9 @@ export async function POST(
 // rollback runs. An unconditional revert would stomp that committed play.
 // The one case where an unconditional-by-id revert back to null actually is
 // safe: `claimedCurrentPlayerTurn === null` only happens when this play
-// emptied the caller's hand, and `current_player_turn: null` can never match
-// any future request's (always 0-3) `position` in resolveTurn's turn check
-// — so nothing else can have claimed past it through this route.
+// ended the round, and `current_player_turn: null` can never match any
+// future request's (always 0-3) `position` in resolveTurn's turn check —
+// so nothing else can have claimed past it through this route.
 //
 // The hand revert, by contrast, is always safe unconditional-by-id (matching
 // start/route.ts's rollback of per-seat hands): it only ever touches this

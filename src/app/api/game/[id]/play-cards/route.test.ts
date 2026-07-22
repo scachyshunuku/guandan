@@ -37,7 +37,7 @@ async function seedRound(
   gameId: string,
   overrides: Record<string, unknown> = {},
 ): Promise<string> {
-  const gameState: GameState = { currentTrick: [], trickCount: 0 };
+  const gameState: GameState = { currentTrick: [], trickCount: 0, finishOrder: [] };
   const { data: round } = await fake
     .from("game_rounds")
     .insert({
@@ -131,9 +131,8 @@ describe("POST /api/game/[id]/play-cards", () => {
     // Regression: a naive `caller.position !== position` check treats a
     // spectator's `position: null` and a submitted `position: null` as a
     // match. Reproduce the exact state where that would matter — a round
-    // halted after a hand-ending play (current_player_turn: null, see the
-    // "halts turn advancement" tests below) — and confirm a spectator still
-    // can't act on it.
+    // halted after the round concluded (see the round-end tests below) —
+    // and confirm a spectator still can't act on it.
     const gameId = await seedGame();
     await seedRound(gameId, { current_player_turn: null });
     await seedParticipant(gameId, null as unknown as number, "spectator", []);
@@ -180,7 +179,11 @@ describe("POST /api/game/[id]/play-cards", () => {
   it("rejects a response that doesn't beat the lead", async () => {
     const gameId = await seedGame();
     await seedRound(gameId, {
-      game_state: { currentTrick: [[{ rank: "9", suit: "CLUBS" }]], trickCount: 0 },
+      game_state: {
+        currentTrick: [{ position: 0, play: [{ rank: "9", suit: "CLUBS" }] }],
+        trickCount: 0,
+        finishOrder: [],
+      },
       current_player_turn: 1,
     });
     await seedParticipant(gameId, 0, "p0", []);
@@ -217,7 +220,7 @@ describe("POST /api/game/[id]/play-cards", () => {
     expect(round?.current_player_turn).toBe(1);
     expect(round?.leader_position).toBe(0);
     expect((round?.game_state as GameState).currentTrick).toEqual([
-      [{ rank: "7", suit: "CLUBS" }],
+      { position: 0, play: [{ rank: "7", suit: "CLUBS" }] },
     ]);
 
     expect(fake._tables.game_actions).toHaveLength(1);
@@ -248,11 +251,12 @@ describe("POST /api/game/[id]/play-cards", () => {
       current_player_turn: 3,
       game_state: {
         currentTrick: [
-          [{ rank: "7", suit: "CLUBS" }],
-          PASS,
-          [{ rank: "9", suit: "CLUBS" }],
+          { position: 0, play: [{ rank: "7", suit: "CLUBS" }] },
+          { position: 1, play: PASS },
+          { position: 2, play: [{ rank: "9", suit: "CLUBS" }] },
         ],
         trickCount: 2,
+        finishOrder: [],
       },
     });
     await seedParticipant(gameId, 3, "p3", [
@@ -268,24 +272,26 @@ describe("POST /api/game/[id]/play-cards", () => {
     expect(response.status).toBe(200);
 
     const round = fake._tables.game_rounds.find((r) => r.id === roundId);
-    // position 3's play was the last non-PASS entry, so they win and lead next.
+    // position 3's play was the last non-PASS entry, so they win and lead
+    // next — they still have a card left, so they lead themselves.
     expect(round?.leader_position).toBe(3);
     expect(round?.current_player_turn).toBe(3);
-    expect(round?.game_state).toEqual({ currentTrick: [], trickCount: 3 });
+    expect(round?.game_state).toEqual({ currentTrick: [], trickCount: 3, finishOrder: [] });
   });
 
-  it("halts turn advancement (even the trick's own winner) when the play empties the player's hand", async () => {
+  it("hands the lead to the winner's partner when the winning play empties their hand", async () => {
     const gameId = await seedGame();
     const roundId = await seedRound(gameId, {
       leader_position: 0,
       current_player_turn: 3,
       game_state: {
         currentTrick: [
-          [{ rank: "7", suit: "CLUBS" }],
-          PASS,
-          [{ rank: "9", suit: "CLUBS" }],
+          { position: 0, play: [{ rank: "7", suit: "CLUBS" }] },
+          { position: 1, play: PASS },
+          { position: 2, play: [{ rank: "9", suit: "CLUBS" }] },
         ],
         trickCount: 2,
+        finishOrder: [],
       },
     });
     await seedParticipant(gameId, 3, "p3", [{ rank: "10", suit: "CLUBS" }]);
@@ -298,14 +304,16 @@ describe("POST /api/game/[id]/play-cards", () => {
     expect(response.status).toBe(200);
 
     const round = fake._tables.game_rounds.find((r) => r.id === roundId);
-    // p3 won the trick (so leads next per RULES.md) but has no cards left to
-    // lead with — turn stays null until Task 3.3's end-hand endpoint resolves it.
-    expect(round?.leader_position).toBe(3);
-    expect(round?.current_player_turn).toBeNull();
-    expect(round?.game_state).toEqual({ currentTrick: [], trickCount: 3 });
+    // p3 (team B, positions 1 & 3) won the trick but has no cards left to
+    // lead with, so their partner (position 1) leads next instead — the
+    // round continues rather than freezing, since only one player is out
+    // (RULES.md "Winner out of cards").
+    expect(round?.leader_position).toBe(1);
+    expect(round?.current_player_turn).toBe(1);
+    expect(round?.game_state).toEqual({ currentTrick: [], trickCount: 3, finishOrder: [3] });
   });
 
-  it("halts turn advancement when the play empties the player's hand", async () => {
+  it("continues play with the next active player when a lead empties the leader's hand (round not yet decided)", async () => {
     const gameId = await seedGame();
     const roundId = await seedRound(gameId);
     await seedParticipant(gameId, 0, "p0", [{ rank: "7", suit: "CLUBS" }]);
@@ -318,10 +326,89 @@ describe("POST /api/game/[id]/play-cards", () => {
     expect(response.status).toBe(200);
 
     const round = fake._tables.game_rounds.find((r) => r.id === roundId);
-    expect(round?.current_player_turn).toBeNull();
+    // Only one player is out — the round doesn't end (detectRoundEnd needs
+    // 3 finishers, or a 1-2 shortcut), so play continues normally to the
+    // next position.
+    expect(round?.current_player_turn).toBe(1);
+    expect(round?.leader_position).toBe(0);
+    expect((round?.game_state as GameState).finishOrder).toEqual([0]);
 
     const participant = fake._tables.game_participants.find((p) => p.game_id === gameId);
     expect(participant?.hand).toEqual([]);
+  });
+
+  it("skips a position that finished in an earlier trick when computing the next turn", async () => {
+    const gameId = await seedGame();
+    // Position 1 already went out in an earlier trick; a fresh trick is
+    // underway led by position 0.
+    const roundId = await seedRound(gameId, {
+      leader_position: 0,
+      current_player_turn: 0,
+      game_state: { currentTrick: [], trickCount: 1, finishOrder: [1] },
+    });
+    await seedParticipant(gameId, 0, "p0", [
+      { rank: "7", suit: "CLUBS" },
+      { rank: "2", suit: "DIAMONDS" },
+    ]);
+
+    const response = await callPlayCards(gameId, {
+      cards: [{ rank: "7", suit: "CLUBS" }],
+      playerId: "p0",
+      position: 0,
+    });
+    expect(response.status).toBe(200);
+
+    const round = fake._tables.game_rounds.find((r) => r.id === roundId);
+    // Turn skips position 1 (already out) and goes straight to position 2.
+    expect(round?.current_player_turn).toBe(2);
+  });
+
+  it("freezes the round once a 3rd player finishes (round concluded)", async () => {
+    const gameId = await seedGame();
+    const roundId = await seedRound(gameId, {
+      leader_position: 0,
+      current_player_turn: 2,
+      // Positions 1 and 3 already finished; position 2 is about to become
+      // the 3rd, which concludes the round (the 4th is placed last
+      // automatically — RULES.md "Round End").
+      game_state: { currentTrick: [], trickCount: 5, finishOrder: [1, 3] },
+    });
+    await seedParticipant(gameId, 2, "p2", [{ rank: "7", suit: "CLUBS" }]);
+
+    const response = await callPlayCards(gameId, {
+      cards: [{ rank: "7", suit: "CLUBS" }],
+      playerId: "p2",
+      position: 2,
+    });
+    expect(response.status).toBe(200);
+
+    const round = fake._tables.game_rounds.find((r) => r.id === roundId);
+    expect(round?.current_player_turn).toBeNull();
+    expect((round?.game_state as GameState).finishOrder).toEqual([1, 3, 2]);
+  });
+
+  it("freezes the round immediately on a 1-2 finish, before a 3rd finisher", async () => {
+    const gameId = await seedGame();
+    // Position 0 already finished 1st. Position 2 (0's partner) finishing
+    // 2nd concludes the round right away, without waiting for a 3rd
+    // finisher (RULES.md "Round End").
+    const roundId = await seedRound(gameId, {
+      leader_position: 2,
+      current_player_turn: 2,
+      game_state: { currentTrick: [], trickCount: 5, finishOrder: [0] },
+    });
+    await seedParticipant(gameId, 2, "p2", [{ rank: "7", suit: "CLUBS" }]);
+
+    const response = await callPlayCards(gameId, {
+      cards: [{ rank: "7", suit: "CLUBS" }],
+      playerId: "p2",
+      position: 2,
+    });
+    expect(response.status).toBe(200);
+
+    const round = fake._tables.game_rounds.find((r) => r.id === roundId);
+    expect(round?.current_player_turn).toBeNull();
+    expect((round?.game_state as GameState).finishOrder).toEqual([0, 2]);
   });
 
   it("lets only one of two concurrent plays for the same turn succeed", async () => {
@@ -424,8 +511,12 @@ describe("POST /api/game/[id]/play-cards", () => {
           round.current_player_turn = 2;
           round.leader_position = 0;
           round.game_state = {
-            currentTrick: [[{ rank: "7", suit: "CLUBS" }], [{ rank: "9", suit: "CLUBS" }]],
+            currentTrick: [
+              { position: 0, play: [{ rank: "7", suit: "CLUBS" }] },
+              { position: 1, play: [{ rank: "9", suit: "CLUBS" }] },
+            ],
             trickCount: 0,
+            finishOrder: [],
           };
           return originalInsert(payload);
         }) as typeof builder.insert;

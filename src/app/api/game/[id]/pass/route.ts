@@ -1,15 +1,17 @@
 // POST /api/game/[id]/pass — see ARCHITECTURE.md section 7 ("Pass") and
-// IMPLEMENTATION.md Task 3.2. Records a pass, and if that completes the
-// trick's one rotation (see types.ts's CurrentTrick doc comment), resolves
-// the trick and hands the lead to its winner.
+// IMPLEMENTATION.md Task 3.2. Records a pass, and if every position still
+// active this trick (see gameRules/turnAdvance.ts) has now acted, resolves
+// the trick and hands the lead to its winner (or their partner, if the
+// winner's own play already emptied their hand — RULES.md "Leader
+// Selection").
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { isPlayerPosition, resolveTurn, type ActiveRoundRow } from "@/lib/gameDb";
 import { parseJsonBody } from "@/lib/http";
 import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import { PASS } from "@/lib/types";
-import type { PassRequest, PassResponse, PlayerPosition } from "@/lib/types";
-import { advanceTrick } from "@/lib/gameRules/scoring";
+import type { PassRequest, PassResponse, PlayerPosition, TrickEntry } from "@/lib/types";
+import { advanceTrick, toGameState } from "@/lib/gameRules/turnAdvance";
 
 export async function POST(
   request: Request,
@@ -42,11 +44,15 @@ export async function POST(
     );
   }
 
+  // A pass never changes anyone's hand, so finishOrder can't grow here —
+  // pass straight through what the round already has.
+  const finishOrder = round.game_state.finishOrder;
+  const entry: TrickEntry = { position, play: PASS };
   const advanced = advanceTrick(
     round.game_state.currentTrick,
-    PASS,
+    entry,
+    finishOrder,
     round.leader_position,
-    position,
     round.game_state.trickCount,
   );
 
@@ -55,7 +61,7 @@ export async function POST(
   const { data: claimed, error: claimError } = await supabaseAdmin
     .from("game_rounds")
     .update({
-      game_state: advanced.gameState,
+      game_state: toGameState(advanced, finishOrder),
       leader_position: advanced.leaderPosition,
       current_player_turn: advanced.currentPlayerTurn,
     })

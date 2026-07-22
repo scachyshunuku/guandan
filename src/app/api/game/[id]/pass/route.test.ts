@@ -37,8 +37,9 @@ async function seedRound(
   overrides: Record<string, unknown> = {},
 ): Promise<string> {
   const gameState: GameState = {
-    currentTrick: [[{ rank: "7", suit: "CLUBS" }]],
+    currentTrick: [{ position: 0, play: [{ rank: "7", suit: "CLUBS" }] }],
     trickCount: 0,
+    finishOrder: [],
   };
   const { data: round } = await fake
     .from("game_rounds")
@@ -123,7 +124,7 @@ describe("POST /api/game/[id]/pass", () => {
   it("rejects passing while leading an empty trick", async () => {
     const gameId = await seedGame();
     await seedRound(gameId, {
-      game_state: { currentTrick: [], trickCount: 0 },
+      game_state: { currentTrick: [], trickCount: 0, finishOrder: [] },
       current_player_turn: 0,
     });
     await seedParticipant(gameId, 0, "p0");
@@ -132,7 +133,7 @@ describe("POST /api/game/[id]/pass", () => {
     expect(response.status).toBe(400);
   });
 
-  it("records the pass and advances turn to the next position", async () => {
+  it("records the pass and advances turn to the next active position", async () => {
     const gameId = await seedGame();
     const roundId = await seedRound(gameId);
     await seedParticipant(gameId, 1, "p1");
@@ -145,8 +146,8 @@ describe("POST /api/game/[id]/pass", () => {
     expect(round?.current_player_turn).toBe(2);
     expect(round?.leader_position).toBe(0);
     expect((round?.game_state as GameState).currentTrick).toEqual([
-      [{ rank: "7", suit: "CLUBS" }],
-      PASS,
+      { position: 0, play: [{ rank: "7", suit: "CLUBS" }] },
+      { position: 1, play: PASS },
     ]);
 
     expect(fake._tables.game_actions).toHaveLength(1);
@@ -169,12 +170,41 @@ describe("POST /api/game/[id]/pass", () => {
     );
   });
 
+  it("skips a position that finished in an earlier trick when advancing turn", async () => {
+    const gameId = await seedGame();
+    // Position 2 already went out; the turn after position 1 passes should
+    // skip straight to position 3.
+    const roundId = await seedRound(gameId, {
+      game_state: {
+        currentTrick: [{ position: 0, play: [{ rank: "7", suit: "CLUBS" }] }],
+        trickCount: 0,
+        finishOrder: [2],
+      },
+      current_player_turn: 1,
+    });
+    await seedParticipant(gameId, 1, "p1");
+
+    const response = await callPass(gameId, { playerId: "p1", position: 1 });
+    expect(response.status).toBe(200);
+
+    const round = fake._tables.game_rounds.find((r) => r.id === roundId);
+    expect(round?.current_player_turn).toBe(3);
+  });
+
   it("resolves the trick to its leader when the 3rd consecutive pass completes the rotation", async () => {
     const gameId = await seedGame();
     const roundId = await seedRound(gameId, {
       leader_position: 0,
       current_player_turn: 3,
-      game_state: { currentTrick: [[{ rank: "7", suit: "CLUBS" }], PASS, PASS], trickCount: 4 },
+      game_state: {
+        currentTrick: [
+          { position: 0, play: [{ rank: "7", suit: "CLUBS" }] },
+          { position: 1, play: PASS },
+          { position: 2, play: PASS },
+        ],
+        trickCount: 4,
+        finishOrder: [],
+      },
     });
     await seedParticipant(gameId, 3, "p3");
 
@@ -184,7 +214,63 @@ describe("POST /api/game/[id]/pass", () => {
     const round = fake._tables.game_rounds.find((r) => r.id === roundId);
     expect(round?.leader_position).toBe(0);
     expect(round?.current_player_turn).toBe(0);
-    expect(round?.game_state).toEqual({ currentTrick: [], trickCount: 5 });
+    expect(round?.game_state).toEqual({ currentTrick: [], trickCount: 5, finishOrder: [] });
+  });
+
+  it("resolves a trick with fewer than 4 entries once every remaining active player has acted", async () => {
+    const gameId = await seedGame();
+    // Positions 1 and 2 already finished (not partners, so the round hasn't
+    // ended); only positions 0 and 3 are still active, so this trick only
+    // needs 2 entries to complete.
+    const roundId = await seedRound(gameId, {
+      leader_position: 0,
+      current_player_turn: 3,
+      game_state: {
+        currentTrick: [{ position: 0, play: [{ rank: "7", suit: "CLUBS" }] }],
+        trickCount: 6,
+        finishOrder: [1, 2],
+      },
+    });
+    await seedParticipant(gameId, 3, "p3");
+
+    const response = await callPass(gameId, { playerId: "p3", position: 3 });
+    expect(response.status).toBe(200);
+
+    const round = fake._tables.game_rounds.find((r) => r.id === roundId);
+    expect(round?.leader_position).toBe(0);
+    expect(round?.current_player_turn).toBe(0);
+    expect(round?.game_state).toEqual({ currentTrick: [], trickCount: 7, finishOrder: [1, 2] });
+  });
+
+  it("hands the lead to the winner's partner when the winner already had no cards from an earlier play this trick", async () => {
+    const gameId = await seedGame();
+    // Position 0 led with a play that emptied their hand (finishOrder
+    // already includes them); positions 1 and 2 have since passed, and
+    // position 3's pass now completes the trick.
+    const roundId = await seedRound(gameId, {
+      leader_position: 0,
+      current_player_turn: 3,
+      game_state: {
+        currentTrick: [
+          { position: 0, play: [{ rank: "7", suit: "CLUBS" }] },
+          { position: 1, play: PASS },
+          { position: 2, play: PASS },
+        ],
+        trickCount: 4,
+        finishOrder: [0],
+      },
+    });
+    await seedParticipant(gameId, 3, "p3");
+
+    const response = await callPass(gameId, { playerId: "p3", position: 3 });
+    expect(response.status).toBe(200);
+
+    const round = fake._tables.game_rounds.find((r) => r.id === roundId);
+    // Position 0 (team A) won the trick but has no cards, so their partner
+    // (position 2) leads next instead.
+    expect(round?.leader_position).toBe(2);
+    expect(round?.current_player_turn).toBe(2);
+    expect(round?.game_state).toEqual({ currentTrick: [], trickCount: 5, finishOrder: [0] });
   });
 
   it("lets only one of two concurrent double-submitted passes for the same turn succeed", async () => {
@@ -202,8 +288,8 @@ describe("POST /api/game/[id]/pass", () => {
 
     const round = fake._tables.game_rounds.find((r) => r.id === roundId);
     expect((round?.game_state as GameState).currentTrick).toEqual([
-      [{ rank: "7", suit: "CLUBS" }],
-      PASS,
+      { position: 0, play: [{ rank: "7", suit: "CLUBS" }] },
+      { position: 1, play: PASS },
     ]);
     expect(fake._tables.game_actions).toHaveLength(1);
   });
@@ -221,7 +307,7 @@ describe("POST /api/game/[id]/pass", () => {
     expect(round?.current_player_turn).toBe(1);
     expect(round?.leader_position).toBe(0);
     expect((round?.game_state as GameState).currentTrick).toEqual([
-      [{ rank: "7", suit: "CLUBS" }],
+      { position: 0, play: [{ rank: "7", suit: "CLUBS" }] },
     ]);
 
     expect(mockBroadcastToGame).not.toHaveBeenCalled();
