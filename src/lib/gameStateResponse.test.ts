@@ -82,7 +82,7 @@ describe("buildGameStateResponse", () => {
     id: "round-1",
     gameId: "game-1",
     roundNumber: 1,
-    gameState: { currentTrick: [], trickCount: 0 },
+    gameState: { currentTrick: [], trickCount: 0, finishOrder: [] },
     currentPlayerTurn: 0,
     leaderPosition: 0,
     status: "in_progress",

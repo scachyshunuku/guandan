@@ -41,7 +41,7 @@ function round(overrides: Partial<GameRound>): GameRound {
     id: "round-1",
     gameId: "game-1",
     roundNumber: 1,
-    gameState: { currentTrick: [], trickCount: 0 },
+    gameState: { currentTrick: [], trickCount: 0, finishOrder: [] },
     currentPlayerTurn: 1,
     leaderPosition: 0,
     status: "in_progress",
@@ -147,6 +147,7 @@ describe("GameTable", () => {
               { position: 1, play: PASS },
             ],
             trickCount: 0,
+            finishOrder: [],
           },
         })}
         participants={PARTICIPANTS}

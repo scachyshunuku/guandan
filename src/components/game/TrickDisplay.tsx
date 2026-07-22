@@ -6,7 +6,6 @@ import Card from "./Card";
 
 export interface TrickDisplayProps {
   trick: CurrentTrick;
-  leaderPosition: PlayerPosition;
   participants: GameParticipant[];
 }
 
@@ -14,10 +13,9 @@ const POSITIONS: readonly PlayerPosition[] = [0, 1, 2, 3];
 
 // Full detail of the current trick: one row per player (by name, not
 // compass position — unlike GameTable's seat layout), their play shown to
-// the right of their name. A trick is always exactly one rotation (see the
-// `CurrentTrick` type comment), so there's at most one play per player to
-// show, not a history.
-export default function TrickDisplay({ trick, leaderPosition, participants }: TrickDisplayProps) {
+// the right of their name. At most one play per player to show, not a
+// history — see the `CurrentTrick` type comment in lib/types.ts.
+export default function TrickDisplay({ trick, participants }: TrickDisplayProps) {
   if (trick.length === 0) {
     return (
       <div data-testid="trick-display" className="text-sm text-gray-500">
@@ -32,15 +30,18 @@ export default function TrickDisplay({ trick, leaderPosition, participants }: Tr
       .map((p) => [p.position, p]),
   );
 
+  // Looked up by each entry's own `position` rather than derived from array
+  // index + leaderPosition: once a player has gone out mid-round they take
+  // no further turns, so a trick's rotation doesn't necessarily visit every
+  // seat in order (see the `CurrentTrick` type comment in lib/types.ts).
+  const playByPosition = new Map(trick.map((entry) => [entry.position, entry.play]));
+
   return (
     <div data-testid="trick-display" className="flex flex-col gap-3">
       {POSITIONS.map((position) => {
         const participant = byPosition.get(position);
-        // Position `position` acted at trick index (position - leaderPosition
-        // + 4) % 4, per CurrentTrick's turn-order convention; undefined means
-        // they haven't acted yet this trick.
-        const trickIndex = (position - leaderPosition + 4) % 4;
-        const play = trickIndex < trick.length ? trick[trickIndex] : undefined;
+        // undefined means this position hasn't acted yet this trick.
+        const play = playByPosition.get(position);
 
         return (
           <div

@@ -106,6 +106,12 @@ export type CurrentTrick = TrickEntry[];
 export interface GameState {
   currentTrick: CurrentTrick;
   trickCount: number; // tricks completed so far this round
+  // Positions in the order their hands emptied so far this round — the
+  // input shape gameRules/scoring.ts's detectRoundEnd expects, and what lets
+  // play-cards/pass (Task 3.2) skip finished players in future turn
+  // rotations instead of freezing the round the instant anyone goes out.
+  // Empty at the start of a round; a fresh round starts this array over.
+  finishOrder: PlayerPosition[];
 }
 
 // ---------------------------------------------------------------------------

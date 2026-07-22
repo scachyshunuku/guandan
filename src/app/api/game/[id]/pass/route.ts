@@ -1,0 +1,129 @@
+// POST /api/game/[id]/pass — see ARCHITECTURE.md section 7 ("Pass") and
+// IMPLEMENTATION.md Task 3.2. Records a pass, and if every position still
+// active this trick (see gameRules/turnAdvance.ts) has now acted, resolves
+// the trick and hands the lead to its winner (or their partner, if the
+// winner's own play already emptied their hand — RULES.md "Leader
+// Selection").
+import { NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { isPlayerPosition, resolveTurn, type ActiveRoundRow } from "@/lib/gameDb";
+import { parseJsonBody } from "@/lib/http";
+import { broadcastToGame } from "@/lib/realtimeBroadcast";
+import { PASS } from "@/lib/types";
+import type { PassRequest, PassResponse, PlayerPosition, TrickEntry } from "@/lib/types";
+import { advanceTrick, toGameState } from "@/lib/gameRules/turnAdvance";
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id: gameId } = await params;
+
+  const parsed = await parseJsonBody<Partial<PassRequest>>(request);
+  if (parsed.errorResponse) return parsed.errorResponse;
+  const { playerId, position } = parsed.body;
+  if (!playerId || !isPlayerPosition(position)) {
+    return NextResponse.json(
+      { error: "playerId and a valid position (0-3) are required" },
+      { status: 400 },
+    );
+  }
+
+  const turn = await resolveTurn(gameId, playerId, position);
+  if (!turn.ok) {
+    return NextResponse.json({ error: turn.error }, { status: turn.status });
+  }
+  const { round } = turn;
+
+  // Leading (an empty trick) has nothing to beat, so there's no pass option
+  // (RULES.md "When Leading").
+  if (round.game_state.currentTrick.length === 0) {
+    return NextResponse.json(
+      { error: "cannot pass while leading" },
+      { status: 400 },
+    );
+  }
+
+  // A pass never changes anyone's hand, so finishOrder can't grow here —
+  // pass straight through what the round already has.
+  const finishOrder = round.game_state.finishOrder;
+  const entry: TrickEntry = { position, play: PASS };
+  const advanced = advanceTrick(
+    round.game_state.currentTrick,
+    entry,
+    finishOrder,
+    round.leader_position,
+    round.game_state.trickCount,
+  );
+
+  // Compare-and-swap on current_player_turn — see play-cards/route.ts for
+  // why this guards against a double-submit or two racing requests.
+  const { data: claimed, error: claimError } = await supabaseAdmin
+    .from("game_rounds")
+    .update({
+      game_state: toGameState(advanced, finishOrder),
+      leader_position: advanced.leaderPosition,
+      current_player_turn: advanced.currentPlayerTurn,
+    })
+    .eq("id", round.id)
+    .eq("current_player_turn", position)
+    .select("*");
+  if (claimError) {
+    console.error("Failed to claim pass turn", claimError);
+    return NextResponse.json({ error: "Failed to pass" }, { status: 500 });
+  }
+  if (!claimed || claimed.length === 0) {
+    return NextResponse.json(
+      { error: "this turn was already resolved by another request" },
+      { status: 409 },
+    );
+  }
+
+  const { data: actionRow, error: actionError } = await supabaseAdmin
+    .from("game_actions")
+    .insert({
+      game_id: gameId,
+      round_id: round.id,
+      player_id: playerId,
+      action_type: "pass",
+      action_data: {},
+    })
+    .select("*")
+    .single();
+  if (actionError) {
+    console.error("Failed to log pass game_action after claiming the turn; rolling back", actionError);
+    await rollbackRoundClaim(round, advanced.currentPlayerTurn);
+    return NextResponse.json({ error: "Failed to pass" }, { status: 500 });
+  }
+
+  // Broadcast the new round state and the pass itself — see
+  // play-cards/route.ts for why this is best-effort and non-fatal.
+  await Promise.all([
+    broadcastToGame(gameId, "round_updated", claimed[0]),
+    broadcastToGame(gameId, "game_action", actionRow),
+  ]);
+
+  const response: PassResponse = { success: true };
+  return NextResponse.json(response);
+}
+
+// Undoes a claimed turn's round update after the action-log write fails.
+// Conditional on `claimedCurrentPlayerTurn` (never null for pass — unlike
+// play-cards, a pass can never empty a hand), *not* unconditional-by-id: a
+// legitimate next player could already have read our successful claim,
+// acted on it, and advanced the turn again before this rollback runs. See
+// play-cards/route.ts's rollbackClaim for the full reasoning.
+async function rollbackRoundClaim(round: ActiveRoundRow, claimedCurrentPlayerTurn: PlayerPosition) {
+  const { error } = await supabaseAdmin
+    .from("game_rounds")
+    .update({
+      game_state: round.game_state,
+      leader_position: round.leader_position,
+      current_player_turn: round.current_player_turn,
+    })
+    .eq("id", round.id)
+    .eq("current_player_turn", claimedCurrentPlayerTurn);
+  if (error) {
+    console.error("Failed to roll back game_rounds after failed pass write", error);
+  }
+}

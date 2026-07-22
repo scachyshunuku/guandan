@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { CreateGameResponse, GameState } from "@/lib/types";
 
-const INITIAL_GAME_STATE: GameState = { currentTrick: [], trickCount: 0 };
+const INITIAL_GAME_STATE: GameState = { currentTrick: [], trickCount: 0, finishOrder: [] };
 
 export async function POST() {
   const { data: game, error: gameError } = await supabaseAdmin
