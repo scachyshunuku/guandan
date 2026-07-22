@@ -1,28 +1,12 @@
 "use client";
 
-import { STANDARD_RANK_ORDER } from "@/lib/cardUtils";
-import type { Game, StandardRank, Team } from "@/lib/types";
-
-const LEVEL_LABELS: Record<StandardRank, string> = {
-  "2": "2",
-  "3": "3",
-  "4": "4",
-  "5": "5",
-  "6": "6",
-  "7": "7",
-  "8": "8",
-  "9": "9",
-  "10": "10",
-  JACK: "J",
-  QUEEN: "Q",
-  KING: "K",
-  ACE: "A",
-};
+import { RANK_LABELS, STANDARD_RANK_ORDER } from "@/lib/cardUtils";
+import type { Game, Team } from "@/lib/types";
 
 // Level -> short label, e.g. 5 -> "5", 11 -> "J", 14 -> "A" (levels run 2-14,
 // 14 = Ace, per types.ts and RULES.md "Levels").
 const LEVEL_TO_LABEL = new Map<number, string>(
-  STANDARD_RANK_ORDER.map((rank, i) => [i + 2, LEVEL_LABELS[rank]]),
+  STANDARD_RANK_ORDER.map((rank, i) => [i + 2, RANK_LABELS[rank]]),
 );
 
 export interface ScoreBoardProps {

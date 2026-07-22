@@ -280,16 +280,16 @@ All can be built with mocks, integrated later.
 - **Estimated**: 5 hours
 
 ### Task 5.4: Game Actions UI
-- [ ] `components/game/ActionButtons.tsx`
+- [x] `components/game/ActionButtons.tsx`
   - Play button (enabled if valid combo selected)
   - Pass button
   - Unit tests: Button states
-- [ ] `components/game/CardExchangeModal.tsx`
+- [x] `components/game/CardExchangeModal.tsx`
   - Show cards to exchange (read-only initial)
   - Selection UI for return cards
   - Submit button
   - Unit tests: Modal display, selection
-- [ ] `components/game/WildCardSelector.tsx`
+- [x] `components/game/WildCardSelector.tsx`
   - When playing wild card, show selector for what it acts as
   - All 13 ranks
   - All 4 suits

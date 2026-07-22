@@ -1,26 +1,14 @@
 "use client";
 
-import { encodeCard } from "@/lib/cardUtils";
+import { encodeCard, RANK_LABELS, SUIT_SYMBOLS } from "@/lib/cardUtils";
 import type { CardWithWild, StandardRank, Suit } from "@/lib/types";
-
-const SUIT_SYMBOLS: Record<Suit, string> = {
-  CLUBS: "♣",
-  HEARTS: "♥",
-  SPADES: "♠",
-  DIAMONDS: "♦",
-};
-
-const RANK_LABELS: Partial<Record<CardWithWild["rank"], string>> = {
-  JACK: "J",
-  QUEEN: "Q",
-  KING: "K",
-  ACE: "A",
-};
 
 const RED_SUITS = new Set<Suit>(["HEARTS", "DIAMONDS"]);
 
+// Jokers aren't standard ranks, so they fall through to their raw rank
+// string here — isJoker/isRed handle their display separately anyway.
 function rankLabel(rank: CardWithWild["rank"] | StandardRank): string {
-  return RANK_LABELS[rank] ?? rank;
+  return RANK_LABELS[rank as StandardRank] ?? rank;
 }
 
 function isRed(card: CardWithWild): boolean {
