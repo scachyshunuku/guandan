@@ -217,11 +217,11 @@ All of these can be done in parallel. Heavy unit test coverage.
 - **Estimated**: 6 hours
 
 ### Task 4.4: Main Game Hook
-- [ ] Create `hooks/useGame.ts`:
+- [x] Create `hooks/useGame.ts`:
   - Combines Zustand + Realtime sync + API mutations
   - Manages optimistic updates
   - Handles reconnection
-- [ ] Unit tests: Sync logic, optimistic updates
+- [x] Unit tests: Sync logic, optimistic updates
 - **Blockers**: Tasks 4.2, 4.3
 - **Enables**: Task 5.x
 - **Testability**: Unit tests

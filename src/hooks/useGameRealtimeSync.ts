@@ -16,6 +16,7 @@
 // IMPLEMENTATION.md Task 6.2 ("Player disconnects/reconnects"), still
 // blocked on Phase 3-5. `participant_joined` only covers the join half.
 import { useEffect, useRef } from "react";
+import type { REALTIME_SUBSCRIBE_STATES } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { useGameStore } from "@/store/gameStore";
 import {
@@ -33,11 +34,21 @@ import type { GameAction } from "@/lib/types";
 export function useGameRealtimeSync(
   gameId: string | null,
   onGameAction?: (action: GameAction) => void,
+  // Surfaces the channel's subscribe status (SUBSCRIBED/CHANNEL_ERROR/
+  // TIMED_OUT/CLOSED) so callers (Task 4.4's useGame) can tell a dropped
+  // connection from a healthy one - broadcasts are missed while down, since
+  // there's no replay, only a resubscribe.
+  onStatusChange?: (status: REALTIME_SUBSCRIBE_STATES) => void,
 ) {
   const onGameActionRef = useRef(onGameAction);
   useEffect(() => {
     onGameActionRef.current = onGameAction;
   }, [onGameAction]);
+
+  const onStatusChangeRef = useRef(onStatusChange);
+  useEffect(() => {
+    onStatusChangeRef.current = onStatusChange;
+  }, [onStatusChange]);
 
   useEffect(() => {
     if (!gameId) return;
@@ -64,7 +75,7 @@ export function useGameRealtimeSync(
       .on("broadcast", { event: "game_action" }, ({ payload }: { payload: GameActionRow }) => {
         onGameActionRef.current?.(mapGameActionRow(payload));
       })
-      .subscribe();
+      .subscribe((status) => onStatusChangeRef.current?.(status));
 
     return () => {
       supabase.removeChannel(channel);
