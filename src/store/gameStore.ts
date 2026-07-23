@@ -32,6 +32,9 @@ export interface GameStoreState {
 
   // Indexed by Team (0 = team A, 1 = team B), mirrors Game.teamALevel/teamBLevel.
   teamLevels: [number, number];
+  // Mirrors Game.winningTeam — null until the game reaches status
+  // 'completed' (RULES.md "Winning the Game").
+  winningTeam: Team | null;
 
   setGame: (gameId: string, myPlayerId: string) => void;
   setGameStatus: (status: GameStatus) => void;
@@ -42,6 +45,7 @@ export interface GameStoreState {
   updateParticipants: (participants: GameParticipant[]) => void;
   addParticipant: (participant: GameParticipant) => void;
   setTeamLevels: (teamALevel: number, teamBLevel: number) => void;
+  setWinningTeam: (winningTeam: Team | null) => void;
   reset: () => void;
 }
 
@@ -55,6 +59,7 @@ const initialState = {
   currentTrick: [],
   currentPlayerTurn: null,
   teamLevels: [2, 2] as [number, number],
+  winningTeam: null as Team | null,
 };
 
 export const useGameStore = create<GameStoreState>((set) => ({
@@ -81,6 +86,7 @@ export const useGameStore = create<GameStoreState>((set) => ({
     }),
   setTeamLevels: (teamALevel, teamBLevel) =>
     set({ teamLevels: [teamALevel, teamBLevel] }),
+  setWinningTeam: (winningTeam) => set({ winningTeam }),
   reset: () => set(initialState),
 }));
 

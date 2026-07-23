@@ -67,6 +67,17 @@ export function isStandardRank(rank: Rank): rank is StandardRank {
   return rank !== "BLACK_JOKER" && rank !== "RED_JOKER";
 }
 
+// The level rank in effect for wild-card/level-card purposes (RULES.md
+// "Level Cards & Wild Cards"): the higher of the two teams' levels, since
+// there's no separate "declaring team" column — the team further ahead is
+// the one whose level the hand is played at. Shared by the server
+// (lib/gameDb.ts's levelRankForGame) and the client (ActionButtons' local
+// play validation) so both sides agree on which rank is wild.
+export function levelRankForLevels(teamALevel: number, teamBLevel: number): StandardRank {
+  const level = Math.max(teamALevel, teamBLevel);
+  return STANDARD_RANK_ORDER[level - 2];
+}
+
 // Numeric rank for comparisons; higher is stronger. Every round has a level
 // (RULES.md "Level Cards & Wild Cards"), so `levelRank` is required rather
 // than optional — an omitted level would silently rank that round's level

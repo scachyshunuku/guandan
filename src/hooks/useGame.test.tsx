@@ -39,6 +39,7 @@ const mutationMocks = {
   pass: jest.fn().mockResolvedValue({ success: true }),
   joinGame: jest.fn().mockResolvedValue({ spectator: true }),
   exchangeCards: jest.fn().mockResolvedValue({ success: true }),
+  startGame: jest.fn().mockResolvedValue({ success: true, hand: [] }),
 };
 
 jest.mock("./useGameActions", () => ({
@@ -55,6 +56,9 @@ jest.mock("./useGameActions", () => ({
     exchangeCards: mutationMocks.exchangeCards,
     isExchangingCards: false,
     exchangeCardsError: null,
+    startGame: mutationMocks.startGame,
+    isStartingGame: false,
+    startGameError: null,
   }),
 }));
 
@@ -135,7 +139,33 @@ describe("useGame", () => {
     expect(result.current.myPosition).toBe(0);
     expect(result.current.hand).toEqual([{ rank: "5", suit: "HEARTS" }]);
     expect(result.current.currentPlayerTurn).toBe(0);
+    expect(result.current.winningTeam).toBeNull();
     expect(result.current.error).toBeNull();
+  });
+
+  it("hydrates winningTeam once the game is won", async () => {
+    mockFetchOnce(
+      200,
+      gameStateResponse({
+        game: {
+          id: "game-1",
+          status: "completed",
+          teamALevel: 14,
+          teamBLevel: 5,
+          winningTeam: 0,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+    );
+
+    const { result } = renderHook(
+      () => useGame({ gameId: "game-1", playerId: "player-1" }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.winningTeam).toBe(0);
   });
 
   it("surfaces a failed initial fetch as an error", async () => {
@@ -273,6 +303,24 @@ describe("useGame", () => {
     });
 
     expect(result.current.hand).toEqual([{ rank: "5", suit: "HEARTS" }]);
+  });
+
+  it("applies the dealt hand once startGame resolves", async () => {
+    mockFetchOnce(200, gameStateResponse());
+    const { result } = renderHook(
+      () => useGame({ gameId: "game-1", playerId: "player-1" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const dealtHand = [{ rank: "ACE", suit: "SPADES" }];
+    mutationMocks.startGame.mockResolvedValue({ success: true, hand: dealtHand });
+
+    await act(async () => {
+      await result.current.startGame();
+    });
+
+    expect(result.current.hand).toEqual(dealtHand);
   });
 
   it("does not clobber a newer broadcast-derived trick when a stale playCards request later fails", async () => {

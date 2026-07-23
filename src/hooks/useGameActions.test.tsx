@@ -101,6 +101,42 @@ describe("useGameActions", () => {
     expect(response).toEqual({ spectator: true });
   });
 
+  it("startGame posts the bound playerId to start", async () => {
+    mockFetchOnce(200, { success: true, hand: [] });
+    const { result } = renderHook(
+      () => useGameActions({ gameId: "game-1", playerId: "player-1", position: 2 }),
+      { wrapper },
+    );
+
+    let response;
+    await act(async () => {
+      response = await result.current.startGame();
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/game/game-1/start",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ playerId: "player-1" }),
+      }),
+    );
+    expect(response).toEqual({ success: true, hand: [] });
+  });
+
+  it("startGame rejects locally without hitting the network when spectating", async () => {
+    global.fetch = jest.fn();
+    const { result } = renderHook(
+      () =>
+        useGameActions({ gameId: "game-1", playerId: "player-1", position: null }),
+      { wrapper },
+    );
+
+    await expect(result.current.startGame()).rejects.toThrow(
+      "Must be seated to start the game",
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it("exchangeCards posts cardToGive plus the bound playerId/position", async () => {
     mockFetchOnce(200, { success: true });
     const { result } = renderHook(

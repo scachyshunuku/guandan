@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { gameShareLink } from "@/lib/format";
 
 export interface CreateGameFormProps {
   onCreateGame: () => void;
@@ -26,10 +27,7 @@ export default function CreateGameForm({
   const [copied, setCopied] = useState(false);
 
   if (gameId) {
-    const joinLink =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/game/${gameId}`
-        : `/game/${gameId}`;
+    const joinLink = gameShareLink(gameId);
 
     return (
       <div data-testid="create-game-form" className="flex flex-col gap-3">

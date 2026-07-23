@@ -16,6 +16,7 @@ import type {
   PassResponse,
   PlayCardsResponse,
   PlayerPosition,
+  StartGameResponse,
 } from "@/lib/types";
 
 // PlayCardsResponse/ExchangeCardsResponse can report a rule rejection
@@ -88,6 +89,19 @@ export function useGameActions({
       }),
   });
 
+  // Only a seated player can start (server-enforced, route.ts's "Only a
+  // seated player can start the game"), so - like playCards/pass above -
+  // this rejects locally for a spectator instead of firing a request the
+  // server would reject anyway.
+  const startGameMutation = useMutation({
+    mutationFn: () => {
+      if (position === null) {
+        return Promise.reject(new Error("Must be seated to start the game"));
+      }
+      return postJson<StartGameResponse>(`/api/game/${gameId}/start`, { playerId });
+    },
+  });
+
   const exchangeCardsMutation = useMutation({
     mutationFn: (input: ExchangeCardsInput) => {
       if (position === null) {
@@ -116,5 +130,9 @@ export function useGameActions({
     exchangeCards: exchangeCardsMutation.mutateAsync,
     isExchangingCards: exchangeCardsMutation.isPending,
     exchangeCardsError: exchangeCardsMutation.error,
+
+    startGame: startGameMutation.mutateAsync,
+    isStartingGame: startGameMutation.isPending,
+    startGameError: startGameMutation.error,
   };
 }

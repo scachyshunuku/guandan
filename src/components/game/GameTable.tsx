@@ -3,12 +3,15 @@
 import { pluralize } from "@/lib/format";
 import { type SeatLabel, seatLabelFor } from "@/lib/seating";
 import { PASS } from "@/lib/types";
-import type { Game, GameParticipant, GameRound, PlayerPosition } from "@/lib/types";
+import type { Game, GameParticipant, GameState, PlayerPosition } from "@/lib/types";
 import PlayerCard from "./PlayerCard";
 
 export interface GameTableProps {
-  game: Game;
-  round: GameRound | null;
+  game: Pick<Game, "teamALevel" | "teamBLevel">;
+  round: {
+    currentPlayerTurn: PlayerPosition | null;
+    gameState: Pick<GameState, "currentTrick">;
+  } | null;
   participants: GameParticipant[];
   // The viewing client's own seat; null for spectators, who default to the
   // same orientation as position 0.
@@ -76,7 +79,7 @@ function renderSeat(
   position: PlayerPosition,
   seatLabel: SeatLabel,
   participant: (GameParticipant & { position: PlayerPosition }) | undefined,
-  round: GameRound | null,
+  round: GameTableProps["round"],
   myPosition: PlayerPosition | null,
 ) {
   if (!participant) {
@@ -100,7 +103,7 @@ function renderSeat(
   );
 }
 
-function renderTrickArea(round: GameRound | null, anchor: PlayerPosition) {
+function renderTrickArea(round: GameTableProps["round"], anchor: PlayerPosition) {
   const trick = round?.gameState.currentTrick ?? [];
 
   if (trick.length === 0) {

@@ -42,6 +42,7 @@ describe("gameStore", () => {
     expect(state.currentTrick).toEqual([]);
     expect(state.currentPlayerTurn).toBeNull();
     expect(state.teamLevels).toEqual([2, 2]);
+    expect(state.winningTeam).toBeNull();
   });
 
   it("setGame stores the game id and player id", () => {
@@ -113,6 +114,11 @@ describe("gameStore", () => {
   it("setTeamLevels updates both team levels", () => {
     useGameStore.getState().setTeamLevels(5, 8);
     expect(useGameStore.getState().teamLevels).toEqual([5, 8]);
+  });
+
+  it("setWinningTeam updates the winning team", () => {
+    useGameStore.getState().setWinningTeam(1);
+    expect(useGameStore.getState().winningTeam).toBe(1);
   });
 
   it("reset restores the initial state after mutations", () => {
