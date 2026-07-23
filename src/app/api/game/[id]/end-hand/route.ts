@@ -16,7 +16,7 @@ import {
   type GameRoundRow,
   type ParticipantRow,
 } from "@/lib/gameDb";
-import { compareCards, removeCardsFromHand } from "@/lib/cardUtils";
+import { compareCards, removeCardsFromHand, sortCards } from "@/lib/cardUtils";
 import { parseJsonBody } from "@/lib/http";
 import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import {
@@ -41,8 +41,14 @@ interface ExchangeTransfer {
   card: CardWithWild;
 }
 
+// Re-sorts every call rather than trusting the hand's existing order —
+// deck.ts's dealHands() sorts a hand once at deal time for a nicer initial
+// display, but that's a one-time presentational sort, not an invariant:
+// nothing keeps a hand sorted as cards are added/removed by play or
+// exchange, so this can't assume the highest card is already at either end.
 function bestCard(hand: readonly CardWithWild[], levelRank: StandardRank): CardWithWild {
-  return hand.reduce((best, card) => (compareCards(card, best, levelRank) > 0 ? card : best));
+  const sorted = sortCards(hand, levelRank);
+  return sorted[sorted.length - 1];
 }
 
 // The automatic "initial" half of RULES.md "Card Exchange (After Each

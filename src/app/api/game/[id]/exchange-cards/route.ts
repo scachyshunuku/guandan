@@ -9,7 +9,14 @@
 // and deals the next.
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getGameContext, getParticipants, isPlayerPosition, type GameRow, type GameRoundRow } from "@/lib/gameDb";
+import {
+  getGameContext,
+  getParticipants,
+  isPlayerPosition,
+  levelRankForGame,
+  type GameRow,
+  type GameRoundRow,
+} from "@/lib/gameDb";
 import { removeCardsFromHand } from "@/lib/cardUtils";
 import { dealHands } from "@/lib/deck";
 import { parseJsonBody } from "@/lib/http";
@@ -266,7 +273,7 @@ async function finalizeRoundAndDealNext(game: GameRow, round: GameRoundRow): Pro
     return "error";
   }
 
-  const hands = dealHands();
+  const hands = dealHands(levelRankForGame(game));
   const dealWrites = ([0, 1, 2, 3] as const).map((position) => {
     const participant = seated.get(position)!;
     return { id: participant.id, originalHand: participant.hand, newHand: hands[position] };

@@ -103,8 +103,11 @@ export function compareCards(a: Card, b: Card, levelRank: StandardRank): number 
   return getSuitOrder(a.suit) - getSuitOrder(b.suit);
 }
 
-// Returns a new array sorted ascending by rank (then suit).
-export function sortCards(cards: Card[], levelRank: StandardRank): Card[] {
+// Returns a new array sorted ascending by rank (then suit). Takes `readonly
+// Card[]` (not just `Card[]`) since it only ever reads `cards` — the `[...]`
+// copy is what gets sorted — so a caller holding a readonly/CardWithWild[]
+// hand can pass it straight through without a cast.
+export function sortCards(cards: readonly Card[], levelRank: StandardRank): Card[] {
   return [...cards].sort((a, b) => compareCards(a, b, levelRank));
 }
 
