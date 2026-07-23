@@ -49,7 +49,7 @@ export default function GamePage() {
 
   if (isLoading) {
     return (
-      <div data-testid="game-loading" className="flex flex-1 items-center justify-center">
+      <div data-testid="game-loading" className="flex flex-1 items-center justify-center bg-slate-100">
         <p className="text-sm text-slate-500">Loading game…</p>
       </div>
     );
@@ -57,7 +57,7 @@ export default function GamePage() {
 
   if (error) {
     return (
-      <div data-testid="game-error" className="flex flex-1 items-center justify-center">
+      <div data-testid="game-error" className="flex flex-1 items-center justify-center bg-slate-100">
         <p className="text-sm text-red-500">{error.message}</p>
       </div>
     );
