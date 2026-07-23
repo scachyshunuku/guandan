@@ -73,6 +73,7 @@ export interface GameRoundRow {
   current_player_turn: PlayerPosition | null;
   leader_position: PlayerPosition | null;
   status: RoundStatus;
+  finishing_positions: number[] | null;
 }
 
 // The round currently in play, i.e. the highest round_number for this game.
@@ -81,13 +82,44 @@ export async function getLatestRound(
 ): Promise<GameRoundRow | null> {
   const { data, error } = await supabaseAdmin
     .from("game_rounds")
-    .select("id, round_number, game_state, current_player_turn, leader_position, status")
+    .select("id, round_number, game_state, current_player_turn, leader_position, status, finishing_positions")
     .eq("game_id", gameId)
     .order("round_number", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) throw error;
   return data;
+}
+
+export interface GameContext {
+  game: GameRow;
+  round: GameRoundRow | null;
+  participants: ParticipantRow[];
+  caller: ParticipantRow | undefined;
+}
+
+// Shared preamble for routes that need the game, its latest round, all
+// participants, and the calling participant before applying their own
+// status/turn checks (IMPLEMENTATION.md Task 3.3's end-hand and
+// exchange-cards). Deliberately doesn't validate game/round status or
+// caller identity itself — those requirements differ too much between
+// routes (in_progress vs card_exchange, seated vs a specific position) to
+// fold in here; see resolveTurn below for a route pairing (play-cards/pass)
+// where that validation *is* shared.
+export async function getGameContext(
+  gameId: string,
+  playerId: string,
+): Promise<GameContext | null> {
+  const game = await getGame(gameId);
+  if (!game) return null;
+
+  const [round, participants] = await Promise.all([
+    getLatestRound(gameId),
+    getParticipants(gameId),
+  ]);
+  const caller = participants.find((p) => p.player_id === playerId);
+
+  return { game, round, participants, caller };
 }
 
 const ALL_POSITIONS = [0, 1, 2, 3] as const;
