@@ -2,8 +2,8 @@
 // RULES.md "Dealing": 2 standard decks + 4 jokers (108 cards), 27 dealt to
 // each of the 4 players.
 
-import type { Card, Suit } from "./types";
-import { STANDARD_RANK_ORDER } from "./cardUtils";
+import type { Card, StandardRank, Suit } from "./types";
+import { sortCards, STANDARD_RANK_ORDER } from "./cardUtils";
 
 const SUITS: readonly Suit[] = Object.freeze([
   "CLUBS",
@@ -40,10 +40,17 @@ export function shuffle<T>(items: readonly T[]): T[] {
   return result;
 }
 
-// Shuffles a fresh deck and deals 27 cards to each of the 4 positions.
-export function dealHands(): [Card[], Card[], Card[], Card[]] {
+// Shuffles a fresh deck and deals 27 cards to each of the 4 positions, each
+// hand pre-sorted low-to-high (via cardUtils.sortCards) so a player's hand
+// starts out organized rather than in raw deal order. This is a one-time
+// presentational sort at deal time only — nothing re-sorts a hand as cards
+// are added or removed afterward (by play or card exchange), so anything
+// that needs e.g. the single highest card in a hand *after* dealing (the
+// card exchange's "best card") must sort for itself rather than assume this
+// order still holds.
+export function dealHands(levelRank: StandardRank): [Card[], Card[], Card[], Card[]] {
   const deck = shuffle(createDeck());
   const hands: [Card[], Card[], Card[], Card[]] = [[], [], [], []];
   deck.forEach((card, i) => hands[i % PLAYERS].push(card));
-  return hands;
+  return hands.map((hand) => sortCards(hand, levelRank)) as [Card[], Card[], Card[], Card[]];
 }

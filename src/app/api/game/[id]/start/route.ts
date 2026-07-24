@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { dealHands } from "@/lib/deck";
-import { getGame, getLatestRound, getParticipants } from "@/lib/gameDb";
+import { getGame, getLatestRound, getParticipants, levelRankForGame } from "@/lib/gameDb";
 import { parseJsonBody } from "@/lib/http";
 import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import type {
@@ -98,7 +98,7 @@ export async function POST(
     );
   }
 
-  const hands = dealHands();
+  const hands = dealHands(levelRankForGame(game));
   const leader = Math.floor(Math.random() * 4) as PlayerPosition;
 
   const roundUpdate = supabaseAdmin

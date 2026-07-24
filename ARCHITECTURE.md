@@ -432,7 +432,11 @@ useEffect(() => {
      - Players who received cards select any card from their hand to give back to the player who gave them the card
      - All return exchanges happen simultaneously (all players choose at same time)
 5. Reshuffle and deal 27 cards to each player for the next round
-6. Start next hand with 1st place player as leader
+6. Start next hand with whoever gave up the tribute card that went to 1st
+   place as leader (RULES.md "Leader Selection") — 4th place in a
+   single-team lead; whichever of 3rd/4th gave the higher card in a
+   two-team lead. If the tribute was cancelled (both Red Jokers held by
+   the losing side), 1st place leads instead
 7. Continue until a team wins with 1-2 or 1-3 finish at level A
 
 ### End Game

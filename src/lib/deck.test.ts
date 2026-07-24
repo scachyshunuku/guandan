@@ -1,6 +1,8 @@
 import type { Card } from "./types";
-import { encodeCard } from "./cardUtils";
+import { compareCards, encodeCard } from "./cardUtils";
 import { createDeck, dealHands, shuffle } from "./deck";
+
+const LEVEL_RANK = "2" as const;
 
 function multiset(cards: Card[]): string[] {
   return cards.map(encodeCard).sort();
@@ -52,7 +54,7 @@ describe("shuffle", () => {
 
 describe("dealHands", () => {
   it("deals 4 hands of 27 cards each", () => {
-    const hands = dealHands();
+    const hands = dealHands(LEVEL_RANK);
     expect(hands).toHaveLength(4);
     for (const hand of hands) {
       expect(hand).toHaveLength(27);
@@ -60,9 +62,18 @@ describe("dealHands", () => {
   });
 
   it("deals the full 108-card deck with no duplicates or omissions", () => {
-    const hands = dealHands();
+    const hands = dealHands(LEVEL_RANK);
     const dealt = multiset(hands.flat());
     const full = multiset(createDeck());
     expect(dealt).toEqual(full);
+  });
+
+  it("deals each hand pre-sorted low to high", () => {
+    const hands = dealHands(LEVEL_RANK);
+    for (const hand of hands) {
+      for (let i = 1; i < hand.length; i++) {
+        expect(compareCards(hand[i - 1], hand[i], LEVEL_RANK)).toBeLessThanOrEqual(0);
+      }
+    }
   });
 });

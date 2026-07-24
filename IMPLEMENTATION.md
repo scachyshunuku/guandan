@@ -142,12 +142,12 @@ All of these can be done in parallel. Heavy unit test coverage.
 - **Estimated**: 8 hours
 
 ### Task 3.3: Hand End & Card Exchange API
-- [ ] `POST /api/game/[id]/end-hand`
+- [x] `POST /api/game/[id]/end-hand`
   - Determine finishing positions
   - Determine exchange type (1-4, 1-3, 1-2)
   - Set game_rounds.status = 'card_exchange'
   - Broadcast (initial exchanges calculated)
-- [ ] `POST /api/game/[id]/exchange-cards`
+- [x] `POST /api/game/[id]/exchange-cards`
   - Validate player received card
   - Accept card selection for return
   - Insert card_exchange actions
@@ -157,7 +157,7 @@ All of these can be done in parallel. Heavy unit test coverage.
   - Shuffle & deal cards
   - Check if game won (1-2 or 1-3 at level A)
   - Broadcast next round start
-- [ ] Integration tests: Single-team lead, two-team lead, card selection, level promotion
+- [x] Integration tests: Single-team lead, two-team lead, card selection, level promotion
 - **Blockers**: Tasks 1.2, 1.3, 2.4, 3.2
 - **Enables**: Task 4.x
 - **Testability**: Integration tests

@@ -133,10 +133,18 @@ describe("compareCards", () => {
     }
   }
 
-  it.each(suitPairs)("breaks ties between same-rank %s vs %s consistently", (a, b) => {
+  it.each(suitPairs)("treats same-rank non-level %s vs %s as a genuine tie", (a, b) => {
     const levelRank = levelRankExcluding("7");
     const result = compareCards({ rank: "7", suit: a }, { rank: "7", suit: b }, levelRank);
-    const expectedSign = Math.sign(SUIT_ORDER.indexOf(a) - SUIT_ORDER.indexOf(b));
+    expect(result).toBe(0);
+  });
+
+  it.each(suitPairs)("among level cards, only hearts vs a non-hearts suit breaks the tie", (a, b) => {
+    const levelRank = "7";
+    const result = compareCards({ rank: "7", suit: a }, { rank: "7", suit: b }, levelRank);
+    const expectedSign = Math.sign(
+      (a === "HEARTS" ? 1 : 0) - (b === "HEARTS" ? 1 : 0),
+    );
     expect(Math.sign(result)).toBe(expectedSign);
   });
 

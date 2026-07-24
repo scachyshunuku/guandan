@@ -266,6 +266,14 @@ export interface PassResponse {
   success: true;
 }
 
+export interface EndHandRequest {
+  playerId: string;
+}
+
+export interface EndHandResponse {
+  success: true;
+}
+
 export interface ExchangeCardsRequest {
   playerId: string;
   position: PlayerPosition;
