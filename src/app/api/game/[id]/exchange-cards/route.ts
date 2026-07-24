@@ -104,7 +104,7 @@ export async function POST(
     // "already submitted" row on file and would otherwise have no way to
     // ever advance the round again.
     if (returnActions.length >= initialActions.length) {
-      const outcome = await finalizeRoundAndDealNext(game, round);
+      const outcome = await finalizeRoundAndDealNext(game, round, initialActions);
       if (outcome === "error") {
         return NextResponse.json(
           { error: "The round could not be finalized. Please retry." },
@@ -186,7 +186,7 @@ export async function POST(
   const postInsertActions = await getRoundCardExchangeActions(round.id);
   const postReturnCount = postInsertActions.filter((a) => asCardExchangeData(a).type === "return").length;
   if (postReturnCount >= initialActions.length) {
-    const outcome = await finalizeRoundAndDealNext(game, round);
+    const outcome = await finalizeRoundAndDealNext(game, round, initialActions);
     if (outcome === "error") {
       // This return itself is safely recorded above — but exchange-cards'
       // job also includes advancing the game once every return is in
@@ -218,12 +218,15 @@ type FinalizeOutcome = "dealt" | "already_finalized" | "error";
 
 // Completes the just-exchanged round and deals the next one, once every
 // recipient of an initial card has returned one (RULES.md "End Hand /
-// Level": "Reshuffle and deal 27 cards... Start next hand with 1st place
-// player as leader"). The compare-and-swap on `status` means only one of
-// however many requests conclude "all returns are in" actually proceeds
-// past the claim below — the rest get "already_finalized", their own
-// return already recorded regardless.
-async function finalizeRoundAndDealNext(game: GameRow, round: GameRoundRow): Promise<FinalizeOutcome> {
+// Level": "Reshuffle and deal 27 cards..."). The compare-and-swap on
+// `status` means only one of however many requests conclude "all returns
+// are in" actually proceeds past the claim below — the rest get
+// "already_finalized", their own return already recorded regardless.
+async function finalizeRoundAndDealNext(
+  game: GameRow,
+  round: GameRoundRow,
+  initialActions: readonly GameActionRow[],
+): Promise<FinalizeOutcome> {
   const roundCompleteResult = await supabaseAdmin
     .from("game_rounds")
     .update({ status: "completed" })
@@ -239,7 +242,15 @@ async function finalizeRoundAndDealNext(game: GameRow, round: GameRoundRow): Pro
   }
 
   const finishingPositions = round.finishing_positions ?? [];
-  const leaderPosition = finishingPositions.indexOf(1) as PlayerPosition;
+  const firstPos = finishingPositions.indexOf(1) as PlayerPosition;
+  // RULES.md "Leader Selection": whoever gave up the tribute card that
+  // went to 1st place leads next — not 1st place itself. A round only
+  // reaches 'card_exchange' (and this function) via a non-cancelled
+  // tribute (end-hand/route.ts skips straight to 'completed' otherwise),
+  // so there's always exactly one 'initial' action routed `to` 1st place.
+  const leaderPosition = asCardExchangeData(
+    initialActions.find((a) => asCardExchangeData(a).to === firstPos)!,
+  ).from;
 
   const outcome = await dealNextRound(game.id, round.round_number, leaderPosition, levelRankForGame(game));
   if (outcome === "error") {

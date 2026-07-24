@@ -43,7 +43,8 @@ Each round:
 ## Leader Selection
 
 - **First round**: A random player is chosen to lead the first trick
-- **Subsequent rounds**: The player who finished 1st in the previous round leads the first trick
+- **Subsequent rounds**: Whoever gave up the tribute card that went to 1st place leads the first trick — not 1st place themselves. In a single-team lead, that's always 4th place (they're the only one who gives a card). In a two-team lead, it's whichever of 3rd/4th gave the higher card (the one routed to 1st place; see "Card Exchange")
+- **Cancelled tribute**: If the tribute was cancelled (see "Card Exchange"), there's no card-giver to hand leadership to, so 1st place leads instead
 - **Within a round**: After each trick ends, the player who won that trick leads the next trick
 - **Winner out of cards**: If the trick winner has no cards left after their winning play (that play was their last), their partner leads the next trick instead — the round continues with the remaining active players until the round ends (see "Scoring" → "Round End")
 

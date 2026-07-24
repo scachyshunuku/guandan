@@ -284,8 +284,10 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const newRound = fake._tables.game_rounds.find((r) => r.game_id === gameId && r.round_number === 2);
     expect(newRound).toBeDefined();
-    expect(newRound?.leader_position).toBe(0); // 1st place leads the next hand
-    expect(newRound?.current_player_turn).toBe(0);
+    // Position 2 (4th place) gave up the tribute card that went to 1st —
+    // they lead next, not 1st place (RULES.md "Leader Selection").
+    expect(newRound?.leader_position).toBe(2);
+    expect(newRound?.current_player_turn).toBe(2);
     expect(newRound?.game_state).toEqual({ currentTrick: [], trickCount: 0, finishOrder: [] });
 
     const dealtHands = fake._tables.game_participants
@@ -348,7 +350,50 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     expect(round?.status).toBe("completed");
     const newRound = fake._tables.game_rounds.find((r) => r.game_id === gameId && r.round_number === 2);
     expect(newRound).toBeDefined();
-    expect(newRound?.leader_position).toBe(0);
+    // Position 3 gave the QUEEN that went to 1st (position 0) — they lead
+    // next, not 1st place (RULES.md "Leader Selection").
+    expect(newRound?.leader_position).toBe(3);
+  });
+
+  it("has 3rd place lead next when 3rd (not 4th) gave the higher tribute card", async () => {
+    const gameId = await seedGame();
+    // 0=1st, 1=3rd, 2=4th, 3=2nd — deliberately different from the previous
+    // test's position layout, so this isn't just "4th place happens to
+    // lead": here it's 3rd place whose card is higher.
+    const roundId = await seedRound(gameId, [1, 3, 4, 2]);
+    await seedInitialExchange(gameId, roundId, 1, 0, { rank: "QUEEN", suit: "SPADES" });
+    await seedInitialExchange(gameId, roundId, 2, 3, { rank: "9", suit: "CLUBS" });
+    await seedParticipant(gameId, 0, "p0", [
+      { rank: "QUEEN", suit: "SPADES" },
+      { rank: "5", suit: "DIAMONDS" },
+    ]);
+    await seedParticipant(gameId, 1, "p1", [{ rank: "3", suit: "DIAMONDS" }]);
+    await seedParticipant(gameId, 2, "p2", [{ rank: "4", suit: "DIAMONDS" }]);
+    await seedParticipant(gameId, 3, "p3", [
+      { rank: "9", suit: "CLUBS" },
+      { rank: "6", suit: "DIAMONDS" },
+    ]);
+
+    const first = await callExchange(gameId, {
+      playerId: "p0",
+      position: 0,
+      cardToGive: { rank: "5", suit: "DIAMONDS" },
+      type: "return",
+      recipientPosition: 1,
+    });
+    expect(first.status).toBe(200);
+    const second = await callExchange(gameId, {
+      playerId: "p3",
+      position: 3,
+      cardToGive: { rank: "6", suit: "DIAMONDS" },
+      type: "return",
+      recipientPosition: 2,
+    });
+    expect(second.status).toBe(200);
+
+    const newRound = fake._tables.game_rounds.find((r) => r.game_id === gameId && r.round_number === 2);
+    expect(newRound).toBeDefined();
+    expect(newRound?.leader_position).toBe(1);
   });
 
   it("lets two near-simultaneous final returns both succeed without dealing two next rounds", async () => {
@@ -597,6 +642,8 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     expect(round?.status).toBe("completed");
     const newRound = fake._tables.game_rounds.find((r) => r.game_id === gameId && r.round_number === 2);
     expect(newRound).toBeDefined();
-    expect(newRound?.leader_position).toBe(0);
+    // Position 2 gave the KING that went to 1st (position 0) — they lead
+    // next, not 1st place (RULES.md "Leader Selection").
+    expect(newRound?.leader_position).toBe(2);
   });
 });
