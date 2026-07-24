@@ -88,6 +88,8 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
   private payload: unknown;
   private filters: [string, unknown][] = [];
   private mode: "many" | "single" | "maybeSingle" = "many";
+  private orderBy: { column: string; ascending: boolean } | null = null;
+  private limitCount: number | null = null;
 
   constructor(
     private tables: Record<string, Row[]>,
@@ -125,15 +127,13 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
     return this;
   }
 
-  // Ordering/limiting aren't simulated — the only caller (getLatestRound)
-  // only ever has one row per game_id in practice, so it doesn't matter.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  order(column?: string, opts?: unknown) {
+  order(column: string, opts?: { ascending?: boolean }) {
+    this.orderBy = { column, ascending: opts?.ascending ?? true };
     return this;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  limit(count?: number) {
+  limit(count: number) {
+    this.limitCount = count;
     return this;
   }
 
@@ -198,6 +198,22 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
       for (const r of result) rows.splice(rows.indexOf(r), 1);
     } else {
       result = rows.filter((r) => matches(r, this.filters));
+    }
+
+    if (this.orderBy) {
+      const { column, ascending } = this.orderBy;
+      result = [...result].sort((a, b) => {
+        const [x, y] = [a[column], b[column]];
+        if (x === y) return 0;
+        // Same comparison Postgres/JS use for the column types this fake
+        // actually orders by (numbers, ISO date strings) — not a general
+        // total order across arbitrary Row values.
+        const cmp = (x as number | string) < (y as number | string) ? -1 : 1;
+        return ascending ? cmp : -cmp;
+      });
+    }
+    if (this.limitCount !== null) {
+      result = result.slice(0, this.limitCount);
     }
 
     if (this.mode === "single") {
