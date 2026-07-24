@@ -23,11 +23,14 @@ Guandan is a trick-taking partnership card game for 4 players (2 teams). It uses
 Red Joker > Black Joker > A > K > Q > J > 10 > 9 > 8 > 7 > 6 > 5 > 4 > 3 > 2
 ```
 
+Two cards of the same rank are otherwise equivalent — suit never breaks a tie, except among level cards (see below).
+
 ### Level Cards & Wild Cards
 - When a team plays at a specific level (e.g., level 5), all cards of that rank become "level cards"
 - Level cards rank above aces but below black jokers
 - **Hearts level cards are wild**: They can represent any card except a joker
   - Example: If level is 5, the 5 of hearts can be played as any card except a joker
+- **Among level cards, hearts ranks highest** when picking a single "best card" from a hand (e.g. for the card exchange below) — this reflects hearts' unique wild-card status. The other three suits remain equivalent to each other. This doesn't change trick-beating: a level card played as itself (not as a wild substitution) beats or loses to other plays purely by rank, regardless of suit.
 
 ## Dealing
 
@@ -147,12 +150,14 @@ After each round, players exchange cards based on finishing positions. **All car
 - **4th place** gives their **best card** to **1st place**
 - **1st place** gives **any card of their choice** back to **4th place** (typically a low card)
 - No other exchanges
+- **Cancelled if 4th place alone holds both Red Jokers**: no card changes hands either way
 
 ### Two-Team Lead (1-2 finish)
 - **Both 3rd and 4th place** give their **best card**
 - The **higher rank card** goes to **1st place**, the **lower rank card** goes to **2nd place**
 - If the two cards are the **same rank**, **1st place chooses which card to take** (then 2nd place gets the other)
 - **Both 1st and 2nd place** must give **any card of their choice** back to the player who gave them their card (typically a low card)
+- **Cancelled if 3rd and 4th place hold both Red Jokers between them** (either one alone, or split one each): no cards change hands at all
 
 ## Game End
 

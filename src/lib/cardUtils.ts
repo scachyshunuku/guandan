@@ -82,8 +82,10 @@ export function getCardRank(card: Card, levelRank: StandardRank): number {
 // Sorting
 // ---------------------------------------------------------------------------
 
-// Arbitrary but fixed, only used to break ties between same-rank cards (e.g.
-// duplicate suits across the two decks, or jokers) so sorting is stable.
+// The four suits, in a fixed but otherwise arbitrary enumeration order —
+// for callers/tests that just need "all four suits" (e.g. building a test
+// deck). Not used for comparison: see compareCards below, which no longer
+// breaks same-rank ties by suit at all.
 export const SUIT_ORDER: readonly Suit[] = Object.freeze([
   "DIAMONDS",
   "CLUBS",
@@ -91,16 +93,29 @@ export const SUIT_ORDER: readonly Suit[] = Object.freeze([
   "SPADES",
 ]);
 
-function getSuitOrder(suit?: Suit): number {
-  return suit === undefined ? -1 : SUIT_ORDER.indexOf(suit);
+// Hearts' unique wild-card status (RULES.md "Level Cards & Wild Cards")
+// makes it strictly the best suit among level-rank cards specifically —
+// the other three suits remain equivalent to each other and to themselves.
+function isHeartsSuit(suit: Suit | undefined): number {
+  return suit === "HEARTS" ? 1 : 0;
 }
 
 // Ascending comparator (lowest rank first), for use with Array.sort / as a
-// building block for other comparisons.
+// building block for other comparisons (e.g. "best card" selection for the
+// card exchange). Same-rank cards are a genuine tie (0) regardless of
+// suit — RULES.md "Card Ranking" never distinguishes by suit — except among
+// level cards, where hearts ranks above the other three suits. This is
+// deliberately *not* reflected in getCardRank, which combinations.ts also
+// relies on for trick-beating: a level card played as itself (not as a
+// wild substitution) beats/loses to other combos purely by rank, suit never
+// enters into it there.
 export function compareCards(a: Card, b: Card, levelRank: StandardRank): number {
   const rankDiff = getCardRank(a, levelRank) - getCardRank(b, levelRank);
   if (rankDiff !== 0) return rankDiff;
-  return getSuitOrder(a.suit) - getSuitOrder(b.suit);
+  if (a.rank === levelRank) {
+    return isHeartsSuit(a.suit) - isHeartsSuit(b.suit);
+  }
+  return 0;
 }
 
 // Returns a new array sorted ascending by rank (then suit). Takes `readonly

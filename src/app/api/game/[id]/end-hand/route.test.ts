@@ -251,6 +251,89 @@ describe("POST /api/game/[id]/end-hand", () => {
     );
   });
 
+  it("cancels a single-team-lead tribute when 4th place alone holds both Red Jokers, and deals the next round immediately", async () => {
+    const gameId = await seedGame();
+    const roundId = await seedRound(gameId, [0, 1, 3]);
+    await seedParticipant(gameId, 0, "p0", []);
+    await seedParticipant(gameId, 1, "p1", []);
+    await seedParticipant(gameId, 2, "p2", [
+      { rank: "RED_JOKER" },
+      { rank: "RED_JOKER" },
+      { rank: "7", suit: "HEARTS" },
+    ]);
+    await seedParticipant(gameId, 3, "p3", []);
+
+    const response = await callEndHand(gameId, { playerId: "p0" });
+    expect(response.status).toBe(200);
+
+    const oldRound = fake._tables.game_rounds.find((r) => r.id === roundId);
+    // Skips 'card_exchange' entirely — there's nothing to return either.
+    expect(oldRound?.status).toBe("completed");
+    expect(oldRound?.finishing_positions).toEqual([1, 2, 4, 3]);
+
+    const game = fake._tables.games.find((g) => g.id === gameId);
+    expect(game?.team_a_level).toBe(3); // level promotion still applies
+    expect(game?.status).toBe("in_progress");
+
+    // No cards changed hands.
+    expect(fake._tables.game_actions ?? []).toHaveLength(0);
+
+    // The next round was dealt immediately, in this same request.
+    const newRound = fake._tables.game_rounds.find((r) => r.game_id === gameId && r.round_number === 2);
+    expect(newRound).toBeDefined();
+    expect(newRound?.leader_position).toBe(0);
+    const dealtHands = fake._tables.game_participants
+      .filter((p) => p.game_id === gameId)
+      .map((p) => p.hand as unknown[]);
+    for (const hand of dealtHands) expect(hand).toHaveLength(27);
+    expect(dealtHands.flat()).toHaveLength(108);
+  });
+
+  it("cancels a two-team-lead tribute when 3rd and 4th hold both Red Jokers between them, and deals the next round immediately", async () => {
+    const gameId = await seedGame();
+    const roundId = await seedRound(gameId, [0, 2]);
+    await seedParticipant(gameId, 0, "p0", []);
+    await seedParticipant(gameId, 1, "p1", [{ rank: "RED_JOKER" }, { rank: "5", suit: "DIAMONDS" }]);
+    await seedParticipant(gameId, 2, "p2", []);
+    await seedParticipant(gameId, 3, "p3", [{ rank: "RED_JOKER" }, { rank: "6", suit: "CLUBS" }]);
+
+    const response = await callEndHand(gameId, { playerId: "p0" });
+    expect(response.status).toBe(200);
+
+    const oldRound = fake._tables.game_rounds.find((r) => r.id === roundId);
+    expect(oldRound?.status).toBe("completed");
+
+    const game = fake._tables.games.find((g) => g.id === gameId);
+    expect(game?.team_a_level).toBe(6); // +4 for a 1-2 finish, still applies
+
+    expect(fake._tables.game_actions ?? []).toHaveLength(0);
+
+    const newRound = fake._tables.game_rounds.find((r) => r.game_id === gameId && r.round_number === 2);
+    expect(newRound).toBeDefined();
+    expect(newRound?.leader_position).toBe(0);
+  });
+
+  it("does not cancel the tribute when only one Red Joker is held", async () => {
+    const gameId = await seedGame();
+    const roundId = await seedRound(gameId, [0, 1, 3]);
+    await seedParticipant(gameId, 0, "p0", []);
+    await seedParticipant(gameId, 1, "p1", []);
+    await seedParticipant(gameId, 2, "p2", [{ rank: "RED_JOKER" }, { rank: "7", suit: "HEARTS" }]);
+    await seedParticipant(gameId, 3, "p3", []);
+
+    const response = await callEndHand(gameId, { playerId: "p0" });
+    expect(response.status).toBe(200);
+
+    const round = fake._tables.game_rounds.find((r) => r.id === roundId);
+    // The tribute proceeds normally: round moves to 'card_exchange' rather
+    // than skipping straight to 'completed'.
+    expect(round?.status).toBe("card_exchange");
+    expect(fake._tables.game_actions).toHaveLength(1);
+    expect(fake._tables.game_actions[0]).toMatchObject({
+      action_data: { from: 2, to: 0, card: { rank: "RED_JOKER" }, type: "initial" },
+    });
+  });
+
   it("ends the game when a 1-2 finish promotes the winning team to level A", async () => {
     const gameId = await seedGame({ team_a_level: 13, team_b_level: 2 });
     const roundId = await seedRound(gameId, [0, 2]);
@@ -380,5 +463,35 @@ describe("POST /api/game/[id]/end-hand", () => {
     const game = fake._tables.games.find((g) => g.id === gameId);
     expect(game?.status).toBe("in_progress");
     expect(game?.winning_team).toBeNull();
+  });
+
+  it("rolls back the round and level promotion if dealing the next round fails after a cancelled tribute", async () => {
+    const gameId = await seedGame();
+    const roundId = await seedRound(gameId, [0, 1, 3]);
+    await seedParticipant(gameId, 0, "p0", []);
+    await seedParticipant(gameId, 1, "p1", []);
+    await seedParticipant(gameId, 2, "p2", [{ rank: "RED_JOKER" }, { rank: "RED_JOKER" }]);
+    await seedParticipant(gameId, 3, "p3", []);
+    // The cancelled-tribute path's round claim and games update don't touch
+    // game_participants at all, so this only ever fails inside
+    // dealNextRound's own deal step.
+    fake._failNext("game_participants", "update");
+
+    const response = await callEndHand(gameId, { playerId: "p0" });
+    expect(response.status).toBe(500);
+
+    const round = fake._tables.game_rounds.find((r) => r.id === roundId);
+    expect(round?.status).toBe("in_progress");
+    expect(round?.finishing_positions).toBeNull();
+
+    const game = fake._tables.games.find((g) => g.id === gameId);
+    expect(game?.team_a_level).toBe(2);
+
+    expect(fake._tables.game_rounds.filter((r) => r.game_id === gameId)).toHaveLength(1);
+
+    // A retry after the rollback resolves cleanly.
+    const retry = await callEndHand(gameId, { playerId: "p0" });
+    expect(retry.status).toBe(200);
+    expect(fake._tables.game_rounds.filter((r) => r.game_id === gameId)).toHaveLength(2);
   });
 });

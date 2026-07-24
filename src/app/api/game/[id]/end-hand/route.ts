@@ -17,6 +17,7 @@ import {
   type ParticipantRow,
 } from "@/lib/gameDb";
 import { compareCards, removeCardsFromHand, sortCards } from "@/lib/cardUtils";
+import { dealNextRound } from "@/lib/dealNextRound";
 import { parseJsonBody } from "@/lib/http";
 import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import {
@@ -41,6 +42,16 @@ interface ExchangeTransfer {
   card: CardWithWild;
 }
 
+// RULES.md "Card Exchange" cancels the tribute outright — no cards change
+// hands at all — when the losing side holds both Red Jokers between them.
+type ExchangePlan =
+  | { cancelled: true; transfers: [] }
+  | { cancelled: false; transfers: ExchangeTransfer[] };
+
+function countRedJokers(hand: readonly CardWithWild[]): number {
+  return hand.filter((card) => card.rank === "RED_JOKER").length;
+}
+
 // Re-sorts every call rather than trusting the hand's existing order —
 // deck.ts's dealHands() sorts a hand once at deal time for a nicer initial
 // display, but that's a one-time presentational sort, not an invariant:
@@ -61,36 +72,55 @@ function planInitialExchanges(
   finishingPositions: readonly number[],
   participants: readonly ParticipantRow[],
   levelRank: StandardRank,
-): ExchangeTransfer[] {
+): ExchangePlan {
   const posByRank = (rank: number) => finishingPositions.indexOf(rank) as PlayerPosition;
   const handOf = (position: PlayerPosition) =>
     participants.find((p) => p.position === position)!.hand;
 
   const firstPos = posByRank(1);
   const fourthPos = posByRank(4);
-  const fourthCard = bestCard(handOf(fourthPos), levelRank);
+  const fourthHand = handOf(fourthPos);
 
   if (combo !== "1-2") {
+    // RULES.md "Card Exchange" → "Cancelled if 4th place alone holds both
+    // Red Jokers": the tribute is called off entirely, no card either way.
+    if (countRedJokers(fourthHand) === 2) {
+      return { cancelled: true, transfers: [] };
+    }
     // Single-team lead (RULES.md "Single-Team Lead"): 4th's best card goes
     // to 1st, no other exchange.
-    return [{ from: fourthPos, to: firstPos, card: fourthCard }];
+    return {
+      cancelled: false,
+      transfers: [{ from: fourthPos, to: firstPos, card: bestCard(fourthHand, levelRank) }],
+    };
+  }
+
+  const secondPos = posByRank(2);
+  const thirdPos = posByRank(3);
+  const thirdHand = handOf(thirdPos);
+  // RULES.md "Card Exchange" → "Cancelled if 3rd and 4th place hold both
+  // Red Jokers between them" — combined across both losing players,
+  // however they're split between the two hands.
+  if (countRedJokers(thirdHand) + countRedJokers(fourthHand) === 2) {
+    return { cancelled: true, transfers: [] };
   }
 
   // Two-team lead (RULES.md "Two-Team Lead"): 3rd and 4th both give their
   // best card; the higher rank goes to 1st, the lower to 2nd. RULES.md has
   // 1st choose which card to take when the two are tied in rank — there's
-  // no interactive step for that decision yet, so a tie instead falls back
-  // to compareCards' full ordering (which breaks rank ties by suit), the
-  // same total order this codebase already uses everywhere else "which
-  // card is better" comes up.
-  const secondPos = posByRank(2);
-  const thirdPos = posByRank(3);
-  const thirdCard = bestCard(handOf(thirdPos), levelRank);
+  // no interactive step for that decision yet, so a genuine tie (compareCards
+  // returns 0 — see cardUtils.ts) instead falls back to fourth's card going
+  // to 1st, an arbitrary but deterministic choice.
+  const fourthCard = bestCard(fourthHand, levelRank);
+  const thirdCard = bestCard(thirdHand, levelRank);
   const thirdIsHigher = compareCards(thirdCard, fourthCard, levelRank) > 0;
-  return [
-    { from: thirdPos, to: thirdIsHigher ? firstPos : secondPos, card: thirdCard },
-    { from: fourthPos, to: thirdIsHigher ? secondPos : firstPos, card: fourthCard },
-  ];
+  return {
+    cancelled: false,
+    transfers: [
+      { from: thirdPos, to: thirdIsHigher ? firstPos : secondPos, card: thirdCard },
+      { from: fourthPos, to: thirdIsHigher ? secondPos : firstPos, card: fourthCard },
+    ],
+  };
 }
 
 // Resolves each transfer against the participants' current hands into a
@@ -273,6 +303,15 @@ async function finalizeContinuingHand(
   teamALevel: number,
   teamBLevel: number,
 ) {
+  const plan = planInitialExchanges(combo, finishingPositions, participants, levelRank);
+  // RULES.md "Card Exchange" tribute-cancellation: with nothing changing
+  // hands, there's no "return" phase to wait on either — finalize and deal
+  // the next round immediately instead of moving through 'card_exchange'.
+  if (plan.cancelled) {
+    return finalizeCancelledTribute(game, round, finishingPositions, teamALevel, teamBLevel);
+  }
+  const { transfers } = plan;
+
   // See finalizeWonGame's identical comment: capture before any write
   // mutates these same live row objects (round.finishing_positions,
   // game.team_a_level/team_b_level) out from under this function's still-held
@@ -298,7 +337,6 @@ async function finalizeContinuingHand(
     );
   }
 
-  const transfers = planInitialExchanges(combo, finishingPositions, participants, levelRank);
   const handWrites = computeExchangeHandWrites(participants, transfers);
 
   const [gameUpdateResult, handResults, actionResults] = await Promise.all([
@@ -362,6 +400,93 @@ async function finalizeContinuingHand(
     broadcastToGame(game.id, "game_updated", gameUpdateResult.data![0]),
     ...actionResults.map((r) => broadcastToGame(game.id, "game_action", r.data)),
   ]);
+
+  const response: EndHandResponse = { success: true };
+  return NextResponse.json(response);
+}
+
+// A cancelled tribute (RULES.md "Card Exchange") has no cards to move and
+// no return to wait on, so this claims the round straight to 'completed'
+// (skipping 'card_exchange' entirely — unlike finalizeContinuingHand's
+// normal path, exchange-cards is never involved for this round) and deals
+// the next round itself via the same dealNextRound helper exchange-cards
+// uses once its own returns are all in.
+async function finalizeCancelledTribute(
+  game: GameRow,
+  round: GameRoundRow,
+  finishingPositions: number[],
+  teamALevel: number,
+  teamBLevel: number,
+) {
+  // See finalizeWonGame's identical comment on capturing these before any
+  // write mutates the live row objects they're read from.
+  const originalFinishingPositions = round.finishing_positions;
+  const originalTeamALevel = game.team_a_level;
+  const originalTeamBLevel = game.team_b_level;
+
+  const roundClaimResult = await supabaseAdmin
+    .from("game_rounds")
+    .update({ finishing_positions: finishingPositions, status: "completed" })
+    .eq("id", round.id)
+    .eq("status", "in_progress")
+    .select("*");
+  if (roundClaimResult.error) {
+    console.error("Failed to claim end-hand transition", roundClaimResult.error);
+    return NextResponse.json({ error: "Failed to end hand" }, { status: 500 });
+  }
+  if (!roundClaimResult.data?.length) {
+    return NextResponse.json(
+      { error: "hand was already ended by another request" },
+      { status: 409 },
+    );
+  }
+
+  const gameUpdateResult = await supabaseAdmin
+    .from("games")
+    .update({ team_a_level: teamALevel, team_b_level: teamBLevel })
+    .eq("id", game.id)
+    .eq("status", "in_progress")
+    .select("*");
+  if (gameUpdateResult.error || !gameUpdateResult.data?.length) {
+    console.error(
+      "Failed to persist level promotion for a cancelled-tribute hand; rolling back",
+      gameUpdateResult.error,
+    );
+    await supabaseAdmin
+      .from("game_rounds")
+      .update({ finishing_positions: originalFinishingPositions, status: "in_progress" })
+      .eq("id", round.id)
+      .eq("status", "completed");
+    return NextResponse.json({ error: "Failed to end hand" }, { status: 500 });
+  }
+
+  const leaderPosition = finishingPositions.indexOf(1) as PlayerPosition;
+  const outcome = await dealNextRound(
+    game.id,
+    round.round_number,
+    leaderPosition,
+    levelRankForGame({ team_a_level: teamALevel, team_b_level: teamBLevel }),
+  );
+  if (outcome === "error") {
+    console.error("Failed to deal the next round after a cancelled tribute; rolling back");
+    await Promise.all([
+      supabaseAdmin
+        .from("game_rounds")
+        .update({ finishing_positions: originalFinishingPositions, status: "in_progress" })
+        .eq("id", round.id)
+        .eq("status", "completed"),
+      supabaseAdmin
+        .from("games")
+        .update({ team_a_level: originalTeamALevel, team_b_level: originalTeamBLevel })
+        .eq("id", game.id),
+    ]);
+    return NextResponse.json({ error: "Failed to end hand" }, { status: 500 });
+  }
+
+  // dealNextRound already broadcasts the new round itself; only the game's
+  // level change (and, for a cancelled tribute, the fact that nothing else
+  // changed hands) is this function's own news to announce.
+  await broadcastToGame(game.id, "game_updated", gameUpdateResult.data[0]);
 
   const response: EndHandResponse = { success: true };
   return NextResponse.json(response);

@@ -11,23 +11,20 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   getGameContext,
-  getParticipants,
   isPlayerPosition,
   levelRankForGame,
   type GameRow,
   type GameRoundRow,
 } from "@/lib/gameDb";
 import { removeCardsFromHand } from "@/lib/cardUtils";
-import { dealHands } from "@/lib/deck";
+import { dealNextRound } from "@/lib/dealNextRound";
 import { parseJsonBody } from "@/lib/http";
 import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import type { GameActionRow } from "@/lib/db/mappers";
 import type {
   CardExchangeActionData,
-  CardWithWild,
   ExchangeCardsRequest,
   ExchangeCardsResponse,
-  GameState,
   PlayerPosition,
 } from "@/lib/types";
 
@@ -244,57 +241,11 @@ async function finalizeRoundAndDealNext(game: GameRow, round: GameRoundRow): Pro
   const finishingPositions = round.finishing_positions ?? [];
   const leaderPosition = finishingPositions.indexOf(1) as PlayerPosition;
 
-  // Fetched fresh here, not reused from the caller's earlier read — this
-  // request's own return (and, in a two-return round, a concurrent
-  // request's return) has already landed by this point, and dealing needs
-  // each seat's *current* hand as the rollback fallback below, not a
-  // pre-exchange snapshot.
-  const freshParticipants = await getParticipants(game.id);
-  const seated = new Map<PlayerPosition, { id: string; hand: CardWithWild[] }>();
-  for (const p of freshParticipants) {
-    if (p.position !== null) seated.set(p.position, p);
-  }
-
-  const newGameState: GameState = { currentTrick: [], trickCount: 0, finishOrder: [] };
-  const newRoundInsert = await supabaseAdmin
-    .from("game_rounds")
-    .insert({
-      game_id: game.id,
-      round_number: round.round_number + 1,
-      game_state: newGameState,
-      leader_position: leaderPosition,
-      current_player_turn: leaderPosition,
-    })
-    .select("*")
-    .single();
-  if (newRoundInsert.error || !newRoundInsert.data) {
-    console.error("Failed to create next round after card exchange completed; rolling back", newRoundInsert.error);
+  const outcome = await dealNextRound(game.id, round.round_number, leaderPosition, levelRankForGame(game));
+  if (outcome === "error") {
     await revertRoundToCardExchange(round.id);
     return "error";
   }
-
-  const hands = dealHands(levelRankForGame(game));
-  const dealWrites = ([0, 1, 2, 3] as const).map((position) => {
-    const participant = seated.get(position)!;
-    return { id: participant.id, originalHand: participant.hand, newHand: hands[position] };
-  });
-  const dealResults = await Promise.all(
-    dealWrites.map((w) => supabaseAdmin.from("game_participants").update({ hand: w.newHand }).eq("id", w.id)),
-  );
-  const dealFailure = dealResults.find((r) => r.error);
-  if (dealFailure) {
-    console.error("Failed to deal hands for the new round; rolling back", dealFailure.error);
-    await Promise.all([
-      supabaseAdmin.from("game_rounds").delete().eq("id", newRoundInsert.data.id),
-      revertRoundToCardExchange(round.id),
-      ...dealWrites.map((w) =>
-        supabaseAdmin.from("game_participants").update({ hand: w.originalHand }).eq("id", w.id),
-      ),
-    ]);
-    return "error";
-  }
-
-  await broadcastToGame(game.id, "round_updated", newRoundInsert.data);
   return "dealt";
 }
 
