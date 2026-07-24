@@ -74,6 +74,7 @@ function applyGameState(response: GameStateResponse, gameId: string, playerId: s
   store.setGame(gameId, playerId);
   store.setGameStatus(response.game.status);
   store.setTeamLevels(response.game.teamALevel, response.game.teamBLevel);
+  store.setWinningTeam(response.game.winningTeam);
   store.updateParticipants(response.participants);
   const me = response.participants.find((p) => p.playerId === playerId);
   store.setMyPosition(me?.position ?? null);
@@ -92,6 +93,7 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
   const currentTrick = useGameStore((s) => s.currentTrick);
   const currentPlayerTurn = useGameStore((s) => s.currentPlayerTurn);
   const teamLevels = useGameStore((s) => s.teamLevels);
+  const winningTeam = useGameStore((s) => s.winningTeam);
 
   const actions = useGameActions({ gameId, playerId, position: myPosition });
   // useGameActions/useQuery return a fresh object every render, so a plain
@@ -270,6 +272,19 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     [],
   );
 
+  // Not optimistic like the mutations above - there's nothing to guess at
+  // locally (the dealt hand is server-random), so this just applies the
+  // response once it's confirmed. gameStatus/currentPlayerTurn update
+  // separately via the game_updated/round_updated broadcasts every
+  // subscribed client (including this one) receives - see
+  // realtimeBroadcast.ts's doc comment - only the caller's own hand needs
+  // this explicit round-trip, since hands are deliberately never broadcast.
+  const startGame = useCallback(async () => {
+    const response = await actionsRef.current.startGame();
+    useGameStore.getState().setHand(response.hand);
+    return response;
+  }, []);
+
   return {
     gameStatus,
     participants,
@@ -278,6 +293,7 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     currentTrick,
     currentPlayerTurn,
     teamLevels,
+    winningTeam,
 
     isLoading: gameStateQuery.isLoading,
     error: gameStateQuery.error,
@@ -298,5 +314,9 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     exchangeCards,
     isExchangingCards: actions.isExchangingCards,
     exchangeCardsError: actions.exchangeCardsError,
+
+    startGame,
+    isStartingGame: actions.isStartingGame,
+    startGameError: actions.startGameError,
   };
 }

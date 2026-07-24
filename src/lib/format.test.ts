@@ -1,4 +1,4 @@
-import { pluralize } from "./format";
+import { gameShareLink, pluralize } from "./format";
 
 describe("pluralize", () => {
   it("uses the singular form for a count of 1", () => {
@@ -13,5 +13,11 @@ describe("pluralize", () => {
   it("supports an irregular plural form", () => {
     expect(pluralize(1, "die", "dice")).toBe("1 die");
     expect(pluralize(2, "die", "dice")).toBe("2 dice");
+  });
+});
+
+describe("gameShareLink", () => {
+  it("builds an absolute link using the current origin", () => {
+    expect(gameShareLink("game-123")).toBe(`${window.location.origin}/game/game-123`);
   });
 });

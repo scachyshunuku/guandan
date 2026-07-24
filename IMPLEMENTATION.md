@@ -315,17 +315,17 @@ All can be built with mocks, integrated later.
 - **Estimated**: 5 hours
 
 ### Task 5.6: Pages & Layouts
-- [ ] `app/layout.tsx` - Root layout with providers
+- [x] `app/layout.tsx` - Root layout with providers
   - Zustand provider
   - Supabase provider
   - Error boundary
-- [ ] `app/game/[id]/layout.tsx` - Game page provider
+- [x] `app/game/[id]/layout.tsx` - Game page provider
   - Initialize useGame hook
   - Pass state to children
-- [ ] `app/game/[id]/page.tsx` - Game board container
+- [x] `app/game/[id]/page.tsx` - Game board container
   - Render GameTable + PlayerHand + TrickDisplay
   - Handle game state
-- [ ] Unit tests: Provider setup
+- [x] Unit tests: Provider setup
 - **Blockers**: Tasks 4.1, 4.4, 5.1-5.4
 - **Testability**: Component tests
 - **Estimated**: 4 hours

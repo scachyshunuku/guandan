@@ -3,7 +3,7 @@
 // those routes actually need — full row<->type mapping for the GET state
 // endpoint belongs to whichever task builds it (IMPLEMENTATION.md Task 3.4).
 import { supabaseAdmin } from "./supabaseAdmin";
-import { STANDARD_RANK_ORDER } from "./cardUtils";
+import { levelRankForLevels } from "./cardUtils";
 import { isValidUuid } from "./http";
 import type {
   CardWithWild,
@@ -38,13 +38,10 @@ export async function getGame(gameId: string): Promise<GameRow | null> {
   return data;
 }
 
-// The level rank in effect for wild-card/level-card purposes (RULES.md
-// "Level Cards & Wild Cards"): the higher of the two teams' levels, since
-// there's no separate "declaring team" column — the team further ahead is
-// the one whose level the hand is played at.
+// The level rank in effect for wild-card/level-card purposes — see
+// levelRankForLevels' doc comment in cardUtils.ts.
 export function levelRankForGame(game: Pick<GameRow, "team_a_level" | "team_b_level">): StandardRank {
-  const level = Math.max(game.team_a_level, game.team_b_level);
-  return STANDARD_RANK_ORDER[level - 2];
+  return levelRankForLevels(game.team_a_level, game.team_b_level);
 }
 
 export interface ParticipantRow {
