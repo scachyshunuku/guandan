@@ -139,6 +139,40 @@ describe("useGameRealtimeSync", () => {
     ]);
   });
 
+  it("syncs participant_updated broadcasts by upserting the existing participant", () => {
+    useGameStore.getState().addParticipant({
+      id: "participant-1",
+      gameId: "game-1",
+      playerName: "Alice",
+      playerId: "alice",
+      position: 0,
+      hand: [],
+      isConnected: true,
+      connectedAt: "2026-01-01T00:00:00.000Z",
+      lastHeartbeat: "2026-01-01T00:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    renderHook(() => useGameRealtimeSync("game-1"));
+
+    channels[0].fire("participant_updated", {
+      id: "participant-1",
+      game_id: "game-1",
+      player_name: "Alice",
+      player_id: "alice",
+      position: 0,
+      hand: [],
+      is_connected: false,
+      connected_at: "2026-01-01T00:00:00.000Z",
+      last_heartbeat: "2026-01-01T00:00:00.000Z",
+      created_at: "2026-01-01T00:00:00.000Z",
+    });
+
+    const state = useGameStore.getState();
+    expect(state.participants).toEqual([
+      expect.objectContaining({ id: "participant-1", isConnected: false }),
+    ]);
+  });
+
   it("relays game_action broadcasts to onGameAction", () => {
     const onGameAction = jest.fn();
     renderHook(() => useGameRealtimeSync("game-1", onGameAction));

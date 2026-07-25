@@ -7,9 +7,21 @@ import PlayerHand from "@/components/game/PlayerHand";
 import TrickDisplay from "@/components/game/TrickDisplay";
 import ScoreBoard from "@/components/game/ScoreBoard";
 import ActionButtons from "@/components/game/ActionButtons";
+import CardExchangeModal from "@/components/game/CardExchangeModal";
+import TributeChoiceModal from "@/components/game/TributeChoiceModal";
+import WildCardSelector from "@/components/game/WildCardSelector";
+import { canPlayCards } from "@/lib/gameRules/validation";
 import { levelRankForLevels } from "@/lib/cardUtils";
 import { gameShareLink, pluralize } from "@/lib/format";
-import type { CardWithWild, GameParticipant, PlayerPosition } from "@/lib/types";
+import type {
+  Card,
+  CardExchangeActionData,
+  CardWithWild,
+  GameParticipant,
+  PlayerPosition,
+  StandardRank,
+  Suit,
+} from "@/lib/types";
 
 // Task 5.6's "Game board container": composes the board out of the pieces
 // built in Tasks 5.1-5.4 (PlayerHand, GameTable, TrickDisplay, ScoreBoard,
@@ -26,6 +38,10 @@ export default function GamePage() {
     hand,
     currentTrick,
     currentPlayerTurn,
+    roundStatus,
+    finishingPositions,
+    pendingTributeChoice,
+    roundActions,
     teamLevels,
     winningTeam,
     isLoading,
@@ -40,12 +56,37 @@ export default function GamePage() {
     joinGame,
     isJoiningGame,
     joinGameError,
+    exchangeCards,
+    isExchangingCards,
+    exchangeCardsError,
+    chooseTribute,
+    isChoosingTribute,
+    chooseTributeError,
     startGame,
     isStartingGame,
     startGameError,
   } = useGameContext();
 
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
+  // Keyed by hand index, one entry per level-rank heart the viewer has
+  // already given a wild interpretation to (RULES.md "Level Cards & Wild
+  // Cards") - a double deck (ARCHITECTURE.md) means a player can hold and
+  // select more than one at once (e.g. two wilds completing a bomb), so this
+  // is a map rather than a single value; an eligible card missing from it
+  // just hasn't been assigned one yet.
+  const [wildActsAsByIndex, setWildActsAsByIndex] = useState<
+    Record<number, { rank: StandardRank; suit: Suit }>
+  >({});
+  // Discards stale wild choices the moment the selection they were made for
+  // changes, rather than in a useEffect (React's "adjusting state when a
+  // prop changes" pattern - https://react.dev/learn/you-might-not-need-an-effect)
+  // - an effect here would let one extra render briefly show a wild
+  // interpretation attached to a selection it was never chosen for.
+  const [wildActsAsForSelection, setWildActsAsForSelection] = useState(selectedIndices);
+  if (wildActsAsForSelection !== selectedIndices) {
+    setWildActsAsForSelection(selectedIndices);
+    setWildActsAsByIndex({});
+  }
 
   if (isLoading) {
     return (
@@ -99,17 +140,41 @@ export default function GamePage() {
     );
   }
 
-  // TODO(Task 3.3): once end-hand/exchange-cards land, round.status can be
-  // 'card_exchange' - this container will need a branch for it (rendering
-  // CardExchangeModal.tsx instead of the board below). Unreachable today:
-  // useGame doesn't even carry round.status yet, and no route ever sets it.
   const game = { teamALevel: teamLevels[0], teamBLevel: teamLevels[1], winningTeam };
   const round = { currentPlayerTurn, gameState: { currentTrick } };
   const isMyTurn = myPosition !== null && currentPlayerTurn === myPosition;
   const levelRank = levelRankForLevels(teamLevels[0], teamLevels[1]);
 
+  // Every level-rank heart in the current selection (RULES.md "Level Cards &
+  // Wild Cards") - a double deck (ARCHITECTURE.md) means more than one can
+  // legitimately be selected together (e.g. two wilds completing a bomb).
+  const wildEligibleIndices = selectedIndices.filter(
+    (index) => hand[index]?.rank === levelRank && hand[index]?.suit === "HEARTS",
+  );
+  // A level-rank heart can always legally be played as itself (RULES.md: the
+  // wild substitution is optional, not mandatory) - e.g. a lone heart is
+  // already a valid single on an empty trick without ever opening the
+  // selector. The selector only needs to interrupt when the raw selection
+  // (played as itself) *isn't* already a legal play, since that's the only
+  // case where a wild interpretation could be what makes it one.
+  const rawSelectedCards = selectedIndices.map((index) => hand[index]);
+  const rawSelectionIsValid = canPlayCards(rawSelectedCards, hand, currentTrick, levelRank).valid;
+  // The next eligible card still waiting on a wild interpretation - prompted
+  // one at a time rather than all at once, so WildCardSelector's UI (one
+  // rank/suit picker) doesn't need to change shape for the multi-wild case.
+  const pendingWildIndex = rawSelectionIsValid
+    ? undefined
+    : wildEligibleIndices.find((index) => wildActsAsByIndex[index] === undefined);
+  const needsWildChoice = pendingWildIndex !== undefined;
+  // What actually gets validated/submitted: the raw selection, except every
+  // wild-eligible card gets its own chosen actsAs attached once assigned.
+  const effectiveSelectedCards = selectedIndices.map((index) =>
+    wildActsAsByIndex[index] ? { ...hand[index], actsAs: wildActsAsByIndex[index] } : hand[index],
+  );
+
   function handlePlay(cards: CardWithWild[]) {
     setSelectedIndices([]);
+    setWildActsAsByIndex({});
     playCards(cards).catch(() => {
       // Failure surfaces via useGame's isPlayingCards/playCardsError state
       // and the optimistic hand/trick update is reverted automatically
@@ -120,6 +185,18 @@ export default function GamePage() {
   function handlePass() {
     setSelectedIndices([]);
     pass().catch(() => {});
+  }
+
+  function handleSubmitReturn(card: Card, recipientPosition: PlayerPosition) {
+    exchangeCards({ cardToGive: card, type: "return", recipientPosition }).catch(() => {
+      // Failure surfaces via exchangeCardsError below.
+    });
+  }
+
+  function handleChooseTribute(take: PlayerPosition) {
+    chooseTribute(take).catch(() => {
+      // Failure surfaces via chooseTributeError below.
+    });
   }
 
   return (
@@ -133,11 +210,42 @@ export default function GamePage() {
 
       {gameStatus === "completed" ? (
         <p data-testid="game-over-message" className="text-sm font-semibold text-slate-700">
-          Game over
+          {winningTeam === null
+            ? "Game over"
+            : myPosition === null
+              ? `Game over — Team ${winningTeam === 0 ? "A" : "B"} wins`
+              : myPosition % 2 === winningTeam
+                ? "Game over — your team wins!"
+                : "Game over — your team lost"}
         </p>
       ) : myPosition === null ? (
         <p data-testid="spectator-note" className="text-sm text-slate-500">
           You&apos;re spectating
+        </p>
+      ) : roundStatus === "card_exchange" ? (
+        <CardExchangeModal
+          myPosition={myPosition}
+          hand={hand}
+          initialExchanges={roundActions
+            .filter((a) => a.actionType === "card_exchange")
+            .map((a) => a.actionData as CardExchangeActionData)
+            .filter((d) => d.type === "initial")}
+          onSubmitReturn={handleSubmitReturn}
+          isSubmitting={isExchangingCards}
+        />
+      ) : roundStatus === "awaiting_tribute_choice" && pendingTributeChoice ? (
+        <TributeChoiceModal
+          thirdPosition={pendingTributeChoice.thirdPosition}
+          thirdCard={pendingTributeChoice.thirdCard}
+          fourthPosition={pendingTributeChoice.fourthPosition}
+          fourthCard={pendingTributeChoice.fourthCard}
+          isFirstPlace={finishingPositions?.indexOf(1) === myPosition}
+          onChoose={handleChooseTribute}
+          isSubmitting={isChoosingTribute}
+        />
+      ) : currentPlayerTurn === null ? (
+        <p data-testid="hand-ended-message" className="text-sm text-slate-500">
+          Hand ended — resolving…
         </p>
       ) : (
         <div className="flex flex-col items-center gap-3">
@@ -146,9 +254,22 @@ export default function GamePage() {
             selectedIndices={selectedIndices}
             onSelectionChange={setSelectedIndices}
           />
+          {needsWildChoice && pendingWildIndex !== undefined && (
+            // Keyed by which card this prompt is for, so a second wild in
+            // the same selection (a double deck can hold two level-rank
+            // hearts) gets a fresh selector rather than one still showing
+            // the first card's already-picked rank/suit.
+            <WildCardSelector
+              key={pendingWildIndex}
+              onConfirm={(actsAs) =>
+                setWildActsAsByIndex((prev) => ({ ...prev, [pendingWildIndex]: actsAs }))
+              }
+              onCancel={() => setSelectedIndices([])}
+            />
+          )}
           <ActionButtons
             hand={hand}
-            selectedCards={selectedIndices.map((index) => hand[index])}
+            selectedCards={effectiveSelectedCards}
             currentTrick={currentTrick}
             levelRank={levelRank}
             isMyTurn={isMyTurn}
@@ -162,6 +283,16 @@ export default function GamePage() {
             </p>
           )}
         </div>
+      )}
+      {exchangeCardsError && (
+        <p data-testid="exchange-error" className="text-xs text-red-500">
+          {exchangeCardsError.message}
+        </p>
+      )}
+      {chooseTributeError && (
+        <p data-testid="tribute-choice-error" className="text-xs text-red-500">
+          {chooseTributeError.message}
+        </p>
       )}
     </main>
   );

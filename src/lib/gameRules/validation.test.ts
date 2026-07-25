@@ -152,6 +152,49 @@ describe("canPlayCards: wild card legality", () => {
     // 9-9 pair, one of them the wild heart standing in as the 9 of spades.
     expect(canPlayCards([c("9", "CLUBS"), wild], hand, NO_LEAD, levelRank)).toEqual({ valid: true });
   });
+
+  it("rejects a wild claim with a bogus actsAs.rank", () => {
+    const levelRank: StandardRank = "5";
+    const bogus = {
+      rank: "5",
+      suit: "HEARTS",
+      actsAs: { rank: "not-a-rank", suit: "SPADES" },
+    } as unknown as CardWithWild;
+    const hand = [bogus];
+    const result = canPlayCards([bogus], hand, NO_LEAD, levelRank);
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/wild/);
+  });
+
+  it("rejects a wild claim with a bogus actsAs.suit", () => {
+    const levelRank: StandardRank = "5";
+    const bogus = {
+      rank: "5",
+      suit: "HEARTS",
+      actsAs: { rank: "ACE", suit: "not-a-suit" },
+    } as unknown as CardWithWild;
+    const hand = [bogus];
+    const result = canPlayCards([bogus], hand, NO_LEAD, levelRank);
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/wild/);
+  });
+
+  it("a bogus actsAs claim can't be used to sneak a play past beatsTrick", () => {
+    // Before validatePlayedCard checked actsAs's own shape, getCardRank
+    // returned undefined for a bogus rank, and undefined <= n is false — so
+    // beatsCombo would (wrongly) report this as beating the lead instead of
+    // rejecting the play outright.
+    const levelRank: StandardRank = "5";
+    const bogus = {
+      rank: "5",
+      suit: "HEARTS",
+      actsAs: { rank: "not-a-rank", suit: "SPADES" },
+    } as unknown as CardWithWild;
+    const hand = [bogus];
+    const lead: CurrentTrick = [{ position: 0, play: [c("ACE", "SPADES")] }];
+    const result = canPlayCards([bogus], hand, lead, levelRank);
+    expect(result.valid).toBe(false);
+  });
 });
 
 describe("canPlayCards / beatsTrick: leading an empty trick", () => {

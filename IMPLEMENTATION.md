@@ -347,12 +347,12 @@ All can be built with mocks, integrated later.
 - **Estimated**: 8 hours
 
 ### Task 6.2: Edge Cases & Error Handling
-- [ ] Player disconnects/reconnects
-- [ ] Invalid plays (server-side validation)
-- [ ] Wild card selection
-- [ ] Same-rank card selection (1-2 finish)
-- [ ] Level promotion logic
-- [ ] Game win condition
+- [x] Player disconnects/reconnects
+- [x] Invalid plays (server-side validation)
+- [x] Wild card selection
+- [x] Same-rank card selection (1-2 finish)
+- [x] Level promotion logic
+- [x] Game win condition
 - **Blockers**: All Phase 3-5 tasks
 - **Testability**: E2E tests + manual
 - **Estimated**: 8 hours

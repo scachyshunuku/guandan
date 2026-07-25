@@ -16,7 +16,6 @@ import {
   type GameRoundRow,
   type ParticipantRow,
 } from "@/lib/gameDb";
-import { compareCards, removeCardsFromHand, sortCards } from "@/lib/cardUtils";
 import { dealNextRound } from "@/lib/dealNextRound";
 import { parseJsonBody } from "@/lib/http";
 import { broadcastToGame } from "@/lib/realtimeBroadcast";
@@ -27,129 +26,21 @@ import {
   getFinishResult,
   type FinishCombo,
 } from "@/lib/gameRules/scoring";
+import {
+  computeExchangeHandWrites,
+  planInitialExchanges,
+  toHandWrites,
+  type ExchangePlan,
+} from "@/lib/gameRules/cardExchange";
 import type {
-  CardExchangeActionData,
   CardWithWild,
+  CardExchangeActionData,
   EndHandRequest,
   EndHandResponse,
+  GameState,
   PlayerPosition,
   StandardRank,
 } from "@/lib/types";
-
-interface ExchangeTransfer {
-  from: PlayerPosition;
-  to: PlayerPosition;
-  card: CardWithWild;
-}
-
-// RULES.md "Card Exchange" cancels the tribute outright — no cards change
-// hands at all — when the losing side holds both Red Jokers between them.
-type ExchangePlan =
-  | { cancelled: true; transfers: [] }
-  | { cancelled: false; transfers: ExchangeTransfer[] };
-
-function countRedJokers(hand: readonly CardWithWild[]): number {
-  return hand.filter((card) => card.rank === "RED_JOKER").length;
-}
-
-// Re-sorts every call rather than trusting the hand's existing order —
-// deck.ts's dealHands() sorts a hand once at deal time for a nicer initial
-// display, but that's a one-time presentational sort, not an invariant:
-// nothing keeps a hand sorted as cards are added/removed by play or
-// exchange, so this can't assume the highest card is already at either end.
-function bestCard(hand: readonly CardWithWild[], levelRank: StandardRank): CardWithWild {
-  const sorted = sortCards(hand, levelRank);
-  return sorted[sorted.length - 1];
-}
-
-// The automatic "initial" half of RULES.md "Card Exchange (After Each
-// Round)": who gives which card to whom, before either recipient has made
-// any choice of their own. `levelRank` is this *just-finished* hand's level
-// (the higher of the two pre-promotion team levels) — the card values in
-// effect while that hand's cards were actually in play.
-function planInitialExchanges(
-  combo: FinishCombo,
-  finishingPositions: readonly number[],
-  participants: readonly ParticipantRow[],
-  levelRank: StandardRank,
-): ExchangePlan {
-  const posByRank = (rank: number) => finishingPositions.indexOf(rank) as PlayerPosition;
-  const handOf = (position: PlayerPosition) =>
-    participants.find((p) => p.position === position)!.hand;
-
-  const firstPos = posByRank(1);
-  const fourthPos = posByRank(4);
-  const fourthHand = handOf(fourthPos);
-
-  if (combo !== "1-2") {
-    // RULES.md "Card Exchange" → "Cancelled if 4th place alone holds both
-    // Red Jokers": the tribute is called off entirely, no card either way.
-    if (countRedJokers(fourthHand) === 2) {
-      return { cancelled: true, transfers: [] };
-    }
-    // Single-team lead (RULES.md "Single-Team Lead"): 4th's best card goes
-    // to 1st, no other exchange.
-    return {
-      cancelled: false,
-      transfers: [{ from: fourthPos, to: firstPos, card: bestCard(fourthHand, levelRank) }],
-    };
-  }
-
-  const secondPos = posByRank(2);
-  const thirdPos = posByRank(3);
-  const thirdHand = handOf(thirdPos);
-  // RULES.md "Card Exchange" → "Cancelled if 3rd and 4th place hold both
-  // Red Jokers between them" — combined across both losing players,
-  // however they're split between the two hands.
-  if (countRedJokers(thirdHand) + countRedJokers(fourthHand) === 2) {
-    return { cancelled: true, transfers: [] };
-  }
-
-  // Two-team lead (RULES.md "Two-Team Lead"): 3rd and 4th both give their
-  // best card; the higher rank goes to 1st, the lower to 2nd. RULES.md has
-  // 1st choose which card to take when the two are tied in rank — there's
-  // no interactive step for that decision yet, so a genuine tie (compareCards
-  // returns 0 — see cardUtils.ts) instead falls back to fourth's card going
-  // to 1st, an arbitrary but deterministic choice.
-  const fourthCard = bestCard(fourthHand, levelRank);
-  const thirdCard = bestCard(thirdHand, levelRank);
-  const thirdIsHigher = compareCards(thirdCard, fourthCard, levelRank) > 0;
-  return {
-    cancelled: false,
-    transfers: [
-      { from: thirdPos, to: thirdIsHigher ? firstPos : secondPos, card: thirdCard },
-      { from: fourthPos, to: thirdIsHigher ? secondPos : firstPos, card: fourthCard },
-    ],
-  };
-}
-
-// Resolves each transfer against the participants' current hands into a
-// flat list of per-participant hand writes. A map keyed by position (not a
-// direct mutation of the participant rows) so a from/to pair that happened
-// to share a position would still compose correctly — even though today's
-// transfers never do (from is always 3rd/4th, to is always 1st/2nd).
-function computeExchangeHandWrites(
-  participants: readonly ParticipantRow[],
-  transfers: readonly ExchangeTransfer[],
-): { id: string; originalHand: CardWithWild[]; newHand: CardWithWild[] }[] {
-  const byPosition = new Map<PlayerPosition, ParticipantRow>();
-  for (const p of participants) {
-    if (p.position !== null) byPosition.set(p.position, p);
-  }
-
-  const newHandByPosition = new Map<PlayerPosition, CardWithWild[]>();
-  for (const { from, to, card } of transfers) {
-    const fromHand = newHandByPosition.get(from) ?? byPosition.get(from)!.hand;
-    const toHand = newHandByPosition.get(to) ?? byPosition.get(to)!.hand;
-    newHandByPosition.set(from, removeCardsFromHand(fromHand, [card]));
-    newHandByPosition.set(to, [...toHand, card]);
-  }
-
-  return [...newHandByPosition.entries()].map(([position, newHand]) => {
-    const participant = byPosition.get(position)!;
-    return { id: participant.id, originalHand: participant.hand, newHand };
-  });
-}
 
 export async function POST(
   request: Request,
@@ -303,12 +194,25 @@ async function finalizeContinuingHand(
   teamALevel: number,
   teamBLevel: number,
 ) {
-  const plan = planInitialExchanges(combo, finishingPositions, participants, levelRank);
+  // A concluded round's finishing positions only ever cover seats 0-3
+  // (detectRoundEnd), so the exchange logic only needs — and only accepts —
+  // seated participants, never a spectator's position: null row.
+  const seated = participants.filter(
+    (p): p is ParticipantRow & { position: PlayerPosition } => p.position !== null,
+  );
+  const plan = planInitialExchanges(combo, finishingPositions, seated, levelRank);
   // RULES.md "Card Exchange" tribute-cancellation: with nothing changing
   // hands, there's no "return" phase to wait on either — finalize and deal
   // the next round immediately instead of moving through 'card_exchange'.
   if (plan.cancelled) {
     return finalizeCancelledTribute(game, round, finishingPositions, teamALevel, teamBLevel);
+  }
+  // RULES.md "Two-Team Lead": 3rd/4th's best cards tied in rank — pause on
+  // 'awaiting_tribute_choice' for 1st place to decide (choose-tribute/
+  // route.ts) rather than resolving the tie arbitrarily. Level promotion
+  // still applies now; it doesn't depend on the outcome of that choice.
+  if (plan.needsChoice) {
+    return finalizePendingTributeChoice(game, round, finishingPositions, plan, teamALevel, teamBLevel);
   }
   const { transfers } = plan;
 
@@ -337,7 +241,7 @@ async function finalizeContinuingHand(
     );
   }
 
-  const handWrites = computeExchangeHandWrites(participants, transfers);
+  const handWrites = toHandWrites(seated, computeExchangeHandWrites(seated, transfers));
 
   const [gameUpdateResult, handResults, actionResults] = await Promise.all([
     supabaseAdmin
@@ -487,6 +391,87 @@ async function finalizeCancelledTribute(
   // level change (and, for a cancelled tribute, the fact that nothing else
   // changed hands) is this function's own news to announce.
   await broadcastToGame(game.id, "game_updated", gameUpdateResult.data[0]);
+
+  const response: EndHandResponse = { success: true };
+  return NextResponse.json(response);
+}
+
+// RULES.md "Two-Team Lead": 3rd/4th's best cards tied in rank — 1st place
+// must choose which to take before the exchange's transfers can be computed
+// (choose-tribute/route.ts resolves that choice and applies them). Level
+// promotion still applies now, same as the resolved-transfer path above;
+// only the transfers themselves wait on the choice.
+async function finalizePendingTributeChoice(
+  game: GameRow,
+  round: GameRoundRow,
+  finishingPositions: number[],
+  plan: Extract<ExchangePlan, { needsChoice: true }>,
+  teamALevel: number,
+  teamBLevel: number,
+) {
+  const originalFinishingPositions = round.finishing_positions;
+
+  const newGameState: GameState = {
+    currentTrick: round.game_state.currentTrick,
+    trickCount: round.game_state.trickCount,
+    finishOrder: round.game_state.finishOrder,
+    pendingTributeChoice: {
+      thirdPosition: plan.thirdPosition,
+      thirdCard: plan.thirdCard,
+      fourthPosition: plan.fourthPosition,
+      fourthCard: plan.fourthCard,
+    },
+  };
+
+  const roundClaimResult = await supabaseAdmin
+    .from("game_rounds")
+    .update({
+      finishing_positions: finishingPositions,
+      status: "awaiting_tribute_choice",
+      game_state: newGameState,
+    })
+    .eq("id", round.id)
+    .eq("status", "in_progress")
+    .select("*");
+  if (roundClaimResult.error) {
+    console.error("Failed to claim end-hand transition", roundClaimResult.error);
+    return NextResponse.json({ error: "Failed to end hand" }, { status: 500 });
+  }
+  const claimedRound = roundClaimResult.data?.[0];
+  if (!claimedRound) {
+    return NextResponse.json(
+      { error: "hand was already ended by another request" },
+      { status: 409 },
+    );
+  }
+
+  const gameUpdateResult = await supabaseAdmin
+    .from("games")
+    .update({ team_a_level: teamALevel, team_b_level: teamBLevel })
+    .eq("id", game.id)
+    .eq("status", "in_progress")
+    .select("*");
+  if (gameUpdateResult.error || !gameUpdateResult.data?.length) {
+    console.error(
+      "Failed to persist level promotion while pausing for a tribute choice; rolling back",
+      gameUpdateResult.error,
+    );
+    await supabaseAdmin
+      .from("game_rounds")
+      .update({
+        finishing_positions: originalFinishingPositions,
+        status: "in_progress",
+        game_state: round.game_state,
+      })
+      .eq("id", round.id)
+      .eq("status", "awaiting_tribute_choice");
+    return NextResponse.json({ error: "Failed to end hand" }, { status: 500 });
+  }
+
+  await Promise.all([
+    broadcastToGame(game.id, "round_updated", claimedRound),
+    broadcastToGame(game.id, "game_updated", gameUpdateResult.data[0]),
+  ]);
 
   const response: EndHandResponse = { success: true };
   return NextResponse.json(response);

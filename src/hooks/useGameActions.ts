@@ -10,8 +10,11 @@ import { useMutation } from "@tanstack/react-query";
 import { postJson } from "@/lib/httpClient";
 import type {
   CardWithWild,
+  ChooseTributeResponse,
+  EndHandResponse,
   ExchangeCardsRequest,
   ExchangeCardsResponse,
+  HeartbeatResponse,
   JoinGameResponse,
   PassResponse,
   PlayCardsResponse,
@@ -114,6 +117,35 @@ export function useGameActions({
     },
   });
 
+  // No `position === null` guard, unlike the mutations above: end-hand can
+  // be triggered by any seated player once a round concludes (route.ts only
+  // requires *a* seat, not a specific one), and useGame's auto-trigger calls
+  // this without knowing in advance whether it "should" be the one to act.
+  const endHandMutation = useMutation({
+    mutationFn: () => postJson<EndHandResponse>(`/api/game/${gameId}/end-hand`, { playerId }),
+  });
+
+  // Not seat-gated, unlike the mutations above - every participant row
+  // (seated or spectating) has its own is_connected/last_heartbeat, and
+  // ARCHITECTURE.md "Disconnect & Reconnect" doesn't scope heartbeats to
+  // seated players only.
+  const heartbeatMutation = useMutation({
+    mutationFn: () => postJson<HeartbeatResponse>(`/api/game/${gameId}/heartbeat`, { playerId }),
+  });
+
+  const chooseTributeMutation = useMutation({
+    mutationFn: (take: PlayerPosition) => {
+      if (position === null) {
+        return Promise.reject(new Error("Must be seated to choose a tribute card"));
+      }
+      return postJson<ChooseTributeResponse>(`/api/game/${gameId}/choose-tribute`, {
+        playerId,
+        position,
+        take,
+      }).then(throwIfUnsuccessful);
+    },
+  });
+
   return {
     playCards: playCardsMutation.mutateAsync,
     isPlayingCards: playCardsMutation.isPending,
@@ -130,6 +162,16 @@ export function useGameActions({
     exchangeCards: exchangeCardsMutation.mutateAsync,
     isExchangingCards: exchangeCardsMutation.isPending,
     exchangeCardsError: exchangeCardsMutation.error,
+
+    endHand: endHandMutation.mutateAsync,
+    isEndingHand: endHandMutation.isPending,
+    endHandError: endHandMutation.error,
+
+    chooseTribute: chooseTributeMutation.mutateAsync,
+    isChoosingTribute: chooseTributeMutation.isPending,
+    chooseTributeError: chooseTributeMutation.error,
+
+    sendHeartbeat: heartbeatMutation.mutateAsync,
 
     startGame: startGameMutation.mutateAsync,
     isStartingGame: startGameMutation.isPending,

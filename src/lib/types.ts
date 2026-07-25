@@ -112,6 +112,18 @@ export interface GameState {
   // rotations instead of freezing the round the instant anyone goes out.
   // Empty at the start of a round; a fresh round starts this array over.
   finishOrder: PlayerPosition[];
+  // Set by end-hand only for a two-team-lead (1-2) finish whose 3rd/4th
+  // tribute cards tie in rank (RULES.md "Two-Team Lead": "If the two cards
+  // are the same rank, 1st place chooses which card to take") — holds
+  // everything POST /api/game/[id]/choose-tribute needs to finish the
+  // exchange once 1st place decides. Cleared (round moves to
+  // 'card_exchange') once that choice is submitted.
+  pendingTributeChoice?: {
+    thirdPosition: PlayerPosition;
+    thirdCard: Card;
+    fourthPosition: PlayerPosition;
+    fourthCard: Card;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +131,15 @@ export interface GameState {
 // ---------------------------------------------------------------------------
 
 export type GameStatus = "waiting" | "in_progress" | "completed";
-export type RoundStatus = "in_progress" | "card_exchange" | "completed";
+// 'awaiting_tribute_choice': a two-team-lead (1-2) finish whose 3rd/4th
+// tribute cards tied in rank (RULES.md "Two-Team Lead") — waiting on 1st
+// place to choose via POST /api/game/[id]/choose-tribute before the round
+// can move on to 'card_exchange'.
+export type RoundStatus =
+  | "in_progress"
+  | "awaiting_tribute_choice"
+  | "card_exchange"
+  | "completed";
 export type GameActionType =
   | "card_played"
   | "pass"
@@ -238,6 +258,19 @@ export interface LeaveGameResponse {
   success: true;
 }
 
+// ARCHITECTURE.md "Disconnect & Reconnect": the client pings this
+// periodically to keep its participant row's `lastHeartbeat` fresh; the
+// server derives `isConnected` from that (gameStateResponse.ts) rather than
+// trusting a client-reported connection state, and also sweeps every other
+// participant in the game for staleness on each call.
+export interface HeartbeatRequest {
+  playerId: string;
+}
+
+export interface HeartbeatResponse {
+  success: true;
+}
+
 export interface StartGameRequest {
   playerId: string;
 }
@@ -273,6 +306,20 @@ export interface EndHandRequest {
 export interface EndHandResponse {
   success: true;
 }
+
+// RULES.md "Two-Team Lead": "If the two cards are the same rank, 1st place
+// chooses which card to take (then 2nd place gets the other)." `take`
+// identifies whose tribute card 1st place is taking — the other tied
+// position's card goes to 2nd place instead.
+export interface ChooseTributeRequest {
+  playerId: string;
+  position: PlayerPosition;
+  take: PlayerPosition;
+}
+
+export type ChooseTributeResponse =
+  | { success: true }
+  | { success: false; error: string; reason: string };
 
 export interface ExchangeCardsRequest {
   playerId: string;

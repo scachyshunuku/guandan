@@ -11,10 +11,12 @@
 // field for raw actions, so `game_action` events are handed to the caller
 // via `onGameAction` rather than synced directly.
 //
-// No `participant_left` event yet — there's no `leave` route (or
-// disconnect/heartbeat detection) in the codebase at all; that's
-// IMPLEMENTATION.md Task 6.2 ("Player disconnects/reconnects"), still
-// blocked on Phase 3-5. `participant_joined` only covers the join half.
+// No `participant_left` event — there's still no `leave` route. There is
+// now a `participant_updated` event (IMPLEMENTATION.md Task 6.2, "Player
+// disconnects/reconnects"): the heartbeat route broadcasts it whenever a
+// participant's connected status changes (their own heartbeat lands, or
+// they're swept as stale by someone else's), reusing `addParticipant`'s
+// upsert-by-id the same way `participant_joined` does.
 import { useEffect, useRef } from "react";
 import type { REALTIME_SUBSCRIBE_STATES } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
@@ -61,9 +63,7 @@ export function useGameRealtimeSync(
         useGameStore.getState().setTeamLevels(game.teamALevel, game.teamBLevel);
       })
       .on("broadcast", { event: "round_updated" }, ({ payload }: { payload: GameRoundRow }) => {
-        const round = mapGameRoundRow(payload);
-        useGameStore.getState().updateTrick(round.gameState.currentTrick);
-        useGameStore.getState().setCurrentPlayerTurn(round.currentPlayerTurn);
+        useGameStore.getState().applyRoundUpdate(mapGameRoundRow(payload));
       })
       .on(
         "broadcast",
@@ -72,8 +72,17 @@ export function useGameRealtimeSync(
           useGameStore.getState().addParticipant(mapGameParticipantRow(payload));
         },
       )
+      .on(
+        "broadcast",
+        { event: "participant_updated" },
+        ({ payload }: { payload: GameParticipantRow }) => {
+          useGameStore.getState().addParticipant(mapGameParticipantRow(payload));
+        },
+      )
       .on("broadcast", { event: "game_action" }, ({ payload }: { payload: GameActionRow }) => {
-        onGameActionRef.current?.(mapGameActionRow(payload));
+        const action = mapGameActionRow(payload);
+        useGameStore.getState().appendRoundAction(action);
+        onGameActionRef.current?.(action);
       })
       .subscribe((status) => onStatusChangeRef.current?.(status));
 
