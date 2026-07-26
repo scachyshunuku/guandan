@@ -147,22 +147,13 @@ describe("useGameActions", () => {
 
     const cardToGive = { suit: "spades", rank: 3 } as never;
     await act(async () => {
-      await result.current.exchangeCards({
-        cardToGive,
-        type: "return",
-        recipientPosition: 3,
-      });
+      await result.current.exchangeCards({ cardToGive });
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/game/game-1/exchange-cards",
       expect.objectContaining({
-        body: JSON.stringify({
-          cardToGive,
-          type: "return",
-          recipientPosition: 3,
-          playerId: "player-1",
-        }),
+        body: JSON.stringify({ cardToGive, playerId: "player-1" }),
       }),
     );
   });
@@ -226,8 +217,6 @@ describe("useGameActions", () => {
       await expect(
         result.current.exchangeCards({
           cardToGive: { suit: "spades", rank: 3 } as never,
-          type: "return",
-          recipientPosition: 3,
         }),
       ).rejects.toThrow("You don't hold that card");
     });

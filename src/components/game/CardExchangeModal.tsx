@@ -15,11 +15,10 @@ export interface CardExchangeModalProps {
   // every entry is shown regardless of who it involves, not just the
   // viewer's own.
   initialExchanges: CardExchangeActionData[];
-  // recipientPosition is the player who gave the viewer their initial-exchange
-  // card (i.e. `owedTo.from` below) — passed back out rather than making the
-  // caller re-derive it, since it's exactly what useGameActions'
-  // exchangeCards needs as `recipientPosition` alongside the card.
-  onSubmitReturn: (card: Card, recipientPosition: PlayerPosition) => void;
+  // Just the card: the server (exchange-cards/route.ts) derives who it goes
+  // back to from the 'initial' card_exchange history itself, the same
+  // owedTo lookup this component does below purely for display.
+  onSubmitReturn: (card: Card) => void;
   isSubmitting?: boolean;
 }
 
@@ -79,7 +78,7 @@ export default function CardExchangeModal({
             data-testid="submit-return-button"
             disabled={selectedIndex === null || isSubmitting}
             onClick={() => {
-              if (selectedIndex !== null) onSubmitReturn(hand[selectedIndex], owedTo.from);
+              if (selectedIndex !== null) onSubmitReturn(hand[selectedIndex]);
             }}
             className="self-start rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
           >

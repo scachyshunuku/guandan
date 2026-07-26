@@ -282,8 +282,6 @@ describe("GamePage", () => {
 
     expect(exchangeCardsMock).toHaveBeenCalledWith({
       cardToGive: { suit: "CLUBS", rank: "3" },
-      type: "return",
-      recipientPosition: 3,
     });
   });
 

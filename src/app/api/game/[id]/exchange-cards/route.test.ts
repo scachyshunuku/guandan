@@ -111,8 +111,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const response = await callExchange("does-not-exist", {
       playerId: "p0",
       cardToGive: { rank: "3", suit: "HEARTS" },
-      type: "return",
-      recipientPosition: 2,
     });
     expect(response.status).toBe(404);
   });
@@ -125,8 +123,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const response = await callExchange(gameId, {
       playerId: "p0",
       cardToGive: { rank: "3", suit: "HEARTS" },
-      type: "return",
-      recipientPosition: 2,
     });
     expect(response.status).toBe(400);
   });
@@ -140,27 +136,8 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const response = await callExchange(gameId, {
       playerId: "not-a-participant",
       cardToGive: { rank: "KING", suit: "CLUBS" },
-      type: "return",
-      recipientPosition: 2,
     });
     expect(response.status).toBe(403);
-  });
-
-  it("rejects an 'initial' type submission — that half is automatic", async () => {
-    const gameId = await seedGame();
-    const roundId = await seedRound(gameId, [1, 2, 4, 3]);
-    await seedInitialExchange(gameId, roundId, 2, 0, { rank: "KING", suit: "CLUBS" });
-    await seedParticipant(gameId, 0, "p0", [{ rank: "KING", suit: "CLUBS" }]);
-
-    const response = await callExchange(gameId, {
-      playerId: "p0",
-      cardToGive: { rank: "3", suit: "HEARTS" },
-      type: "initial",
-      recipientPosition: 2,
-    });
-    expect(response.status).toBe(400);
-    const body = (await response.json()) as ExchangeCardsResponse;
-    expect(body).toMatchObject({ success: false });
   });
 
   it("rejects a player who didn't receive a card in the initial exchange", async () => {
@@ -172,27 +149,10 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const response = await callExchange(gameId, {
       playerId: "p1",
       cardToGive: { rank: "3", suit: "HEARTS" },
-      type: "return",
-      recipientPosition: 2,
     });
     expect(response.status).toBe(400);
     const body = (await response.json()) as ExchangeCardsResponse;
     expect(body).toMatchObject({ success: false, reason: expect.stringContaining("did not receive") });
-  });
-
-  it("rejects a recipientPosition that doesn't match who gave the card", async () => {
-    const gameId = await seedGame();
-    const roundId = await seedRound(gameId, [1, 2, 4, 3]);
-    await seedInitialExchange(gameId, roundId, 2, 0, { rank: "KING", suit: "CLUBS" });
-    await seedParticipant(gameId, 0, "p0", [{ rank: "KING", suit: "CLUBS" }, { rank: "3", suit: "HEARTS" }]);
-
-    const response = await callExchange(gameId, {
-      playerId: "p0",
-      cardToGive: { rank: "3", suit: "HEARTS" },
-      type: "return",
-      recipientPosition: 1, // should be 2 (who actually gave the card)
-    });
-    expect(response.status).toBe(400);
   });
 
   it("rejects a card the player doesn't hold", async () => {
@@ -204,8 +164,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const response = await callExchange(gameId, {
       playerId: "p0",
       cardToGive: { rank: "9", suit: "DIAMONDS" },
-      type: "return",
-      recipientPosition: 2,
     });
     expect(response.status).toBe(400);
   });
@@ -223,16 +181,12 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const first = await callExchange(gameId, {
       playerId: "p0",
       cardToGive: { rank: "4", suit: "SPADES" },
-      type: "return",
-      recipientPosition: 2,
     });
     expect(first.status).toBe(200);
 
     const second = await callExchange(gameId, {
       playerId: "p0",
       cardToGive: { rank: "KING", suit: "CLUBS" },
-      type: "return",
-      recipientPosition: 2,
     });
     expect(second.status).toBe(409);
   });
@@ -252,8 +206,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const response = await callExchange(gameId, {
       playerId: "p0",
       cardToGive: { rank: "3", suit: "HEARTS" },
-      type: "return",
-      recipientPosition: 2,
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true });
@@ -317,8 +269,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const firstReturn = await callExchange(gameId, {
       playerId: "p0",
       cardToGive: { rank: "5", suit: "DIAMONDS" },
-      type: "return",
-      recipientPosition: 3,
     });
     expect(firstReturn.status).toBe(200);
 
@@ -329,8 +279,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const secondReturn = await callExchange(gameId, {
       playerId: "p2",
       cardToGive: { rank: "6", suit: "DIAMONDS" },
-      type: "return",
-      recipientPosition: 1,
     });
     expect(secondReturn.status).toBe(200);
 
@@ -365,15 +313,11 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const first = await callExchange(gameId, {
       playerId: "p0",
       cardToGive: { rank: "5", suit: "DIAMONDS" },
-      type: "return",
-      recipientPosition: 1,
     });
     expect(first.status).toBe(200);
     const second = await callExchange(gameId, {
       playerId: "p3",
       cardToGive: { rank: "6", suit: "DIAMONDS" },
-      type: "return",
-      recipientPosition: 2,
     });
     expect(second.status).toBe(200);
 
@@ -402,14 +346,10 @@ describe("POST /api/game/[id]/exchange-cards", () => {
       callExchange(gameId, {
         playerId: "p0",
         cardToGive: { rank: "5", suit: "DIAMONDS" },
-        type: "return",
-        recipientPosition: 3,
       }),
       callExchange(gameId, {
         playerId: "p2",
         cardToGive: { rank: "6", suit: "DIAMONDS" },
-        type: "return",
-        recipientPosition: 1,
       }),
     ]);
     expect(r1.status).toBe(200);
@@ -438,8 +378,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const response = await callExchange(gameId, {
       playerId: "p0",
       cardToGive: { rank: "3", suit: "HEARTS" },
-      type: "return",
-      recipientPosition: 2,
     });
     expect(response.status).toBe(500);
 
@@ -473,8 +411,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const response = await callExchange(gameId, {
       playerId: "p0",
       cardToGive: { rank: "3", suit: "HEARTS" },
-      type: "return",
-      recipientPosition: 2,
     });
     expect(response.status).toBe(500);
 
@@ -489,8 +425,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const retry = await callExchange(gameId, {
       playerId: "p0",
       cardToGive: { rank: "3", suit: "HEARTS" },
-      type: "return",
-      recipientPosition: 2,
     });
     expect(retry.status).toBe(200);
   });
@@ -536,8 +470,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const response = await callExchange(gameId, {
       playerId: "p0",
       cardToGive: { rank: "3", suit: "HEARTS" },
-      type: "return",
-      recipientPosition: 2,
     });
     expect(response.status).toBe(500);
 
@@ -592,8 +524,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const body = {
       playerId: "p0",
       cardToGive: { rank: "3", suit: "HEARTS" },
-      type: "return",
-      recipientPosition: 2,
     };
 
     const first = await callExchange(gameId, body);

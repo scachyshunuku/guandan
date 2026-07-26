@@ -500,12 +500,17 @@ Response: { success }
 ```
 
 ### `POST /api/game/[code]/exchange-cards`
-Submit card exchange during the exchange phase (initial or return).
+Submit the player-selected "return" half of a card exchange (the "initial"
+half is automatic — best card, sender/recipient determined by finishing
+position — and isn't something a client can submit at all).
 ```
-Body: { playerId, cardToGive: {suit, rank}, type: 'initial'|'return', recipientPosition: int }
+Body: { playerId, cardToGive: {suit, rank} }
 Response: { success } OR { error, reason }
 ```
-Note: Initial exchanges are automatic (best card). Return exchanges require player selection of which card to give back.
+Note: no `type` or `recipientPosition` field — this route only ever accepts
+a 'return' exchange (so `type` could only ever be one legal value), and who
+it goes back to is derived from the 'initial' card_exchange game_actions
+history (who gave the caller their card), not trusted from the client.
 
 ### `POST /api/game/[code]/choose-tribute`
 RULES.md "Two-Team Lead": resolves a same-rank tie in the initial tribute

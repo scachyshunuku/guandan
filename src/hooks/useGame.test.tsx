@@ -275,16 +275,12 @@ describe("useGame", () => {
     act(() => {
       result.current.exchangeCards({
         cardToGive: { rank: "5", suit: "HEARTS" },
-        type: "return",
-        recipientPosition: 2,
       });
     });
 
     expect(result.current.hand).toEqual([]);
     expect(mutationMocks.exchangeCards).toHaveBeenCalledWith({
       cardToGive: { rank: "5", suit: "HEARTS" },
-      type: "return",
-      recipientPosition: 2,
     });
 
     await act(async () => {
@@ -306,8 +302,6 @@ describe("useGame", () => {
       await expect(
         result.current.exchangeCards({
           cardToGive: { rank: "5", suit: "HEARTS" },
-          type: "return",
-          recipientPosition: 2,
         }),
       ).rejects.toThrow("You don't hold that card");
     });

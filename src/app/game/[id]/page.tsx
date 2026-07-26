@@ -187,8 +187,8 @@ export default function GamePage() {
     pass().catch(() => {});
   }
 
-  function handleSubmitReturn(card: Card, recipientPosition: PlayerPosition) {
-    exchangeCards({ cardToGive: card, type: "return", recipientPosition }).catch(() => {
+  function handleSubmitReturn(card: Card) {
+    exchangeCards({ cardToGive: card }).catch(() => {
       // Failure surfaces via exchangeCardsError below.
     });
   }

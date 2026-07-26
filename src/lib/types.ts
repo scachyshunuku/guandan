@@ -325,14 +325,17 @@ export type ChooseTributeResponse =
   | { success: true }
   | { success: false; error: string; reason: string };
 
-// No `position` field (see PlayCardsRequest's comment) — `recipientPosition`
-// stays, since which position gets the return isn't the caller's own seat,
-// it's who exchange-cards' 'initial' half already recorded as owed a return.
+// No `position` field (see PlayCardsRequest's comment). No `type` field
+// either: this route only ever accepts a 'return' exchange — the 'initial'
+// half is automatic (applied by end-hand), not something a client can
+// submit — so a client-submitted type could only ever be one legal value.
+// No `recipientPosition` either: exchange-cards derives who the caller owes
+// a return to from the 'initial' card_exchange game_actions history (who
+// gave them their card), the same server-known-better-than-the-client
+// reasoning as `position`.
 export interface ExchangeCardsRequest {
   playerId: string;
   cardToGive: Card;
-  type: "initial" | "return";
-  recipientPosition: PlayerPosition;
 }
 
 export type ExchangeCardsResponse =
