@@ -48,9 +48,10 @@ export default function TrickDisplay({ trick, participants }: TrickDisplayProps)
             key={position}
             data-testid="trick-display-player"
             data-position={position}
-            // Fixed to Card's height so every row takes up the same space
+            // Fixed to Card's height (h-20/sm:h-24, see Card.tsx's own
+            // responsive sizing) so every row takes up the same space
             // whether the player played cards, passed, or hasn't acted yet.
-            className="flex h-24 items-center gap-4"
+            className="flex h-20 items-center gap-4 sm:h-24"
           >
             <span
               data-testid="trick-display-name"
@@ -65,7 +66,10 @@ export default function TrickDisplay({ trick, participants }: TrickDisplayProps)
             ) : play === PASS ? (
               <PassCard />
             ) : (
-              <div data-testid="trick-display-cards" className="flex flex-wrap gap-1">
+              <div
+                data-testid="trick-display-cards"
+                className="flex flex-wrap gap-1 animate-card-in"
+              >
                 {play.map((card, cardIndex) => (
                   <Card key={cardIndex} card={card} />
                 ))}
@@ -84,7 +88,7 @@ function PassCard() {
   return (
     <div
       data-testid="trick-display-pass"
-      className="flex h-24 w-16 items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 text-xs font-semibold tracking-wide text-gray-400"
+      className="flex h-20 w-14 animate-card-in items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 text-xs font-semibold tracking-wide text-gray-400 sm:h-24 sm:w-16"
     >
       PASS
     </div>

@@ -94,12 +94,20 @@ export const useGameStore = create<GameStoreState>((set) => ({
 // Derived state (RULES.md: partners sit opposite each other, 0 & 2 vs 1 & 3)
 // ---------------------------------------------------------------------------
 
+// Not store-shaped (takes a plain participants array) so callers outside
+// the store - e.g. game/[id]/page.tsx's WaitingRoom and in-progress board -
+// can share the same spectator predicate instead of re-writing the
+// `position === null` filter themselves.
+export function filterSpectators(participants: GameParticipant[]): GameParticipant[] {
+  return participants.filter((p) => p.position === null);
+}
+
 export function getSeatedParticipants(state: GameStoreState): GameParticipant[] {
   return state.participants.filter((p) => p.position !== null);
 }
 
 export function getSpectators(state: GameStoreState): GameParticipant[] {
-  return state.participants.filter((p) => p.position === null);
+  return filterSpectators(state.participants);
 }
 
 export function getMyTeam(state: GameStoreState): Team | null {

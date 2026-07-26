@@ -36,13 +36,13 @@ export default function GameTable({ game, round, participants, myPosition }: Gam
   );
 
   return (
-    <div data-testid="game-table" className="flex flex-col items-center gap-4 p-4">
-      <div data-testid="score-display" className="flex gap-6 text-sm font-medium">
+    <div data-testid="game-table" className="flex flex-col items-center gap-2 p-2 sm:gap-4 sm:p-4">
+      <div data-testid="score-display" className="flex gap-3 text-sm font-medium sm:gap-6">
         <span data-testid="team-a-level">Team A · Level {game.teamALevel}</span>
         <span data-testid="team-b-level">Team B · Level {game.teamBLevel}</span>
       </div>
 
-      <div className="grid grid-cols-3 grid-rows-3 items-center justify-items-center gap-2">
+      <div className="grid grid-cols-3 grid-rows-3 items-center justify-items-center gap-1 sm:gap-2">
         {SEAT_POSITIONS.map((position) => {
           const seatLabel = seatLabelFor(position, anchor);
           return (
