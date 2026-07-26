@@ -166,6 +166,7 @@ export type RoundStatus =
 export type GameActionType =
   | "card_played"
   | "pass"
+  | "trick_end"
   | "card_exchange"
   | "join"
   | "leave";
@@ -215,6 +216,12 @@ export interface CardPlayedActionData {
 
 export type PassActionData = Record<string, never>;
 
+// Logged by whichever request (play-cards or pass) resolves a trick, i.e.
+// advanceTrick's `trickWinner` was non-null - see gameRules/turnAdvance.ts.
+export interface TrickEndActionData {
+  winnerPosition: PlayerPosition;
+}
+
 export interface CardExchangeActionData {
   from: PlayerPosition;
   to: PlayerPosition;
@@ -242,6 +249,7 @@ export interface LeaveActionData {
 export type GameActionData =
   | CardPlayedActionData
   | PassActionData
+  | TrickEndActionData
   | CardExchangeActionData
   | JoinActionData
   | LeaveActionData;

@@ -184,6 +184,38 @@ describe("GameHistory", () => {
     expect(screen.getByTestId("game-history-entry")).toHaveTextContent("Dave left seat 4");
   });
 
+  it("describes a trick_end action, resolving the winner's position to a name", () => {
+    render(
+      <GameHistory
+        actions={[
+          makeAction({
+            actionType: "trick_end",
+            actionData: { winnerPosition: 2 },
+          }),
+        ]}
+        participants={[makeParticipant({ playerName: "Carol", position: 2 })]}
+      />,
+    );
+    expect(screen.getByTestId("game-history-entry")).toHaveTextContent(
+      "Trick ended — won by Carol",
+    );
+  });
+
+  it("renders the most recent action first", () => {
+    render(
+      <GameHistory
+        actions={[
+          makeAction({ id: "action-1", actionType: "pass", playerId: "player-1" }),
+          makeAction({ id: "action-2", actionType: "trick_end", actionData: { winnerPosition: 0 } }),
+        ]}
+        participants={[makeParticipant({ playerId: "player-1", playerName: "Alice", position: 0 })]}
+      />,
+    );
+    const entries = screen.getAllByTestId("game-history-entry");
+    expect(entries[0]).toHaveTextContent("Trick ended — won by Alice");
+    expect(entries[1]).toHaveTextContent("Alice passed");
+  });
+
   it("falls back to a generic label for an unrecognized action type", () => {
     render(
       <GameHistory
