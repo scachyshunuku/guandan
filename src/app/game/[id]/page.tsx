@@ -17,7 +17,6 @@ import GameHistory from "@/components/game/GameHistory";
 import TributeChoiceModal from "@/components/game/TributeChoiceModal";
 import WildCardSelector from "@/components/game/WildCardSelector";
 import { bestCardCandidates } from "@/lib/gameRules/cardExchange";
-import { canPlayCards } from "@/lib/gameRules/validation";
 import { levelRankForLevels } from "@/lib/cardUtils";
 import { gameShareLink } from "@/lib/format";
 import { filterSpectators } from "@/store/gameStore";
@@ -180,20 +179,15 @@ export default function GamePage() {
   const wildEligibleIndices = selectedIndices.filter(
     (index) => hand[index]?.rank === levelRank && hand[index]?.suit === "HEARTS",
   );
-  // A level-rank heart can always legally be played as itself (RULES.md: the
-  // wild substitution is optional, not mandatory) - e.g. a lone heart is
-  // already a valid single on an empty trick without ever opening the
-  // selector. The selector only needs to interrupt when the raw selection
-  // (played as itself) *isn't* already a legal play, since that's the only
-  // case where a wild interpretation could be what makes it one.
-  const rawSelectedCards = selectedIndices.map((index) => hand[index]);
-  const rawSelectionIsValid = canPlayCards(rawSelectedCards, hand, currentTrick, levelRank).valid;
+  // The selector always opens for a level-rank heart, even when playing it as
+  // itself would already be legal - the player decides the interpretation
+  // rather than it being silently inferred, since only they know whether they
+  // meant it as the wild or its literal rank. WildCardSelector offers a
+  // one-click "play as itself" shortcut for that literal case.
   // The next eligible card still waiting on a wild interpretation - prompted
   // one at a time rather than all at once, so WildCardSelector's UI (one
   // rank/suit picker) doesn't need to change shape for the multi-wild case.
-  const pendingWildIndex = rawSelectionIsValid
-    ? undefined
-    : wildEligibleIndices.find((index) => wildActsAsByIndex[index] === undefined);
+  const pendingWildIndex = wildEligibleIndices.find((index) => wildActsAsByIndex[index] === undefined);
   const needsWildChoice = pendingWildIndex !== undefined;
   // What actually gets validated/submitted: the raw selection, except every
   // wild-eligible card gets its own chosen actsAs attached once assigned.
@@ -330,6 +324,7 @@ export default function GamePage() {
             // the first card's already-picked rank/suit.
             <WildCardSelector
               key={pendingWildIndex}
+              card={{ rank: levelRank, suit: "HEARTS" }}
               onConfirm={(actsAs) =>
                 setWildActsAsByIndex((prev) => ({ ...prev, [pendingWildIndex]: actsAs }))
               }
@@ -344,6 +339,7 @@ export default function GamePage() {
             isMyTurn={isMyTurn}
             onPlay={handlePlay}
             onPass={handlePass}
+            hasPendingWildChoice={needsWildChoice}
             isSubmitting={isPlayingCards || isPassing}
           />
           {(playCardsError ?? passError) && (
