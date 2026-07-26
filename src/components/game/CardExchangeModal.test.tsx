@@ -90,8 +90,7 @@ describe("CardExchangeModal", () => {
     const handCards = screen.getByTestId("return-card-options").querySelectorAll('[data-testid="card"]');
     await user.click(handCards[1]);
     await user.click(screen.getByTestId("submit-return-button"));
-    // myPosition=0 received its card from position 3 (see INITIAL_EXCHANGES).
-    expect(onSubmitReturn).toHaveBeenCalledWith(HAND[1], 3);
+    expect(onSubmitReturn).toHaveBeenCalledWith(HAND[1]);
   });
 
   it("disables Submit while a submission is in flight", async () => {

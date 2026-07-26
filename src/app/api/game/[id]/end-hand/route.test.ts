@@ -251,6 +251,111 @@ describe("POST /api/game/[id]/end-hand", () => {
     );
   });
 
+  it("pauses on 'awaiting_tribute_choice' when 3rd and 4th's best cards tie in rank, without moving any cards yet", async () => {
+    const gameId = await seedGame();
+    const roundId = await seedRound(gameId, [0, 2]);
+    await seedParticipant(gameId, 0, "p0", []);
+    await seedParticipant(gameId, 1, "p1", [
+      { rank: "9", suit: "CLUBS" },
+      { rank: "3", suit: "DIAMONDS" },
+    ]);
+    await seedParticipant(gameId, 2, "p2", []);
+    await seedParticipant(gameId, 3, "p3", [
+      { rank: "9", suit: "SPADES" },
+      { rank: "4", suit: "DIAMONDS" },
+    ]);
+
+    const response = await callEndHand(gameId, { playerId: "p0" });
+    expect(response.status).toBe(200);
+
+    const round = fake._tables.game_rounds.find((r) => r.id === roundId);
+    expect(round?.status).toBe("awaiting_tribute_choice");
+    expect(round?.finishing_positions).toEqual([1, 3, 2, 4]);
+    expect((round?.game_state as GameState).pendingTributeChoice).toEqual({
+      thirdPosition: 1,
+      thirdCard: { rank: "9", suit: "CLUBS" },
+      fourthPosition: 3,
+      fourthCard: { rank: "9", suit: "SPADES" },
+    });
+
+    // Level promotion already applies — it doesn't depend on the choice.
+    const game = fake._tables.games.find((g) => g.id === gameId);
+    expect(game?.team_a_level).toBe(6);
+
+    // Nothing has changed hands yet, and no card_exchange actions exist —
+    // that all waits on POST /api/game/[id]/choose-tribute.
+    expect(handOf(gameId, 0)).toEqual([]);
+    expect(handOf(gameId, 1)).toEqual([
+      { rank: "9", suit: "CLUBS" },
+      { rank: "3", suit: "DIAMONDS" },
+    ]);
+    expect(handOf(gameId, 2)).toEqual([]);
+    expect(handOf(gameId, 3)).toEqual([
+      { rank: "9", suit: "SPADES" },
+      { rank: "4", suit: "DIAMONDS" },
+    ]);
+    expect(fake._tables.game_actions ?? []).toHaveLength(0);
+  });
+
+  it("pauses on 'awaiting_giver_choice' when a single-team-lead's 4th place has two cards tied for best, without moving any cards yet", async () => {
+    const gameId = await seedGame();
+    // 0 finishes 1st, 1 finishes 2nd, 3 finishes 3rd; 2 (0's opponent) is
+    // auto-placed 4th - a 1-4 finish.
+    const roundId = await seedRound(gameId, [0, 1, 3]);
+    await seedParticipant(gameId, 0, "p0", []);
+    await seedParticipant(gameId, 1, "p1", []);
+    await seedParticipant(gameId, 2, "p2", [
+      { rank: "KING", suit: "SPADES" },
+      { rank: "KING", suit: "HEARTS" },
+    ]);
+    await seedParticipant(gameId, 3, "p3", []);
+
+    const response = await callEndHand(gameId, { playerId: "p0" });
+    expect(response.status).toBe(200);
+
+    const round = fake._tables.game_rounds.find((r) => r.id === roundId);
+    expect(round?.status).toBe("awaiting_giver_choice");
+    expect((round?.game_state as GameState).pendingGiverChoice).toEqual({
+      levelRank: "2",
+      pendingPositions: [2],
+      resolvedCards: {},
+    });
+
+    // Level promotion already applies — it doesn't depend on the choice.
+    const game = fake._tables.games.find((g) => g.id === gameId);
+    expect(game?.team_a_level).toBe(3); // +1 for a 1-4 finish
+
+    expect(handOf(gameId, 2)).toEqual([
+      { rank: "KING", suit: "SPADES" },
+      { rank: "KING", suit: "HEARTS" },
+    ]);
+    expect(fake._tables.game_actions ?? []).toHaveLength(0);
+  });
+
+  it("pauses on 'awaiting_giver_choice' for whichever of 3rd/4th has a tied hand in a two-team lead", async () => {
+    const gameId = await seedGame();
+    const roundId = await seedRound(gameId, [0, 2]);
+    await seedParticipant(gameId, 0, "p0", []);
+    await seedParticipant(gameId, 1, "p1", [
+      { rank: "QUEEN", suit: "SPADES" },
+      { rank: "QUEEN", suit: "HEARTS" },
+    ]);
+    await seedParticipant(gameId, 2, "p2", []);
+    await seedParticipant(gameId, 3, "p3", [{ rank: "9", suit: "CLUBS" }]);
+
+    const response = await callEndHand(gameId, { playerId: "p0" });
+    expect(response.status).toBe(200);
+
+    const round = fake._tables.game_rounds.find((r) => r.id === roundId);
+    expect(round?.status).toBe("awaiting_giver_choice");
+    expect((round?.game_state as GameState).pendingGiverChoice).toEqual({
+      levelRank: "2",
+      pendingPositions: [1],
+      resolvedCards: {},
+    });
+    expect(fake._tables.game_actions ?? []).toHaveLength(0);
+  });
+
   it("cancels a single-team-lead tribute when 4th place alone holds both Red Jokers, and deals the next round immediately", async () => {
     const gameId = await seedGame();
     const roundId = await seedRound(gameId, [0, 1, 3]);

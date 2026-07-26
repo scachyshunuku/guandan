@@ -39,6 +39,9 @@ const mutationMocks = {
   pass: jest.fn().mockResolvedValue({ success: true }),
   joinGame: jest.fn().mockResolvedValue({ spectator: true }),
   exchangeCards: jest.fn().mockResolvedValue({ success: true }),
+  endHand: jest.fn().mockResolvedValue({ success: true }),
+  chooseTribute: jest.fn().mockResolvedValue({ success: true }),
+  sendHeartbeat: jest.fn().mockResolvedValue({ success: true }),
   startGame: jest.fn().mockResolvedValue({ success: true, hand: [] }),
 };
 
@@ -56,6 +59,13 @@ jest.mock("./useGameActions", () => ({
     exchangeCards: mutationMocks.exchangeCards,
     isExchangingCards: false,
     exchangeCardsError: null,
+    endHand: mutationMocks.endHand,
+    isEndingHand: false,
+    endHandError: null,
+    chooseTribute: mutationMocks.chooseTribute,
+    isChoosingTribute: false,
+    chooseTributeError: null,
+    sendHeartbeat: mutationMocks.sendHeartbeat,
     startGame: mutationMocks.startGame,
     isStartingGame: false,
     startGameError: null,
@@ -265,16 +275,12 @@ describe("useGame", () => {
     act(() => {
       result.current.exchangeCards({
         cardToGive: { rank: "5", suit: "HEARTS" },
-        type: "return",
-        recipientPosition: 2,
       });
     });
 
     expect(result.current.hand).toEqual([]);
     expect(mutationMocks.exchangeCards).toHaveBeenCalledWith({
       cardToGive: { rank: "5", suit: "HEARTS" },
-      type: "return",
-      recipientPosition: 2,
     });
 
     await act(async () => {
@@ -296,8 +302,6 @@ describe("useGame", () => {
       await expect(
         result.current.exchangeCards({
           cardToGive: { rank: "5", suit: "HEARTS" },
-          type: "return",
-          recipientPosition: 2,
         }),
       ).rejects.toThrow("You don't hold that card");
     });
@@ -525,5 +529,125 @@ describe("useGame", () => {
     });
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends a heartbeat immediately on mount", async () => {
+    mockFetchOnce(200, gameStateResponse());
+    renderHook(() => useGame({ gameId: "game-1", playerId: "player-1" }), { wrapper });
+
+    await waitFor(() => expect(mutationMocks.sendHeartbeat).toHaveBeenCalledTimes(1));
+  });
+
+  it("sends heartbeats on an interval well under the stale threshold", async () => {
+    jest.useFakeTimers({ advanceTimers: true });
+    mockFetchOnce(200, gameStateResponse());
+    renderHook(() => useGame({ gameId: "game-1", playerId: "player-1" }), { wrapper });
+
+    await waitFor(() => expect(mutationMocks.sendHeartbeat).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      jest.advanceTimersByTime(30_000);
+    });
+    expect(mutationMocks.sendHeartbeat.mock.calls.length).toBeGreaterThan(1);
+
+    jest.useRealTimers();
+  });
+
+  it("auto-triggers end-hand once a round concludes but the round is still 'in_progress'", async () => {
+    mockFetchOnce(
+      200,
+      gameStateResponse({
+        round: {
+          ...gameStateResponse().round!,
+          currentPlayerTurn: null,
+          status: "in_progress",
+        },
+      }),
+    );
+    renderHook(() => useGame({ gameId: "game-1", playerId: "player-1" }), { wrapper });
+
+    await waitFor(() => expect(mutationMocks.endHand).toHaveBeenCalledTimes(1));
+  });
+
+  it("retries end-hand on an interval after an outright failure, not just once", async () => {
+    jest.useFakeTimers({ advanceTimers: true });
+    mutationMocks.endHand.mockRejectedValue(new Error("network error"));
+    mockFetchOnce(
+      200,
+      gameStateResponse({
+        round: {
+          ...gameStateResponse().round!,
+          currentPlayerTurn: null,
+          status: "in_progress",
+        },
+      }),
+    );
+    renderHook(() => useGame({ gameId: "game-1", playerId: "player-1" }), { wrapper });
+
+    await waitFor(() => expect(mutationMocks.endHand).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      jest.advanceTimersByTime(10_000);
+    });
+    expect(mutationMocks.endHand.mock.calls.length).toBeGreaterThan(1);
+
+    jest.useRealTimers();
+    mutationMocks.endHand.mockResolvedValue({ success: true });
+  });
+
+  it("does not auto-trigger end-hand for a spectator", async () => {
+    mockFetchOnce(
+      200,
+      gameStateResponse({
+        participants: [
+          {
+            id: "participant-1",
+            gameId: "game-1",
+            playerName: "Alice",
+            playerId: "someone-else",
+            position: 0,
+            hand: [],
+            isConnected: true,
+            connectedAt: "2026-01-01T00:00:00.000Z",
+            lastHeartbeat: "2026-01-01T00:00:00.000Z",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        myHand: [],
+        round: {
+          ...gameStateResponse().round!,
+          currentPlayerTurn: null,
+          status: "in_progress",
+        },
+      }),
+    );
+    const { result } = renderHook(
+      () => useGame({ gameId: "game-1", playerId: "player-1" }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.myPosition).toBeNull();
+    expect(mutationMocks.endHand).not.toHaveBeenCalled();
+  });
+
+  it("does not auto-trigger end-hand once the round has moved past 'in_progress'", async () => {
+    mockFetchOnce(
+      200,
+      gameStateResponse({
+        round: {
+          ...gameStateResponse().round!,
+          currentPlayerTurn: null,
+          status: "card_exchange",
+        },
+      }),
+    );
+    const { result } = renderHook(
+      () => useGame({ gameId: "game-1", playerId: "player-1" }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(mutationMocks.endHand).not.toHaveBeenCalled();
   });
 });

@@ -19,12 +19,15 @@ import { useGameStore } from "@/store/gameStore";
 import { useGameRealtimeSync } from "./useGameRealtimeSync";
 import { useGameActions, type ExchangeCardsInput } from "./useGameActions";
 import { encodeCard } from "@/lib/cardUtils";
+import { HEARTBEAT_STALE_MS } from "@/lib/presence";
 import { PASS } from "@/lib/types";
 import type {
+  Card,
   CardExchangeActionData,
   CardWithWild,
   GameAction,
   GameStateResponse,
+  PlayerPosition,
 } from "@/lib/types";
 
 export interface UseGameOptions {
@@ -32,12 +35,24 @@ export interface UseGameOptions {
   playerId: string;
 }
 
+// A third of HEARTBEAT_STALE_MS - comfortably below it so an occasional
+// slow/dropped tick doesn't flip this client to "disconnected" from
+// everyone else's perspective before the next one lands.
+const HEARTBEAT_INTERVAL_MS = HEARTBEAT_STALE_MS / 3;
+
+// How often to retry auto-triggering end-hand while a round sits concluded
+// (see the effect below) - short enough that a stuck round recovers quickly
+// once any seated client's request stops failing, without hammering the
+// route every render.
+const END_HAND_RETRY_INTERVAL_MS = 3_000;
+
 // This client's own link to the games:[id] realtime channel - distinct from
-// GameParticipant.isConnected (server-tracked, per-player, and inert until
-// Task 6.2 adds heartbeat detection). "connecting" covers the brief window
-// before the first subscribe callback fires, so it's treated as healthy the
-// same as "connected" (nothing to warn about yet, unlike a drop after having
-// been connected).
+// GameParticipant.isConnected, which is now tracked server-side via
+// heartbeat/route.ts (Task 6.2) and derived fresh from lastHeartbeat rather
+// than read off this. "connecting" covers the brief window before the first
+// subscribe callback fires, so it's treated as healthy the same as
+// "connected" (nothing to warn about yet, unlike a drop after having been
+// connected).
 export type ConnectionStatus = "connecting" | "connected" | "reconnecting" | "disconnected";
 
 // Removes one hand entry per card in `cards` (matched by suit/rank, not
@@ -88,9 +103,13 @@ function applyGameState(response: GameStateResponse, gameId: string, playerId: s
   store.setMyPosition(me?.position ?? null);
   store.setHand(response.myHand);
   if (response.round) {
-    store.updateTrick(response.round.gameState.currentTrick);
-    store.setCurrentPlayerTurn(response.round.currentPlayerTurn);
+    store.applyRoundUpdate(response.round);
   }
+  // Hydrated directly (not via applyRoundUpdate's roundId-change reset,
+  // which only clears on a *new* round arriving after this one) since this
+  // is the one point that always reflects the server's full history for the
+  // round currently loaded, including on first load and on any refetch.
+  store.setRoundActions(response.roundActions);
 }
 
 export function useGame({ gameId, playerId }: UseGameOptions) {
@@ -100,6 +119,11 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
   const hand = useGameStore((s) => s.hand);
   const currentTrick = useGameStore((s) => s.currentTrick);
   const currentPlayerTurn = useGameStore((s) => s.currentPlayerTurn);
+  const roundStatus = useGameStore((s) => s.roundStatus);
+  const finishingPositions = useGameStore((s) => s.finishingPositions);
+  const pendingTributeChoice = useGameStore((s) => s.pendingTributeChoice);
+  const pendingGiverChoice = useGameStore((s) => s.pendingGiverChoice);
+  const roundActions = useGameStore((s) => s.roundActions);
   const teamLevels = useGameStore((s) => s.teamLevels);
   const winningTeam = useGameStore((s) => s.winningTeam);
 
@@ -231,6 +255,80 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
 
   useGameRealtimeSync(gameId, onGameAction, onStatusChange);
 
+  // ARCHITECTURE.md "Disconnect & Reconnect": pings heartbeat/route.ts every
+  // HEARTBEAT_INTERVAL_MS (well under its own HEARTBEAT_STALE_MS, so a
+  // couple of missed/slow pings in a row don't false-flag this client as
+  // disconnected) so this participant's lastHeartbeat stays fresh. Fires
+  // once immediately on mount/gameId change, then on the interval - not
+  // gated on gameStatus/myPosition, since a spectator's presence is tracked
+  // the same as a seated player's. In-flight-guarded so a slow response
+  // doesn't overlap with the next tick and double up on this route's own
+  // sweep-every-other-participant work and participant_updated broadcasts.
+  const heartbeatInFlightRef = useRef(false);
+  useEffect(() => {
+    if (!gameId) return;
+    function tick() {
+      if (heartbeatInFlightRef.current) return;
+      heartbeatInFlightRef.current = true;
+      actionsRef.current
+        .sendHeartbeat()
+        .catch(() => {
+          // Best-effort, same as every other write in this hook - the next
+          // interval tick retries.
+        })
+        .finally(() => {
+          heartbeatInFlightRef.current = false;
+        });
+    }
+    tick();
+    const interval = setInterval(tick, HEARTBEAT_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [gameId]);
+
+  // end-hand/route.ts's doc comment: play-cards freezes current_player_turn
+  // to null once a round concludes, but nothing calls end-hand itself - any
+  // seated client picks that up here and triggers it, retrying on an
+  // interval (not just once) so an outright request failure - as opposed to
+  // losing the race to another seated client's 409 - doesn't leave the round
+  // stuck until someone happens to refresh: nothing else re-triggers this
+  // effect once its own dependencies stop changing.
+  const endHandInFlightRef = useRef(false);
+  useEffect(() => {
+    if (gameStatus !== "in_progress") return;
+    if (roundStatus !== "in_progress") return;
+    if (currentPlayerTurn !== null) return;
+    if (myPosition === null) return;
+
+    function attemptEndHand() {
+      if (endHandInFlightRef.current) return;
+      endHandInFlightRef.current = true;
+      actionsRef.current
+        .endHand()
+        .catch(() => {
+          // Lost the race to another seated client (409), or failed
+          // outright - either way, the round_updated broadcast is what
+          // actually confirms the transition, not this request's outcome;
+          // the retry interval below covers an outright failure.
+        })
+        .finally(() => {
+          endHandInFlightRef.current = false;
+        });
+    }
+    attemptEndHand();
+    const interval = setInterval(attemptEndHand, END_HAND_RETRY_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [gameStatus, roundStatus, currentPlayerTurn, myPosition]);
+
+  const chooseTribute = useCallback(
+    (take: PlayerPosition) => actionsRef.current.chooseTribute(take),
+    [],
+  );
+
+  const chooseGiverCard = useCallback(
+    (card: Card) => actionsRef.current.chooseGiverCard(card),
+    [],
+  );
+
   const playCards = useCallback(
     (cards: CardWithWild[]) =>
       withOptimisticUpdate(() => {
@@ -320,6 +418,11 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     hand,
     currentTrick,
     currentPlayerTurn,
+    roundStatus,
+    finishingPositions,
+    pendingTributeChoice,
+    pendingGiverChoice,
+    roundActions,
     teamLevels,
     winningTeam,
     connectionStatus,
@@ -343,6 +446,17 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     exchangeCards,
     isExchangingCards: actions.isExchangingCards,
     exchangeCardsError: actions.exchangeCardsError,
+
+    isEndingHand: actions.isEndingHand,
+    endHandError: actions.endHandError,
+
+    chooseTribute,
+    isChoosingTribute: actions.isChoosingTribute,
+    chooseTributeError: actions.chooseTributeError,
+
+    chooseGiverCard,
+    isChoosingGiverCard: actions.isChoosingGiverCard,
+    chooseGiverCardError: actions.chooseGiverCardError,
 
     startGame,
     isStartingGame: actions.isStartingGame,

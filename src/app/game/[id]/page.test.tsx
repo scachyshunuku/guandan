@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import GamePage from "./page";
 import type { GameContextValue } from "./GameProvider";
-import type { GameParticipant } from "@/lib/types";
+import type { CardExchangeActionData, GameAction, GameParticipant } from "@/lib/types";
 
 const useGameContextMock = jest.fn();
 jest.mock("./GameProvider", () => ({
@@ -54,6 +54,11 @@ function baseContext(overrides: Partial<GameContextValue> = {}): GameContextValu
     hand: [{ suit: "SPADES", rank: "3" }],
     currentTrick: [{ position: 1, play: [{ suit: "HEARTS", rank: "4" }] }],
     currentPlayerTurn: 0,
+    roundStatus: "in_progress",
+    finishingPositions: null,
+    pendingTributeChoice: null,
+    pendingGiverChoice: null,
+    roundActions: [],
     teamLevels: [2, 2],
     winningTeam: null,
     connectionStatus: "connected",
@@ -72,6 +77,12 @@ function baseContext(overrides: Partial<GameContextValue> = {}): GameContextValu
     exchangeCards: jest.fn(),
     isExchangingCards: false,
     exchangeCardsError: null,
+    chooseTribute: jest.fn(),
+    isChoosingTribute: false,
+    chooseTributeError: null,
+    chooseGiverCard: jest.fn(),
+    isChoosingGiverCard: false,
+    chooseGiverCardError: null,
     startGame: jest.fn().mockResolvedValue({ success: true, hand: [] }),
     isStartingGame: false,
     startGameError: null,
@@ -220,6 +231,29 @@ describe("GamePage", () => {
     expect(screen.queryByTestId("action-buttons")).not.toBeInTheDocument();
   });
 
+  it("tells the viewer their team won", () => {
+    // baseContext's default myPosition is 0 (team A, i.e. team 0).
+    useGameContextMock.mockReturnValue(baseContext({ gameStatus: "completed", winningTeam: 0 }));
+    render(<GamePage />);
+    expect(screen.getByTestId("game-over-message")).toHaveTextContent("your team wins");
+  });
+
+  it("tells the viewer their team lost", () => {
+    useGameContextMock.mockReturnValue(
+      baseContext({ gameStatus: "completed", winningTeam: 1, myPosition: 0 }),
+    );
+    render(<GamePage />);
+    expect(screen.getByTestId("game-over-message")).toHaveTextContent("your team lost");
+  });
+
+  it("tells a spectator which team won by letter", () => {
+    useGameContextMock.mockReturnValue(
+      baseContext({ gameStatus: "completed", winningTeam: 1, myPosition: null }),
+    );
+    render(<GamePage />);
+    expect(screen.getByTestId("game-over-message")).toHaveTextContent("Team B wins");
+  });
+
   it("passes when the pass button is clicked", async () => {
     const passMock = jest.fn().mockResolvedValue(undefined);
     useGameContextMock.mockReturnValue(baseContext({ pass: passMock }));
@@ -228,6 +262,245 @@ describe("GamePage", () => {
 
     await user.click(screen.getByTestId("pass-button"));
     expect(passMock).toHaveBeenCalled();
+  });
+
+  it("shows a hand-ended message once the round has concluded but end-hand hasn't resolved it yet", () => {
+    useGameContextMock.mockReturnValue(baseContext({ currentPlayerTurn: null }));
+    render(<GamePage />);
+    expect(screen.getByTestId("hand-ended-message")).toBeInTheDocument();
+    expect(screen.queryByTestId("action-buttons")).not.toBeInTheDocument();
+  });
+
+  it("renders the card exchange modal during the card_exchange phase, and submits a return", async () => {
+    const exchangeCardsMock = jest.fn().mockResolvedValue(undefined);
+    const initialExchange: GameAction = {
+      id: "a1",
+      gameId: "game-1",
+      roundId: "round-1",
+      playerId: "system",
+      actionType: "card_exchange",
+      actionData: {
+        from: 3,
+        to: 0,
+        card: { suit: "SPADES", rank: "ACE" },
+        type: "initial",
+      } satisfies CardExchangeActionData,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    useGameContextMock.mockReturnValue(
+      baseContext({
+        roundStatus: "card_exchange",
+        roundActions: [initialExchange],
+        hand: [{ suit: "CLUBS", rank: "3" }],
+        exchangeCards: exchangeCardsMock,
+      }),
+    );
+    const user = userEvent.setup();
+    render(<GamePage />);
+
+    expect(screen.getByTestId("card-exchange-modal")).toBeInTheDocument();
+    const handCards = screen.getByTestId("return-card-options").querySelectorAll('[data-testid="card"]');
+    await user.click(handCards[0]);
+    await user.click(screen.getByTestId("submit-return-button"));
+
+    expect(exchangeCardsMock).toHaveBeenCalledWith({
+      cardToGive: { suit: "CLUBS", rank: "3" },
+    });
+  });
+
+  it("lets 1st place resolve a tied tribute choice", async () => {
+    const chooseTributeMock = jest.fn().mockResolvedValue(undefined);
+    useGameContextMock.mockReturnValue(
+      baseContext({
+        roundStatus: "awaiting_tribute_choice",
+        finishingPositions: [1, 3, 2, 4],
+        pendingTributeChoice: {
+          thirdPosition: 1,
+          thirdCard: { suit: "CLUBS", rank: "9" },
+          fourthPosition: 3,
+          fourthCard: { suit: "SPADES", rank: "9" },
+        },
+        chooseTribute: chooseTributeMock,
+      }),
+    );
+    const user = userEvent.setup();
+    render(<GamePage />);
+
+    expect(screen.getByTestId("tribute-choice-modal")).toBeInTheDocument();
+    const options = screen.getAllByTestId("tribute-choice-option");
+    await user.click(within(options[0]).getByTestId("card"));
+    expect(chooseTributeMock).toHaveBeenCalledWith(1);
+  });
+
+  it("shows a waiting message for the tribute choice when the viewer isn't 1st place", () => {
+    useGameContextMock.mockReturnValue(
+      baseContext({
+        myPosition: 1,
+        roundStatus: "awaiting_tribute_choice",
+        finishingPositions: [1, 3, 2, 4],
+        pendingTributeChoice: {
+          thirdPosition: 1,
+          thirdCard: { suit: "CLUBS", rank: "9" },
+          fourthPosition: 3,
+          fourthCard: { suit: "SPADES", rank: "9" },
+        },
+      }),
+    );
+    render(<GamePage />);
+    expect(screen.getByTestId("tribute-choice-waiting")).toBeInTheDocument();
+  });
+
+  it("lets a pending giver resolve their own tied best-card choice", async () => {
+    const chooseGiverCardMock = jest.fn().mockResolvedValue(undefined);
+    useGameContextMock.mockReturnValue(
+      baseContext({
+        roundStatus: "awaiting_giver_choice",
+        // Level rank is "2" for teamLevels [2, 2] - neither King is wild, so
+        // they're a genuine tie.
+        hand: [
+          { suit: "SPADES", rank: "KING" },
+          { suit: "HEARTS", rank: "KING" },
+        ],
+        pendingGiverChoice: { levelRank: "2", pendingPositions: [0], resolvedCards: {} },
+        chooseGiverCard: chooseGiverCardMock,
+      }),
+    );
+    const user = userEvent.setup();
+    render(<GamePage />);
+
+    expect(screen.getByTestId("giver-card-choice-modal")).toBeInTheDocument();
+    const cards = screen.getByTestId("giver-card-choice-options").querySelectorAll('[data-testid="card"]');
+    expect(cards).toHaveLength(2);
+    await user.click(cards[1]);
+    expect(chooseGiverCardMock).toHaveBeenCalledWith({ suit: "HEARTS", rank: "KING" });
+  });
+
+  it("shows a waiting message for the giver choice when the viewer isn't the one who owes it", () => {
+    useGameContextMock.mockReturnValue(
+      baseContext({
+        myPosition: 0,
+        roundStatus: "awaiting_giver_choice",
+        pendingGiverChoice: { levelRank: "2", pendingPositions: [1], resolvedCards: {} },
+      }),
+    );
+    render(<GamePage />);
+    expect(screen.getByTestId("giver-choice-waiting")).toBeInTheDocument();
+    expect(screen.queryByTestId("giver-card-choice-modal")).not.toBeInTheDocument();
+  });
+
+  it("lets a lone wild card be played as itself without opening the selector", async () => {
+    const playCardsMock = jest.fn().mockResolvedValue(undefined);
+    useGameContextMock.mockReturnValue(
+      baseContext({
+        // Level rank is "2" for teamLevels [2, 2] - the heart 2 is wild, but
+        // a lone card is already a valid single on an empty trick.
+        hand: [{ suit: "HEARTS", rank: "2" }],
+        currentTrick: [],
+        playCards: playCardsMock,
+      }),
+    );
+    const user = userEvent.setup();
+    render(<GamePage />);
+
+    const cards = screen.getByTestId("player-hand").querySelectorAll('[data-testid="card"]');
+    await user.click(cards[0]);
+
+    expect(screen.queryByTestId("wild-card-selector")).not.toBeInTheDocument();
+    expect(screen.getByTestId("play-button")).toBeEnabled();
+
+    await user.click(screen.getByTestId("play-button"));
+    expect(playCardsMock).toHaveBeenCalledWith([{ suit: "HEARTS", rank: "2" }]);
+  });
+
+  it("prompts for a wild-card interpretation when the raw selection isn't already legal, then plays with actsAs attached", async () => {
+    const playCardsMock = jest.fn().mockResolvedValue(undefined);
+    useGameContextMock.mockReturnValue(
+      baseContext({
+        // Level rank is "2" for teamLevels [2, 2] - the heart 2 is wild.
+        // Paired with a 5, the raw selection (heart 2 as itself) isn't a
+        // legal pair, so it can only be played by declaring a wild
+        // interpretation.
+        hand: [{ suit: "HEARTS", rank: "2" }, { suit: "CLUBS", rank: "5" }],
+        currentTrick: [],
+        playCards: playCardsMock,
+      }),
+    );
+    const user = userEvent.setup();
+    render(<GamePage />);
+
+    const cards = screen.getByTestId("player-hand").querySelectorAll('[data-testid="card"]');
+    await user.click(cards[0]);
+    await user.click(cards[1]);
+
+    expect(screen.getByTestId("wild-card-selector")).toBeInTheDocument();
+    expect(screen.getByTestId("play-button")).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "5" }));
+    await user.click(screen.getByRole("button", { name: "diamonds" }));
+    await user.click(screen.getByTestId("wild-card-confirm-button"));
+
+    expect(screen.queryByTestId("wild-card-selector")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("play-button")).toBeEnabled());
+    await user.click(screen.getByTestId("play-button"));
+
+    expect(playCardsMock).toHaveBeenCalledWith([
+      { suit: "HEARTS", rank: "2", actsAs: { rank: "5", suit: "DIAMONDS" } },
+      { suit: "CLUBS", rank: "5" },
+    ]);
+  });
+
+  it("prompts once per wild card when two are selected together (a double deck can hold two level-rank hearts)", async () => {
+    const playCardsMock = jest.fn().mockResolvedValue(undefined);
+    useGameContextMock.mockReturnValue(
+      baseContext({
+        // Level rank is "2" - both hearts are wild. Raw selection (2H, 2H,
+        // 9C, 9S) isn't a legal combo on its own (two ranks, not a
+        // recognized shape); it only becomes a bomb_4 of 9s once both
+        // hearts are each assigned a wild interpretation of "9".
+        hand: [
+          { suit: "HEARTS", rank: "2" },
+          { suit: "HEARTS", rank: "2" },
+          { suit: "CLUBS", rank: "9" },
+          { suit: "SPADES", rank: "9" },
+        ],
+        currentTrick: [],
+        playCards: playCardsMock,
+      }),
+    );
+    const user = userEvent.setup();
+    render(<GamePage />);
+
+    const cards = screen.getByTestId("player-hand").querySelectorAll('[data-testid="card"]');
+    for (const card of Array.from(cards)) {
+      await user.click(card);
+    }
+
+    expect(screen.getByTestId("wild-card-selector")).toBeInTheDocument();
+    expect(screen.getByTestId("play-button")).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "9" }));
+    await user.click(screen.getByRole("button", { name: "diamonds" }));
+    await user.click(screen.getByTestId("wild-card-confirm-button"));
+
+    // Still needs the second heart's interpretation - selector stays open,
+    // Play stays disabled.
+    expect(screen.getByTestId("wild-card-selector")).toBeInTheDocument();
+    expect(screen.getByTestId("play-button")).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "9" }));
+    await user.click(screen.getByRole("button", { name: "clubs" }));
+    await user.click(screen.getByTestId("wild-card-confirm-button"));
+
+    expect(screen.queryByTestId("wild-card-selector")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("play-button")).toBeEnabled());
+    await user.click(screen.getByTestId("play-button"));
+
+    expect(playCardsMock).toHaveBeenCalledWith([
+      { suit: "HEARTS", rank: "2", actsAs: { rank: "9", suit: "DIAMONDS" } },
+      { suit: "HEARTS", rank: "2", actsAs: { rank: "9", suit: "CLUBS" } },
+      { suit: "CLUBS", rank: "9" },
+      { suit: "SPADES", rank: "9" },
+    ]);
   });
 
   it("hides the connection banner while connected", () => {

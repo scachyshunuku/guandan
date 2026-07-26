@@ -112,6 +112,35 @@ export interface GameState {
   // rotations instead of freezing the round the instant anyone goes out.
   // Empty at the start of a round; a fresh round starts this array over.
   finishOrder: PlayerPosition[];
+  // Set by end-hand only for a two-team-lead (1-2) finish whose 3rd/4th
+  // tribute cards tie in rank (RULES.md "Two-Team Lead": "If the two cards
+  // are the same rank, 1st place chooses which card to take") — holds
+  // everything POST /api/game/[id]/choose-tribute needs to finish the
+  // exchange once 1st place decides. Cleared (round moves to
+  // 'card_exchange') once that choice is submitted.
+  pendingTributeChoice?: {
+    thirdPosition: PlayerPosition;
+    thirdCard: Card;
+    fourthPosition: PlayerPosition;
+    fourthCard: Card;
+  };
+  // RULES.md "Card Exchange" → "Best card, when tied": a giver (3rd and/or
+  // 4th place) whose own hand has multiple cards tied for their best card
+  // must choose which one to give — mirrors pendingTributeChoice, but for
+  // the giver's side of the exchange instead of the recipient's. Set only
+  // while roundStatus is 'awaiting_giver_choice'; cleared once every
+  // pending position has resolved (round moves on to
+  // 'awaiting_tribute_choice' if the two givers' resolved cards now tie
+  // with each other, or straight to 'card_exchange' otherwise).
+  pendingGiverChoice?: {
+    // The just-finished hand's level (RULES.md "Level Cards & Wild Cards"),
+    // captured once here rather than re-derived from the game's team
+    // levels later — those may already have been promoted by the time a
+    // later giver's choice or the final cross-giver comparison needs it.
+    levelRank: StandardRank;
+    pendingPositions: PlayerPosition[];
+    resolvedCards: Partial<Record<PlayerPosition, Card>>;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +148,21 @@ export interface GameState {
 // ---------------------------------------------------------------------------
 
 export type GameStatus = "waiting" | "in_progress" | "completed";
-export type RoundStatus = "in_progress" | "card_exchange" | "completed";
+// 'awaiting_giver_choice': a giver (3rd and/or 4th place) whose own hand has
+// multiple cards tied for their best card — waiting on POST
+// /api/game/[id]/choose-giver-card before the round can move on (either to
+// 'awaiting_tribute_choice', if the resolved cards then tie with each
+// other, or straight to 'card_exchange').
+// 'awaiting_tribute_choice': a two-team-lead (1-2) finish whose 3rd/4th
+// tribute cards tied in rank (RULES.md "Two-Team Lead") — waiting on 1st
+// place to choose via POST /api/game/[id]/choose-tribute before the round
+// can move on to 'card_exchange'.
+export type RoundStatus =
+  | "in_progress"
+  | "awaiting_giver_choice"
+  | "awaiting_tribute_choice"
+  | "card_exchange"
+  | "completed";
 export type GameActionType =
   | "card_played"
   | "pass"
@@ -238,6 +281,19 @@ export interface LeaveGameResponse {
   success: true;
 }
 
+// ARCHITECTURE.md "Disconnect & Reconnect": the client pings this
+// periodically to keep its participant row's `lastHeartbeat` fresh; the
+// server derives `isConnected` from that (gameStateResponse.ts) rather than
+// trusting a client-reported connection state, and also sweeps every other
+// participant in the game for staleness on each call.
+export interface HeartbeatRequest {
+  playerId: string;
+}
+
+export interface HeartbeatResponse {
+  success: true;
+}
+
 export interface StartGameRequest {
   playerId: string;
 }
@@ -247,19 +303,22 @@ export interface StartGameResponse {
   hand: CardWithWild[];
 }
 
+// No `position` field: the server derives it from `playerId` (a
+// participant's seat is fixed at join and never reassigned — see
+// gameDb.ts's resolveTurn), so a client-submitted one would only be a
+// redundant, spoofable copy of a value the server already knows.
 export interface PlayCardsRequest {
   cards: CardWithWild[];
   playerId: string;
-  position: PlayerPosition;
 }
 
 export type PlayCardsResponse =
   | { success: true }
   | { success: false; error: string; reason: string };
 
+// See PlayCardsRequest's comment on why there's no `position` field.
 export interface PassRequest {
   playerId: string;
-  position: PlayerPosition;
 }
 
 export interface PassResponse {
@@ -274,12 +333,45 @@ export interface EndHandResponse {
   success: true;
 }
 
+// RULES.md "Card Exchange" → "Best card, when tied": a giver (3rd and/or
+// 4th place) whose own hand has multiple cards tied for their best card
+// chooses which one to give — `card` must be one of those tied candidates.
+// No `position` field (see PlayCardsRequest's comment).
+export interface ChooseGiverCardRequest {
+  playerId: string;
+  card: Card;
+}
+
+export type ChooseGiverCardResponse =
+  | { success: true }
+  | { success: false; error: string; reason: string };
+
+// RULES.md "Two-Team Lead": "If the two cards are the same rank, 1st place
+// chooses which card to take (then 2nd place gets the other)." `take`
+// identifies whose tribute card 1st place is taking — the other tied
+// position's card goes to 2nd place instead. No `position` field: see
+// PlayCardsRequest's comment — the caller's own seat is derived server-side,
+// though `take` itself is a genuine choice only the client can make.
+export interface ChooseTributeRequest {
+  playerId: string;
+  take: PlayerPosition;
+}
+
+export type ChooseTributeResponse =
+  | { success: true }
+  | { success: false; error: string; reason: string };
+
+// No `position` field (see PlayCardsRequest's comment). No `type` field
+// either: this route only ever accepts a 'return' exchange — the 'initial'
+// half is automatic (applied by end-hand), not something a client can
+// submit — so a client-submitted type could only ever be one legal value.
+// No `recipientPosition` either: exchange-cards derives who the caller owes
+// a return to from the 'initial' card_exchange game_actions history (who
+// gave them their card), the same server-known-better-than-the-client
+// reasoning as `position`.
 export interface ExchangeCardsRequest {
   playerId: string;
-  position: PlayerPosition;
   cardToGive: Card;
-  type: "initial" | "return";
-  recipientPosition: PlayerPosition;
 }
 
 export type ExchangeCardsResponse =

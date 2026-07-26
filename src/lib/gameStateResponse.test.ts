@@ -65,6 +65,24 @@ describe("redactParticipantHands", () => {
 
     expect(alice.hand).toEqual([{ rank: "ACE", suit: "SPADES" }]);
   });
+
+  it("derives isConnected from lastHeartbeat freshness rather than trusting the stored flag", () => {
+    const stale = participant({
+      playerId: "alice",
+      isConnected: true, // stale/stored value the heartbeat sweep hasn't corrected yet
+      lastHeartbeat: new Date(Date.now() - 60_000).toISOString(),
+    });
+    const fresh = participant({
+      playerId: "bob",
+      isConnected: false, // stale/stored value the other way
+      lastHeartbeat: new Date().toISOString(),
+    });
+
+    const { participants } = redactParticipantHands([stale, fresh], null);
+
+    expect(participants.find((p) => p.playerId === "alice")?.isConnected).toBe(false);
+    expect(participants.find((p) => p.playerId === "bob")?.isConnected).toBe(true);
+  });
 });
 
 describe("buildGameStateResponse", () => {

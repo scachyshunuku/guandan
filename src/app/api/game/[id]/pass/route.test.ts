@@ -75,40 +75,38 @@ function callPass(gameId: string, body: unknown) {
 
 describe("POST /api/game/[id]/pass", () => {
   it("404s for a nonexistent game", async () => {
-    const response = await callPass("does-not-exist", { playerId: "p1", position: 1 });
+    const response = await callPass("does-not-exist", { playerId: "p1" });
     expect(response.status).toBe(404);
   });
 
-  it("rejects a playerId that doesn't match the claimed position", async () => {
+  it("rejects an unknown playerId", async () => {
     const gameId = await seedGame();
     await seedRound(gameId);
     await seedParticipant(gameId, 1, "p1");
 
-    const response = await callPass(gameId, { playerId: "p1", position: 2 });
+    const response = await callPass(gameId, { playerId: "not-a-participant" });
     expect(response.status).toBe(403);
   });
 
-  it("rejects an out-of-range or malformed position", async () => {
+  it("rejects a request missing playerId", async () => {
     const gameId = await seedGame();
     await seedRound(gameId);
     await seedParticipant(gameId, 1, "p1");
 
-    for (const position of [4, -1, "1", null, undefined]) {
-      const response = await callPass(gameId, { playerId: "p1", position });
-      expect(response.status).toBe(400);
-    }
+    const response = await callPass(gameId, {});
+    expect(response.status).toBe(400);
   });
 
-  it("rejects a spectator (position: null) even when the round is frozen with current_player_turn: null", async () => {
-    // Regression: see the matching test in play-cards/route.test.ts — a
-    // naive `caller.position !== position` check would let a spectator's
-    // `position: null` match a submitted `position: null`.
+  it("rejects a spectator, even when the round is frozen with current_player_turn: null", async () => {
+    // Regression coverage carried over from when `position` was a
+    // client-submitted field — see the matching test in
+    // play-cards/route.test.ts.
     const gameId = await seedGame();
     await seedRound(gameId, { current_player_turn: null });
     await seedParticipant(gameId, null as unknown as number, "spectator");
 
-    const response = await callPass(gameId, { playerId: "spectator", position: null });
-    expect(response.status).toBe(400);
+    const response = await callPass(gameId, { playerId: "spectator" });
+    expect(response.status).toBe(403);
     expect(fake._tables.game_actions ?? []).toHaveLength(0);
   });
 
@@ -117,7 +115,7 @@ describe("POST /api/game/[id]/pass", () => {
     await seedRound(gameId, { current_player_turn: 2 });
     await seedParticipant(gameId, 1, "p1");
 
-    const response = await callPass(gameId, { playerId: "p1", position: 1 });
+    const response = await callPass(gameId, { playerId: "p1" });
     expect(response.status).toBe(400);
   });
 
@@ -129,7 +127,7 @@ describe("POST /api/game/[id]/pass", () => {
     });
     await seedParticipant(gameId, 0, "p0");
 
-    const response = await callPass(gameId, { playerId: "p0", position: 0 });
+    const response = await callPass(gameId, { playerId: "p0" });
     expect(response.status).toBe(400);
   });
 
@@ -138,7 +136,7 @@ describe("POST /api/game/[id]/pass", () => {
     const roundId = await seedRound(gameId);
     await seedParticipant(gameId, 1, "p1");
 
-    const response = await callPass(gameId, { playerId: "p1", position: 1 });
+    const response = await callPass(gameId, { playerId: "p1" });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true });
 
@@ -184,7 +182,7 @@ describe("POST /api/game/[id]/pass", () => {
     });
     await seedParticipant(gameId, 1, "p1");
 
-    const response = await callPass(gameId, { playerId: "p1", position: 1 });
+    const response = await callPass(gameId, { playerId: "p1" });
     expect(response.status).toBe(200);
 
     const round = fake._tables.game_rounds.find((r) => r.id === roundId);
@@ -208,7 +206,7 @@ describe("POST /api/game/[id]/pass", () => {
     });
     await seedParticipant(gameId, 3, "p3");
 
-    const response = await callPass(gameId, { playerId: "p3", position: 3 });
+    const response = await callPass(gameId, { playerId: "p3" });
     expect(response.status).toBe(200);
 
     const round = fake._tables.game_rounds.find((r) => r.id === roundId);
@@ -233,7 +231,7 @@ describe("POST /api/game/[id]/pass", () => {
     });
     await seedParticipant(gameId, 3, "p3");
 
-    const response = await callPass(gameId, { playerId: "p3", position: 3 });
+    const response = await callPass(gameId, { playerId: "p3" });
     expect(response.status).toBe(200);
 
     const round = fake._tables.game_rounds.find((r) => r.id === roundId);
@@ -262,7 +260,7 @@ describe("POST /api/game/[id]/pass", () => {
     });
     await seedParticipant(gameId, 3, "p3");
 
-    const response = await callPass(gameId, { playerId: "p3", position: 3 });
+    const response = await callPass(gameId, { playerId: "p3" });
     expect(response.status).toBe(200);
 
     const round = fake._tables.game_rounds.find((r) => r.id === roundId);
@@ -279,8 +277,8 @@ describe("POST /api/game/[id]/pass", () => {
     await seedParticipant(gameId, 1, "p1");
 
     const [r1, r2] = await Promise.all([
-      callPass(gameId, { playerId: "p1", position: 1 }),
-      callPass(gameId, { playerId: "p1", position: 1 }),
+      callPass(gameId, { playerId: "p1" }),
+      callPass(gameId, { playerId: "p1" }),
     ]);
 
     const statuses = [r1.status, r2.status].sort((a, b) => a - b);
@@ -300,7 +298,7 @@ describe("POST /api/game/[id]/pass", () => {
     await seedParticipant(gameId, 1, "p1");
     fake._failNext("game_actions", "insert");
 
-    const response = await callPass(gameId, { playerId: "p1", position: 1 });
+    const response = await callPass(gameId, { playerId: "p1" });
     expect(response.status).toBe(500);
 
     const round = fake._tables.game_rounds.find((r) => r.id === roundId);
@@ -313,7 +311,7 @@ describe("POST /api/game/[id]/pass", () => {
     expect(mockBroadcastToGame).not.toHaveBeenCalled();
 
     // A retry after the rollback passes cleanly.
-    const retry = await callPass(gameId, { playerId: "p1", position: 1 });
+    const retry = await callPass(gameId, { playerId: "p1" });
     expect(retry.status).toBe(200);
   });
 });

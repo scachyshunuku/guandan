@@ -4,12 +4,7 @@
 // persists it, and advances turn/trick state.
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import {
-  isPlayerPosition,
-  levelRankForGame,
-  resolveTurn,
-  type ActiveRoundRow,
-} from "@/lib/gameDb";
+import { levelRankForGame, resolveTurn, type ActiveRoundRow } from "@/lib/gameDb";
 import { removeCardsFromHand } from "@/lib/cardUtils";
 import { parseJsonBody } from "@/lib/http";
 import { broadcastToGame } from "@/lib/realtimeBroadcast";
@@ -41,19 +36,19 @@ export async function POST(
 
   const parsed = await parseJsonBody<Partial<PlayCardsRequest>>(request);
   if (parsed.errorResponse) return parsed.errorResponse;
-  const { cards, playerId, position } = parsed.body;
-  if (!cards || !playerId || !isPlayerPosition(position)) {
+  const { cards, playerId } = parsed.body;
+  if (!cards || !playerId) {
     return NextResponse.json(
-      { error: "cards, playerId, and a valid position (0-3) are required" },
+      { error: "cards and playerId are required" },
       { status: 400 },
     );
   }
 
-  const turn = await resolveTurn(gameId, playerId, position);
+  const turn = await resolveTurn(gameId, playerId);
   if (!turn.ok) {
     return invalidPlayResponse(turn.error, turn.status);
   }
-  const { game, round, caller } = turn;
+  const { game, round, caller, position } = turn;
 
   const levelRank = levelRankForGame(game);
   const result = canPlayCards(cards, caller.hand, round.game_state.currentTrick, levelRank);

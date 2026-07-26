@@ -81,7 +81,6 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards("does-not-exist", {
       cards: [],
       playerId: "p0",
-      position: 0,
     });
     expect(response.status).toBe(404);
   });
@@ -94,45 +93,39 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "7", suit: "CLUBS" }],
       playerId: "p0",
-      position: 0,
     });
     expect(response.status).toBe(400);
   });
 
-  it("rejects a playerId that doesn't match the claimed position", async () => {
+  it("rejects an unknown playerId", async () => {
     const gameId = await seedGame();
     await seedRound(gameId);
     await seedParticipant(gameId, 0, "p0", [{ rank: "7", suit: "CLUBS" }]);
 
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "7", suit: "CLUBS" }],
-      playerId: "p0",
-      position: 1,
+      playerId: "not-a-participant",
     });
     expect(response.status).toBe(403);
   });
 
-  it("rejects an out-of-range or malformed position", async () => {
+  it("rejects a request missing playerId", async () => {
     const gameId = await seedGame();
     await seedRound(gameId);
     await seedParticipant(gameId, 0, "p0", [{ rank: "7", suit: "CLUBS" }]);
 
-    for (const position of [4, -1, "0", null, undefined]) {
-      const response = await callPlayCards(gameId, {
-        cards: [{ rank: "7", suit: "CLUBS" }],
-        playerId: "p0",
-        position,
-      });
-      expect(response.status).toBe(400);
-    }
+    const response = await callPlayCards(gameId, {
+      cards: [{ rank: "7", suit: "CLUBS" }],
+    });
+    expect(response.status).toBe(400);
   });
 
-  it("rejects a spectator (position: null) even when the round is frozen with current_player_turn: null", async () => {
-    // Regression: a naive `caller.position !== position` check treats a
-    // spectator's `position: null` and a submitted `position: null` as a
-    // match. Reproduce the exact state where that would matter — a round
-    // halted after the round concluded (see the round-end tests below) —
-    // and confirm a spectator still can't act on it.
+  it("rejects a spectator, even when the round is frozen with current_player_turn: null", async () => {
+    // Regression coverage carried over from when `position` was a
+    // client-submitted field: a spectator (position: null in the DB) must
+    // never be able to act, including in this exact state — a round halted
+    // after concluding (see the round-end tests below) — where
+    // current_player_turn is also null.
     const gameId = await seedGame();
     await seedRound(gameId, { current_player_turn: null });
     await seedParticipant(gameId, null as unknown as number, "spectator", []);
@@ -140,9 +133,8 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "7", suit: "CLUBS" }],
       playerId: "spectator",
-      position: null,
     });
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(403);
     expect(fake._tables.game_actions ?? []).toHaveLength(0);
   });
 
@@ -154,7 +146,6 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "7", suit: "CLUBS" }],
       playerId: "p0",
-      position: 0,
     });
     expect(response.status).toBe(400);
     const body = (await response.json()) as PlayCardsResponse;
@@ -169,7 +160,6 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "8", suit: "CLUBS" }],
       playerId: "p0",
-      position: 0,
     });
     expect(response.status).toBe(400);
     const body = (await response.json()) as PlayCardsResponse;
@@ -192,7 +182,6 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "7", suit: "HEARTS" }],
       playerId: "p1",
-      position: 1,
     });
     expect(response.status).toBe(400);
   });
@@ -208,7 +197,6 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "7", suit: "CLUBS" }],
       playerId: "p0",
-      position: 0,
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true });
@@ -267,7 +255,6 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "10", suit: "CLUBS" }],
       playerId: "p3",
-      position: 3,
     });
     expect(response.status).toBe(200);
 
@@ -299,7 +286,6 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "10", suit: "CLUBS" }],
       playerId: "p3",
-      position: 3,
     });
     expect(response.status).toBe(200);
 
@@ -321,7 +307,6 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "7", suit: "CLUBS" }],
       playerId: "p0",
-      position: 0,
     });
     expect(response.status).toBe(200);
 
@@ -354,7 +339,6 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "7", suit: "CLUBS" }],
       playerId: "p0",
-      position: 0,
     });
     expect(response.status).toBe(200);
 
@@ -378,7 +362,6 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "7", suit: "CLUBS" }],
       playerId: "p2",
-      position: 2,
     });
     expect(response.status).toBe(200);
 
@@ -402,7 +385,6 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "7", suit: "CLUBS" }],
       playerId: "p2",
-      position: 2,
     });
     expect(response.status).toBe(200);
 
@@ -427,12 +409,10 @@ describe("POST /api/game/[id]/play-cards", () => {
       callPlayCards(gameId, {
         cards: [{ rank: "7", suit: "CLUBS" }],
         playerId: "p0",
-        position: 0,
       }),
       callPlayCards(gameId, {
         cards: [{ rank: "8", suit: "HEARTS" }],
         playerId: "p0",
-        position: 0,
       }),
     ]);
 
@@ -462,7 +442,6 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "7", suit: "CLUBS" }],
       playerId: "p0",
-      position: 0,
     });
     expect(response.status).toBe(500);
 
@@ -483,7 +462,6 @@ describe("POST /api/game/[id]/play-cards", () => {
     const retry = await callPlayCards(gameId, {
       cards: [{ rank: "7", suit: "CLUBS" }],
       playerId: "p0",
-      position: 0,
     });
     expect(retry.status).toBe(200);
   });
@@ -528,7 +506,6 @@ describe("POST /api/game/[id]/play-cards", () => {
     const response = await callPlayCards(gameId, {
       cards: [{ rank: "7", suit: "CLUBS" }],
       playerId: "p0",
-      position: 0,
     });
     expect(response.status).toBe(500);
 

@@ -5,9 +5,12 @@
 import { create } from "zustand";
 import type {
   CurrentTrick,
+  GameAction,
   GameParticipant,
+  GameRound,
   GameStatus,
   PlayerPosition,
+  RoundStatus,
   Team,
   CardWithWild,
 } from "@/lib/types";
@@ -30,6 +33,30 @@ export interface GameStoreState {
   currentTrick: CurrentTrick;
   currentPlayerTurn: PlayerPosition | null;
 
+  // The round the fields below describe — used to detect a fresh round
+  // (dealNextRound's insert) so roundActions can be reset rather than
+  // carrying over the previous round's card-exchange history.
+  roundId: string | null;
+  roundStatus: RoundStatus;
+  // Mirrors GameRound.finishingPositions — null until the round concludes.
+  // CardExchangeModal/TributeChoiceModal need this to know who's 1st/2nd/
+  // 3rd/4th without re-deriving it client-side.
+  finishingPositions: number[] | null;
+  // Mirrors GameRound.gameState.pendingTributeChoice — set only while
+  // roundStatus is 'awaiting_tribute_choice' (RULES.md "Two-Team Lead").
+  pendingTributeChoice: GameRound["gameState"]["pendingTributeChoice"] | null;
+  // Mirrors GameRound.gameState.pendingGiverChoice — set only while
+  // roundStatus is 'awaiting_giver_choice' (RULES.md "Card Exchange" ->
+  // "Best card, when tied"). `pendingPositions` here is safe to broadcast
+  // to everyone (unlike each giver's actual candidate cards, which the
+  // viewer derives client-side from their own private hand).
+  pendingGiverChoice: GameRound["gameState"]["pendingGiverChoice"] | null;
+  // This round's game_actions (all types, matching GameStateResponse.
+  // roundActions) — hydrated on load, appended to via `game_action`
+  // broadcasts, and reset whenever roundId changes. CardExchangeModal reads
+  // the 'card_exchange'/'initial' entries out of this to show who owes whom.
+  roundActions: GameAction[];
+
   // Indexed by Team (0 = team A, 1 = team B), mirrors Game.teamALevel/teamBLevel.
   teamLevels: [number, number];
   // Mirrors Game.winningTeam — null until the game reaches status
@@ -42,6 +69,13 @@ export interface GameStoreState {
   setHand: (hand: CardWithWild[]) => void;
   updateTrick: (currentTrick: CurrentTrick) => void;
   setCurrentPlayerTurn: (position: PlayerPosition | null) => void;
+  // The full round_updated payload (initial hydration and every broadcast) —
+  // supersedes updateTrick/setCurrentPlayerTurn for that purpose, which
+  // remain in use for optimistic local updates (useGame's playCards/pass)
+  // that only ever touch trick state, never a round's other metadata.
+  applyRoundUpdate: (round: GameRound) => void;
+  appendRoundAction: (action: GameAction) => void;
+  setRoundActions: (actions: GameAction[]) => void;
   updateParticipants: (participants: GameParticipant[]) => void;
   addParticipant: (participant: GameParticipant) => void;
   setTeamLevels: (teamALevel: number, teamBLevel: number) => void;
@@ -58,6 +92,12 @@ const initialState = {
   hand: [],
   currentTrick: [],
   currentPlayerTurn: null,
+  roundId: null as string | null,
+  roundStatus: "in_progress" as RoundStatus,
+  finishingPositions: null as number[] | null,
+  pendingTributeChoice: null as GameRound["gameState"]["pendingTributeChoice"] | null,
+  pendingGiverChoice: null as GameRound["gameState"]["pendingGiverChoice"] | null,
+  roundActions: [] as GameAction[],
   teamLevels: [2, 2] as [number, number],
   winningTeam: null as Team | null,
 };
@@ -71,6 +111,23 @@ export const useGameStore = create<GameStoreState>((set) => ({
   setHand: (hand) => set({ hand }),
   updateTrick: (currentTrick) => set({ currentTrick }),
   setCurrentPlayerTurn: (currentPlayerTurn) => set({ currentPlayerTurn }),
+  applyRoundUpdate: (round) =>
+    set((state) => ({
+      roundId: round.id,
+      roundStatus: round.status,
+      currentTrick: round.gameState.currentTrick,
+      currentPlayerTurn: round.currentPlayerTurn,
+      finishingPositions: round.finishingPositions,
+      pendingTributeChoice: round.gameState.pendingTributeChoice ?? null,
+      pendingGiverChoice: round.gameState.pendingGiverChoice ?? null,
+      // A fresh round (dealNextRound's insert) starts its action history
+      // over; the same round updating again (e.g. a status transition)
+      // keeps whatever's already been recorded.
+      roundActions: state.roundId !== null && state.roundId !== round.id ? [] : state.roundActions,
+    })),
+  appendRoundAction: (action) =>
+    set((state) => ({ roundActions: [...state.roundActions, action] })),
+  setRoundActions: (roundActions) => set({ roundActions }),
   updateParticipants: (participants) => set({ participants }),
   // Upserts by id rather than always appending, since a rejoin (e.g. after a
   // brief disconnect) broadcasts the same participant id again.

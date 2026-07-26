@@ -15,7 +15,7 @@
 
 import type { Card, CardWithWild, CurrentTrick, StandardRank } from "../types";
 import { PASS } from "../types";
-import { encodeCard } from "../cardUtils";
+import { encodeCard, STANDARD_RANK_ORDER, SUIT_ORDER } from "../cardUtils";
 import { getComboRank, getComboType, isBombComboType } from "./combinations";
 
 export interface ValidationResult {
@@ -70,8 +70,24 @@ function validatePlayedCard(
   // Only the level-rank heart may be played as a stand-in for another card
   // (never a joker — `actsAs` is typed to StandardRank so that's already
   // ruled out at compile time).
-  if (card.actsAs !== undefined && (card.rank !== levelRank || card.suit !== "HEARTS")) {
-    return { valid: false, reason: "only the level-rank heart can be played as a wild card" };
+  if (card.actsAs !== undefined) {
+    if (card.rank !== levelRank || card.suit !== "HEARTS") {
+      return { valid: false, reason: "only the level-rank heart can be played as a wild card" };
+    }
+    // `actsAs` is only compile-time guaranteed to be a StandardRank/Suit
+    // shape — it comes straight from a client request body, so a bogus
+    // value (e.g. `actsAs: { rank: "not-a-rank", suit: "HEARTS" }`) would
+    // otherwise sail past every check above and reach getCardRank downstream
+    // (cardUtils.ts), which returns `undefined` for an unrecognized rank.
+    // beatsCombo's `challengerRank <= defenderRank` then evaluates
+    // `undefined <= number`, which is `false` — silently treating the
+    // malformed play as beating the trick instead of rejecting it.
+    if (
+      !STANDARD_RANK_ORDER.includes(card.actsAs.rank) ||
+      !SUIT_ORDER.includes(card.actsAs.suit)
+    ) {
+      return { valid: false, reason: "invalid wild-card claim" };
+    }
   }
 
   // Ownership is checked by (rank, suit) identity, ignoring `actsAs`, since

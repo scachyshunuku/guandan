@@ -9,13 +9,7 @@
 // and deals the next.
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import {
-  getGameContext,
-  isPlayerPosition,
-  levelRankForGame,
-  type GameRow,
-  type GameRoundRow,
-} from "@/lib/gameDb";
+import { getGameContext, levelRankForGame, type GameRow, type GameRoundRow } from "@/lib/gameDb";
 import { removeCardsFromHand } from "@/lib/cardUtils";
 import { dealNextRound } from "@/lib/dealNextRound";
 import { parseJsonBody } from "@/lib/http";
@@ -47,17 +41,12 @@ export async function POST(
 
   const parsed = await parseJsonBody<Partial<ExchangeCardsRequest>>(request);
   if (parsed.errorResponse) return parsed.errorResponse;
-  const { playerId, position, cardToGive, type, recipientPosition } = parsed.body;
-  if (!playerId || !isPlayerPosition(position) || !cardToGive || !isPlayerPosition(recipientPosition)) {
+  const { playerId, cardToGive } = parsed.body;
+  if (!playerId || !cardToGive) {
     return NextResponse.json(
-      { error: "playerId, a valid position, cardToGive, and a valid recipientPosition are required" },
+      { error: "playerId and cardToGive are required" },
       { status: 400 },
     );
-  }
-  // The "initial" half is automatic (applied by end-hand), not something a
-  // client submits — see this file's header comment.
-  if (type !== "return") {
-    return invalidExchangeResponse("only 'return' exchanges can be submitted; initial exchanges are automatic");
   }
 
   const context = await getGameContext(gameId, playerId);
@@ -74,25 +63,23 @@ export async function POST(
       { status: 400 },
     );
   }
-  if (!caller || caller.position === null || caller.position !== position) {
-    return invalidExchangeResponse("playerId does not match position", 403);
+  if (!caller || caller.position === null) {
+    return invalidExchangeResponse("playerId is not a seated participant", 403);
   }
+  const position = caller.position;
 
   const actionRows = await getRoundCardExchangeActions(round.id);
   const initialActions = actionRows.filter((a) => asCardExchangeData(a).type === "initial");
   const returnActions = actionRows.filter((a) => asCardExchangeData(a).type === "return");
 
   // Who gave `position` a card in the initial exchange — that's who they
-  // owe a return to, regardless of what `recipientPosition` the client sent
-  // (validated against it below rather than trusted outright).
+  // owe a return to. No client-submitted recipientPosition to cross-check
+  // against: this is the only source for who the return goes to.
   const myInitial = initialActions.find((a) => asCardExchangeData(a).to === position);
   if (!myInitial) {
     return invalidExchangeResponse("you did not receive a card in the initial exchange");
   }
   const owedTo = asCardExchangeData(myInitial).from;
-  if (recipientPosition !== owedTo) {
-    return invalidExchangeResponse("recipientPosition does not match who gave you a card");
-  }
 
   if (returnActions.some((a) => asCardExchangeData(a).from === position)) {
     // Normally a genuine duplicate submission (retry/double-click) — reject
