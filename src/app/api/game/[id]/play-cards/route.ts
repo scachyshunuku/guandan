@@ -18,6 +18,7 @@ import type {
   PlayCardsRequest,
   PlayCardsResponse,
   PlayerPosition,
+  TrickEndActionData,
   TrickEntry,
 } from "@/lib/types";
 
@@ -141,6 +142,32 @@ export async function POST(
     return NextResponse.json({ error: "Failed to play cards" }, { status: 500 });
   }
 
+  // If this play resolved the trick, log a trick_end entry too (Task 6.3's
+  // "who won" audit trail — see GameHistory.tsx). Best-effort, like the
+  // broadcasts below: the play itself already succeeded and is already
+  // persisted, so a failure here shouldn't roll any of that back, only skip
+  // this supplementary log entry.
+  let trickEndActionRow: Record<string, unknown> | null = null;
+  if (advanced.trickWinner !== null) {
+    const trickEndActionData: TrickEndActionData = { winnerPosition: advanced.trickWinner };
+    const { data, error } = await supabaseAdmin
+      .from("game_actions")
+      .insert({
+        game_id: gameId,
+        round_id: round.id,
+        player_id: playerId,
+        action_type: "trick_end",
+        action_data: trickEndActionData,
+      })
+      .select("*")
+      .single();
+    if (error) {
+      console.error("Failed to log trick_end game_action", error);
+    } else {
+      trickEndActionRow = data;
+    }
+  }
+
   // Broadcast the new round state and the play itself so other players' and
   // spectators' useGameRealtimeSync picks it up in real time (see
   // ARCHITECTURE.md section 10, and start/route.ts's identical pattern).
@@ -150,6 +177,7 @@ export async function POST(
   await Promise.all([
     broadcastToGame(gameId, "round_updated", claimed[0]),
     broadcastToGame(gameId, "game_action", actionInsertResult.data),
+    ...(trickEndActionRow ? [broadcastToGame(gameId, "game_action", trickEndActionRow)] : []),
   ]);
 
   const response: PlayCardsResponse = { success: true };

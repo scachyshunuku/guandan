@@ -7,6 +7,7 @@ import type {
   GameParticipant,
   JoinActionData,
   LeaveActionData,
+  TrickEndActionData,
 } from "@/lib/types";
 import Card from "./Card";
 
@@ -27,7 +28,8 @@ export interface GameHistoryProps {
 // Full action-log replay/audit view (Task 6.3), backed by
 // GET /api/game/[id]/history (Task 3.4) - unredacted across every round,
 // unlike GameStateResponse.roundActions which only covers the current one.
-// Ordered oldest-first, same as the API returns it.
+// The API returns actions oldest-first (for replay); this view reverses
+// that for display so the most recent action reads at the top.
 export default function GameHistory({
   actions,
   participants = [],
@@ -63,7 +65,7 @@ export default function GameHistory({
       data-testid="game-history"
       className="flex max-h-64 flex-col gap-2 overflow-y-auto text-xs text-slate-700"
     >
-      {actions.map((action) => (
+      {[...actions].reverse().map((action) => (
         <li
           key={action.id}
           data-testid="game-history-entry"
@@ -101,6 +103,11 @@ function renderEntry(action: GameAction, participants: GameParticipant[]) {
 
     case "pass":
       return <span>{playerNameFor(action.playerId, participants)} passed</span>;
+
+    case "trick_end": {
+      const data = action.actionData as TrickEndActionData;
+      return <span>Trick ended — won by {nameForPosition(data.winnerPosition, participants)}</span>;
+    }
 
     case "card_exchange": {
       const data = action.actionData as CardExchangeActionData;

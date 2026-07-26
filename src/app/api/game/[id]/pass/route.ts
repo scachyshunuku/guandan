@@ -10,7 +10,13 @@ import { resolveTurn, type ActiveRoundRow } from "@/lib/gameDb";
 import { parseJsonBody } from "@/lib/http";
 import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import { PASS } from "@/lib/types";
-import type { PassRequest, PassResponse, PlayerPosition, TrickEntry } from "@/lib/types";
+import type {
+  PassRequest,
+  PassResponse,
+  PlayerPosition,
+  TrickEndActionData,
+  TrickEntry,
+} from "@/lib/types";
 import { advanceTrick, toGameState } from "@/lib/gameRules/turnAdvance";
 
 export async function POST(
@@ -96,11 +102,35 @@ export async function POST(
     return NextResponse.json({ error: "Failed to pass" }, { status: 500 });
   }
 
+  // If this pass resolved the trick, log a trick_end entry too — see
+  // play-cards/route.ts's identical, equally best-effort handling.
+  let trickEndActionRow: Record<string, unknown> | null = null;
+  if (advanced.trickWinner !== null) {
+    const trickEndActionData: TrickEndActionData = { winnerPosition: advanced.trickWinner };
+    const { data, error } = await supabaseAdmin
+      .from("game_actions")
+      .insert({
+        game_id: gameId,
+        round_id: round.id,
+        player_id: playerId,
+        action_type: "trick_end",
+        action_data: trickEndActionData,
+      })
+      .select("*")
+      .single();
+    if (error) {
+      console.error("Failed to log trick_end game_action", error);
+    } else {
+      trickEndActionRow = data;
+    }
+  }
+
   // Broadcast the new round state and the pass itself — see
   // play-cards/route.ts for why this is best-effort and non-fatal.
   await Promise.all([
     broadcastToGame(gameId, "round_updated", claimed[0]),
     broadcastToGame(gameId, "game_action", actionRow),
+    ...(trickEndActionRow ? [broadcastToGame(gameId, "game_action", trickEndActionRow)] : []),
   ]);
 
   const response: PassResponse = { success: true };

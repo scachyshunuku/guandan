@@ -41,6 +41,7 @@ describe("advanceTrick", () => {
       trickCount: 2,
       leaderPosition: 0,
       currentPlayerTurn: 2,
+      trickWinner: null,
     });
   });
 
@@ -61,6 +62,7 @@ describe("advanceTrick", () => {
       trickCount: 2,
       leaderPosition: 0,
       currentPlayerTurn: 0,
+      trickWinner: null,
     });
   });
 
@@ -79,6 +81,7 @@ describe("advanceTrick", () => {
       trickCount: 3,
       leaderPosition: 3,
       currentPlayerTurn: 3,
+      trickWinner: 3,
     });
   });
 
@@ -91,6 +94,7 @@ describe("advanceTrick", () => {
       trickCount: 6,
       leaderPosition: 0,
       currentPlayerTurn: 0,
+      trickWinner: 0,
     });
   });
 
@@ -111,6 +115,8 @@ describe("advanceTrick", () => {
     expect(result.leaderPosition).toBe(1);
     expect(result.currentPlayerTurn).toBe(1);
     expect(result.currentTrick).toEqual([]);
+    // trickWinner is the actual winner (3), not the partner who leads next.
+    expect(result.trickWinner).toBe(3);
   });
 
   it("hands the lead to the winner themselves when they still have cards", () => {
@@ -124,6 +130,7 @@ describe("advanceTrick", () => {
     ];
     const result = advanceTrick(currentTrick, pass(2), [], 0, 2);
     expect(result.leaderPosition).toBe(3);
+    expect(result.trickWinner).toBe(3);
   });
 
   it("credits the winner correctly even when they went out earlier in the same trick", () => {
@@ -134,5 +141,6 @@ describe("advanceTrick", () => {
     // their partner (position 2) leads next.
     expect(result.leaderPosition).toBe(2);
     expect(result.currentPlayerTurn).toBe(2);
+    expect(result.trickWinner).toBe(0);
   });
 });

@@ -35,6 +35,12 @@ export interface TrickAdvance {
   trickCount: number;
   leaderPosition: PlayerPosition;
   currentPlayerTurn: PlayerPosition;
+  // The position that won the trick this entry resolved, for callers that
+  // want to log a trick_end game_action - null while the trick is still in
+  // progress. This is the actual trick winner (calculateTrickWinner), not
+  // necessarily `leaderPosition`/`currentPlayerTurn`: those go to the
+  // winner's partner instead when the winner's play emptied their hand.
+  trickWinner: PlayerPosition | null;
 }
 
 // Appends `entry` (a play or a pass) to the trick and returns the resulting
@@ -97,6 +103,7 @@ export function advanceTrick(
       trickCount: trickCount + 1,
       leaderPosition: nextLeader,
       currentPlayerTurn: nextLeader,
+      trickWinner: winner,
     };
   }
 
@@ -105,6 +112,7 @@ export function advanceTrick(
     trickCount,
     leaderPosition,
     currentPlayerTurn: nextActivePosition(entry.position, finishOrder),
+    trickWinner: null,
   };
 }
 
