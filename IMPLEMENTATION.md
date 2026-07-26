@@ -335,13 +335,13 @@ All can be built with mocks, integrated later.
 ## Phase 6: Integration & Testing (Week 3)
 
 ### Task 6.1: End-to-End Game Flow
-- [ ] Create new game
-- [ ] 4 players join
-- [ ] Game starts (cards dealt)
-- [ ] Round of play (multiple tricks)
-- [ ] Card exchange
-- [ ] Next round starts
-- [ ] Integration test with real Supabase + API
+- [x] Create new game
+- [x] 4 players join
+- [x] Game starts (cards dealt)
+- [x] Round of play (multiple tricks)
+- [x] Card exchange
+- [x] Next round starts
+- [x] Integration test with real Supabase + API
 - **Blockers**: All Phase 3-5 tasks
 - **Testability**: E2E test (Cypress or Playwright)
 - **Estimated**: 8 hours
@@ -358,11 +358,11 @@ All can be built with mocks, integrated later.
 - **Estimated**: 8 hours
 
 ### Task 6.3: Performance & Polish
-- [ ] Animations (card plays, trick transitions)
-- [ ] Connection status indicator
-- [ ] Spectator list
-- [ ] Game history/replay
-- [ ] Mobile responsiveness
+- [x] Animations (card plays, trick transitions)
+- [x] Connection status indicator
+- [x] Spectator list
+- [x] Game history/replay
+- [x] Mobile responsiveness
 - **Blockers**: All Phase 3-5 tasks
 - **Testability**: Manual + Lighthouse
 - **Estimated**: 10 hours

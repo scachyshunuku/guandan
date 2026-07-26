@@ -32,7 +32,7 @@ export default function PlayerCard({
       data-position={position}
       className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-2 text-sm ${
         isCurrentTurn
-          ? "border-amber-400 bg-amber-50 ring-2 ring-amber-200"
+          ? "animate-pulse-turn border-amber-400 bg-amber-50 ring-2 ring-amber-200"
           : "border-gray-200 bg-white"
       }`}
     >

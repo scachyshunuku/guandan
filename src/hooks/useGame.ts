@@ -12,7 +12,7 @@
 // doc comment: "used to hydrate... on initial load & reconnect").
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { REALTIME_SUBSCRIBE_STATES } from "@supabase/supabase-js";
 import { useGameStore } from "@/store/gameStore";
@@ -45,6 +45,15 @@ const HEARTBEAT_INTERVAL_MS = HEARTBEAT_STALE_MS / 3;
 // once any seated client's request stops failing, without hammering the
 // route every render.
 const END_HAND_RETRY_INTERVAL_MS = 3_000;
+
+// This client's own link to the games:[id] realtime channel - distinct from
+// GameParticipant.isConnected, which is now tracked server-side via
+// heartbeat/route.ts (Task 6.2) and derived fresh from lastHeartbeat rather
+// than read off this. "connecting" covers the brief window before the first
+// subscribe callback fires, so it's treated as healthy the same as
+// "connected" (nothing to warn about yet, unlike a drop after having been
+// connected).
+export type ConnectionStatus = "connecting" | "connected" | "reconnecting" | "disconnected";
 
 // Removes one hand entry per card in `cards` (matched by suit/rank, not
 // object identity - the store's copy and the caller's copy of a card are
@@ -171,6 +180,21 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
   // "disconnected" flag from the previous game's channel, which otherwise
   // would trigger a pointless (if harmless) refetch on this game's first
   // SUBSCRIBED.
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
+  // Resets connectionStatus synchronously on a gameId change via React's
+  // documented "adjusting state during rendering" escape hatch
+  // (react.dev/learn/you-might-not-need-an-effect#adjusting-state-when-a-prop-changes)
+  // instead of inside the effect below - a setState there would trip
+  // react-hooks/set-state-in-effect, which exists to prevent exactly the
+  // extra render this pattern avoids. Tracked with its own state (not a
+  // ref) since this lint config also forbids reading/writing refs during
+  // render (react-hooks/refs).
+  const [lastGameId, setLastGameId] = useState(gameId);
+  if (lastGameId !== gameId) {
+    setLastGameId(gameId);
+    setConnectionStatus("connecting");
+  }
+
   useEffect(() => {
     const state = useGameStore.getState();
     if (state.gameId !== null && state.gameId !== gameId) {
@@ -215,6 +239,7 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
 
   const onStatusChange = useCallback((status: REALTIME_SUBSCRIBE_STATES) => {
     if (status === "SUBSCRIBED") {
+      setConnectionStatus("connected");
       if (wasDisconnectedRef.current) {
         wasDisconnectedRef.current = false;
         gameStateQueryRef.current.refetch();
@@ -222,6 +247,10 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
       return;
     }
     wasDisconnectedRef.current = true;
+    // CLOSED means the channel isn't coming back on its own (e.g. this tab's
+    // subscribe was explicitly torn down); TIMED_OUT/CHANNEL_ERROR are the
+    // transient drops the realtime client retries automatically.
+    setConnectionStatus(status === "CLOSED" ? "disconnected" : "reconnecting");
   }, []);
 
   useGameRealtimeSync(gameId, onGameAction, onStatusChange);
@@ -396,6 +425,7 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     roundActions,
     teamLevels,
     winningTeam,
+    connectionStatus,
 
     isLoading: gameStateQuery.isLoading,
     error: gameStateQuery.error,

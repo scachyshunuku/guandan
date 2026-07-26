@@ -1,20 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useGameContext } from "./GameProvider";
+import { useGameHistory } from "@/hooks/useGameHistory";
+import type { ConnectionStatus as ConnectionStatusValue } from "@/hooks/useGame";
 import GameTable from "@/components/game/GameTable";
 import PlayerHand from "@/components/game/PlayerHand";
 import TrickDisplay from "@/components/game/TrickDisplay";
 import ScoreBoard from "@/components/game/ScoreBoard";
 import ActionButtons from "@/components/game/ActionButtons";
 import CardExchangeModal from "@/components/game/CardExchangeModal";
+import ConnectionStatus from "@/components/game/ConnectionStatus";
 import GiverCardChoiceModal from "@/components/game/GiverCardChoiceModal";
+import SpectatorList from "@/components/game/SpectatorList";
+import GameHistory from "@/components/game/GameHistory";
 import TributeChoiceModal from "@/components/game/TributeChoiceModal";
 import WildCardSelector from "@/components/game/WildCardSelector";
 import { bestCardCandidates } from "@/lib/gameRules/cardExchange";
 import { canPlayCards } from "@/lib/gameRules/validation";
 import { levelRankForLevels } from "@/lib/cardUtils";
-import { gameShareLink, pluralize } from "@/lib/format";
+import { gameShareLink } from "@/lib/format";
+import { filterSpectators } from "@/store/gameStore";
 import type {
   Card,
   CardExchangeActionData,
@@ -47,6 +53,7 @@ export default function GamePage() {
     roundActions,
     teamLevels,
     winningTeam,
+    connectionStatus,
     isLoading,
     error,
     refetch,
@@ -94,6 +101,21 @@ export default function GamePage() {
     setWildActsAsByIndex({});
   }
 
+  const [showHistory, setShowHistory] = useState(false);
+  const history = useGameHistory({ gameId, enabled: showHistory });
+  // useGameHistory's query is a one-off fetch, not synced live off the
+  // games:[id] channel (unlike currentTrick/hand/etc.) - without this, a
+  // panel left open during play would silently go stale until closed and
+  // reopened. currentTrick changing is a proxy for "a new action landed."
+  useEffect(() => {
+    if (showHistory) history.refetch();
+    // Deliberately depends on history.refetch (react-query's stable
+    // function reference), not the whole `history` object, which is a
+    // fresh object literal every render (useGameHistory.ts) and would
+    // defeat this effect's point.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrick, showHistory, history.refetch]);
+
   if (isLoading) {
     return (
       <div data-testid="game-loading" className="flex flex-1 items-center justify-center bg-slate-100">
@@ -136,6 +158,7 @@ export default function GamePage() {
         gameId={gameId}
         participants={participants}
         myPosition={myPosition}
+        connectionStatus={connectionStatus}
         onJoin={handleJoin}
         isJoining={isJoiningGame}
         joinError={joinGameError}
@@ -211,14 +234,35 @@ export default function GamePage() {
     });
   }
 
+  const spectators = filterSpectators(participants);
+
   return (
     <main
       data-testid="game-page"
-      className="flex flex-1 flex-col items-center gap-6 bg-slate-100 px-4 py-8"
+      className="flex flex-1 flex-col items-center gap-4 bg-slate-100 px-2 py-4 sm:gap-6 sm:px-4 sm:py-8"
     >
+      <ConnectionStatus status={connectionStatus} />
       <ScoreBoard game={game} />
       <GameTable game={game} round={round} participants={participants} myPosition={myPosition} />
       <TrickDisplay trick={currentTrick} participants={participants} />
+      <SpectatorList spectators={spectators} />
+
+      <button
+        type="button"
+        data-testid="history-toggle"
+        onClick={() => setShowHistory((prev) => !prev)}
+        className="text-xs font-medium text-indigo-600 underline-offset-2 hover:underline"
+      >
+        {showHistory ? "Hide history" : "Show history"}
+      </button>
+      {showHistory && (
+        <GameHistory
+          actions={history.actions}
+          participants={participants}
+          isLoading={history.isLoading}
+          error={history.error}
+        />
+      )}
 
       {gameStatus === "completed" ? (
         <p data-testid="game-over-message" className="text-sm font-semibold text-slate-700">
@@ -334,6 +378,7 @@ function WaitingRoom({
   gameId,
   participants,
   myPosition,
+  connectionStatus,
   onJoin,
   isJoining,
   joinError,
@@ -350,6 +395,7 @@ function WaitingRoom({
   // taken). Either way, there's nothing more for them to do here, so both
   // show the join form below rather than only handling the first case.
   myPosition: PlayerPosition | null;
+  connectionStatus: ConnectionStatusValue;
   onJoin: (playerName: string) => void;
   isJoining: boolean;
   joinError: Error | null;
@@ -361,7 +407,7 @@ function WaitingRoom({
   const byPosition = new Map(
     participants.filter((p) => p.position !== null).map((p) => [p.position, p]),
   );
-  const spectators = participants.filter((p) => p.position === null);
+  const spectators = filterSpectators(participants);
   // Only a seated player can start (route.ts's "Only a seated player can
   // start the game"), and only once all 4 seats are filled (its "Need 4
   // players to start") - pre-checked here so the button never fires a
@@ -371,8 +417,9 @@ function WaitingRoom({
   return (
     <main
       data-testid="waiting-room"
-      className="flex flex-1 flex-col items-center gap-6 bg-slate-100 px-4 py-16"
+      className="flex flex-1 flex-col items-center gap-6 bg-slate-100 px-2 py-8 sm:px-4 sm:py-16"
     >
+      <ConnectionStatus status={connectionStatus} />
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-sm">
         <h1 className="mb-4 text-lg font-semibold text-slate-900">Waiting for players…</h1>
         <label className="mb-4 flex flex-col gap-1 text-sm text-slate-600">
@@ -403,9 +450,9 @@ function WaitingRoom({
           })}
         </ul>
         {spectators.length > 0 && (
-          <p data-testid="waiting-room-spectators" className="mt-4 text-xs text-slate-500">
-            {pluralize(spectators.length, "spectator")}: {spectators.map((s) => s.playerName).join(", ")}
-          </p>
+          <div className="mt-4">
+            <SpectatorList spectators={spectators} />
+          </div>
         )}
 
         {canStart && (

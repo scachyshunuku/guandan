@@ -17,31 +17,13 @@ import type {
   JoinGameResponse,
   StartGameResponse,
 } from "@/lib/types";
-import { POST as createGame } from "./create/route";
-import { POST as joinGame } from "./[id]/join/route";
-import { POST as startGame } from "./[id]/start/route";
+import { create as createGame, join, start } from "@/testUtils/gameRouteHelpers";
 
 const fake = supabaseAdmin as unknown as FakeSupabaseClient;
 
 beforeEach(() => {
   fake._reset();
 });
-
-function join(gameId: string, playerName: string, playerId: string) {
-  const request = new Request(`http://localhost/api/game/${gameId}/join`, {
-    method: "POST",
-    body: JSON.stringify({ playerName, playerId }),
-  });
-  return joinGame(request, { params: Promise.resolve({ id: gameId }) });
-}
-
-function start(gameId: string, playerId: string) {
-  const request = new Request(`http://localhost/api/game/${gameId}/start`, {
-    method: "POST",
-    body: JSON.stringify({ playerId }),
-  });
-  return startGame(request, { params: Promise.resolve({ id: gameId }) });
-}
 
 describe("full game setup", () => {
   it("takes a game from creation through 4 joins, a spectator, and start", async () => {
