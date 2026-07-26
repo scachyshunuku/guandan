@@ -358,11 +358,11 @@ All can be built with mocks, integrated later.
 - **Estimated**: 8 hours
 
 ### Task 6.3: Performance & Polish
-- [ ] Animations (card plays, trick transitions)
-- [ ] Connection status indicator
-- [ ] Spectator list
-- [ ] Game history/replay
-- [ ] Mobile responsiveness
+- [x] Animations (card plays, trick transitions)
+- [x] Connection status indicator
+- [x] Spectator list
+- [x] Game history/replay
+- [x] Mobile responsiveness
 - **Blockers**: All Phase 3-5 tasks
 - **Testability**: Manual + Lighthouse
 - **Estimated**: 10 hours

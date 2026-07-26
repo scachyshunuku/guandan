@@ -42,7 +42,7 @@ export default function Card({ card, selected = false, onClick }: CardComponentP
       data-testid="card"
       disabled={!onClick}
       onClick={onClick}
-      className={`relative flex h-24 w-16 overflow-hidden rounded-xl border bg-white shadow-sm transition-transform ${
+      className={`relative flex h-20 w-14 overflow-hidden rounded-xl border bg-white shadow-sm transition-transform sm:h-24 sm:w-16 ${
         selected ? "-translate-y-2 border-blue-500 ring-2 ring-blue-100" : "border-gray-200"
       } ${red ? "text-red-600" : "text-gray-900"}`}
     >

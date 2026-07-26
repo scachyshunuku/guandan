@@ -150,7 +150,7 @@ describe("TrickDisplay", () => {
 
     const rows = screen.getAllByTestId("trick-display-player");
     for (const row of rows) {
-      expect(row).toHaveClass("h-24");
+      expect(row).toHaveClass("h-20");
     }
   });
 });
