@@ -50,9 +50,30 @@ describe("advanceTrick", () => {
     expect(result.currentPlayerTurn).toBe(3);
   });
 
-  it("resolves the trick once every active (4/4) position has acted", () => {
-    const currentTrick: CurrentTrick = [play(0, "7"), pass(1), play(2, "9")];
+  it("does not resolve the trick just because every position has acted once — a later play must still come back around", () => {
+    // P1 plays, P2 plays (beats), P3 plays (beats) — P1 and P2 haven't had a
+    // chance to respond to P3's play yet, so the trick must continue even
+    // though every position has now acted exactly once.
+    const currentTrick: CurrentTrick = [play(0, "7"), play(1, "8"), play(2, "9")];
     const result = advanceTrick(currentTrick, play(3, "10"), [], 0, 2);
+    expect(result).toEqual({
+      currentTrick: [play(0, "7"), play(1, "8"), play(2, "9"), play(3, "10")],
+      trickCount: 2,
+      leaderPosition: 0,
+      currentPlayerTurn: 0,
+    });
+  });
+
+  it("resolves the trick once every other active position has passed consecutively since the last play", () => {
+    const currentTrick: CurrentTrick = [
+      play(0, "7"),
+      pass(1),
+      play(2, "9"),
+      play(3, "10"),
+      pass(0),
+      pass(1),
+    ];
+    const result = advanceTrick(currentTrick, pass(2), [], 0, 2);
     expect(result).toEqual({
       currentTrick: [],
       trickCount: 3,
@@ -74,9 +95,18 @@ describe("advanceTrick", () => {
   });
 
   it("hands the lead to the winner's partner when the winning play emptied their hand", () => {
-    const currentTrick: CurrentTrick = [play(0, "7"), pass(1), play(2, "9")];
-    // Position 3 wins with their last card — finishOrder already reflects it.
-    const result = advanceTrick(currentTrick, play(3, "10"), [3], 0, 2);
+    // Position 3 wins with their last card and goes out (finishOrder: [3]),
+    // so the remaining active positions (0, 1, 2) all still owe a fresh pass
+    // since 3's winning play before the trick actually resolves.
+    const currentTrick: CurrentTrick = [
+      play(0, "7"),
+      pass(1),
+      pass(2),
+      play(3, "10"),
+      pass(0),
+      pass(1),
+    ];
+    const result = advanceTrick(currentTrick, pass(2), [3], 0, 2);
     // Position 3's partner (team B) is position 1.
     expect(result.leaderPosition).toBe(1);
     expect(result.currentPlayerTurn).toBe(1);
@@ -84,8 +114,15 @@ describe("advanceTrick", () => {
   });
 
   it("hands the lead to the winner themselves when they still have cards", () => {
-    const currentTrick: CurrentTrick = [play(0, "7"), pass(1), play(2, "9")];
-    const result = advanceTrick(currentTrick, play(3, "10"), [], 0, 2);
+    const currentTrick: CurrentTrick = [
+      play(0, "7"),
+      pass(1),
+      pass(2),
+      play(3, "10"),
+      pass(0),
+      pass(1),
+    ];
+    const result = advanceTrick(currentTrick, pass(2), [], 0, 2);
     expect(result.leaderPosition).toBe(3);
   });
 

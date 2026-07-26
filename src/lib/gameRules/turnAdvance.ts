@@ -6,7 +6,7 @@
 // happens next), not the trick-winner/round-end/promotion *rules* scoring.ts
 // owns.
 
-import type { CurrentTrick, GameState, PlayerPosition, TrickEntry } from "../types";
+import { PASS, type CurrentTrick, type GameState, type PlayerPosition, type TrickEntry } from "../types";
 import { calculateNextLeader, calculateTrickWinner } from "./scoring";
 
 const ALL_POSITIONS: readonly PlayerPosition[] = [0, 1, 2, 3];
@@ -39,11 +39,12 @@ export interface TrickAdvance {
 
 // Appends `entry` (a play or a pass) to the trick and returns the resulting
 // turn/trick state: either handing the turn to the next active position, or
-// — once every position active at the time has acted — resolving the trick
-// to its winner, who leads next (their partner instead, if the winner's own
-// play just emptied their hand — RULES.md "Leader Selection": "Winner out
-// of cards"). `finishOrder` must already reflect this entry's effect (i.e.
-// include the acting position if this exact play emptied their hand).
+// — once every other active position has passed consecutively since the
+// last play — resolving the trick to its winner, who leads next (their
+// partner instead, if the winner's own play just emptied their hand —
+// RULES.md "Leader Selection": "Winner out of cards"). `finishOrder` must
+// already reflect this entry's effect (i.e. include the acting position if
+// this exact play emptied their hand).
 export function advanceTrick(
   currentTrick: CurrentTrick,
   entry: TrickEntry,
@@ -53,12 +54,33 @@ export function advanceTrick(
 ): TrickAdvance {
   const updatedTrick: CurrentTrick = [...currentTrick, entry];
 
+  // A trick resolves once every other active player has passed consecutively
+  // since the last (winning) play — not merely once each active position has
+  // acted once total, which would end the trick the first time it comes back
+  // around even if most of those "acts" were plays that beat the lead rather
+  // than passes (RULES.md: "the trick ends when three [or, with fewer active
+  // players, all other] consecutive players pass"). Find the most recent
+  // non-PASS entry (there's always at least one: a trick can't open with a
+  // pass) and count how many entries have passed since — that's how many
+  // distinct active positions have passed in a row, since turn order visits
+  // each active position at most once before the trick would resolve.
+  const lastPlayIndex = updatedTrick.reduce(
+    (last, e, i) => (e.play !== PASS ? i : last),
+    -1,
+  );
+  const lastPlayPosition = updatedTrick[lastPlayIndex].position;
+  const consecutivePassesSinceLastPlay = updatedTrick.length - 1 - lastPlayIndex;
+
   // Every position active when this trick could still be contested must
-  // act exactly once — including one who goes out on this very entry, who
-  // already has (which is why this checks `finishOrder`, evaluated *after*
-  // this entry, rather than requiring a fixed count of 4).
+  // pass, other than whoever made that last play — unless that player has
+  // *since* gone out (finishOrder, evaluated after this entry), in which
+  // case they're no longer in activePositions to be excluded from, and
+  // everyone remaining active must pass instead.
   const activePositions = ALL_POSITIONS.filter((p) => !finishOrder.includes(p));
-  const trickComplete = activePositions.every((p) => updatedTrick.some((e) => e.position === p));
+  const requiredPasses = activePositions.includes(lastPlayPosition)
+    ? activePositions.length - 1
+    : activePositions.length;
+  const trickComplete = consecutivePassesSinceLastPlay === requiredPasses;
 
   if (trickComplete) {
     const winner = calculateTrickWinner(updatedTrick);

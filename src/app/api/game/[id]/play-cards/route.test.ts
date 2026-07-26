@@ -232,7 +232,7 @@ describe("POST /api/game/[id]/play-cards", () => {
     );
   });
 
-  it("resolves the trick once all 4 positions have acted, crediting the last non-PASS play", async () => {
+  it("does not resolve the trick just because every position has acted once — a later play must still come back around", async () => {
     const gameId = await seedGame();
     const roundId = await seedRound(gameId, {
       leader_position: 0,
@@ -259,14 +259,25 @@ describe("POST /api/game/[id]/play-cards", () => {
     expect(response.status).toBe(200);
 
     const round = fake._tables.game_rounds.find((r) => r.id === roundId);
-    // position 3's play was the last non-PASS entry, so they win and lead
-    // next — they still have a card left, so they lead themselves.
-    expect(round?.leader_position).toBe(3);
-    expect(round?.current_player_turn).toBe(3);
-    expect(round?.game_state).toEqual({ currentTrick: [], trickCount: 3, finishOrder: [] });
+    // Position 3's play beat position 2's, but position 1's earlier pass
+    // happened before that — 0 and 1 haven't had a chance to respond to
+    // position 3's play yet, so the trick must continue back around to them
+    // rather than resolving immediately.
+    expect(round?.leader_position).toBe(0);
+    expect(round?.current_player_turn).toBe(0);
+    expect(round?.game_state).toEqual({
+      currentTrick: [
+        { position: 0, play: [{ rank: "7", suit: "CLUBS" }] },
+        { position: 1, play: PASS },
+        { position: 2, play: [{ rank: "9", suit: "CLUBS" }] },
+        { position: 3, play: [{ rank: "10", suit: "CLUBS" }] },
+      ],
+      trickCount: 2,
+      finishOrder: [],
+    });
   });
 
-  it("hands the lead to the winner's partner when the winning play empties their hand", async () => {
+  it("does not resolve the trick just because the winning play emptied the player's hand — the rest still owe a pass", async () => {
     const gameId = await seedGame();
     const roundId = await seedRound(gameId, {
       leader_position: 0,
@@ -290,13 +301,21 @@ describe("POST /api/game/[id]/play-cards", () => {
     expect(response.status).toBe(200);
 
     const round = fake._tables.game_rounds.find((r) => r.id === roundId);
-    // p3 (team B, positions 1 & 3) won the trick but has no cards left to
-    // lead with, so their partner (position 1) leads next instead — the
-    // round continues rather than freezing, since only one player is out
-    // (RULES.md "Winner out of cards").
-    expect(round?.leader_position).toBe(1);
-    expect(round?.current_player_turn).toBe(1);
-    expect(round?.game_state).toEqual({ currentTrick: [], trickCount: 3, finishOrder: [3] });
+    // p3 goes out on this play (finishOrder: [3]), but 0 and 1 still haven't
+    // had a chance to respond to their winning play, so the trick keeps
+    // going — turn skips straight past the now-finished position 3 to 0.
+    expect(round?.leader_position).toBe(0);
+    expect(round?.current_player_turn).toBe(0);
+    expect(round?.game_state).toEqual({
+      currentTrick: [
+        { position: 0, play: [{ rank: "7", suit: "CLUBS" }] },
+        { position: 1, play: PASS },
+        { position: 2, play: [{ rank: "9", suit: "CLUBS" }] },
+        { position: 3, play: [{ rank: "10", suit: "CLUBS" }] },
+      ],
+      trickCount: 2,
+      finishOrder: [3],
+    });
   });
 
   it("continues play with the next active player when a lead empties the leader's hand (round not yet decided)", async () => {
