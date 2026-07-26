@@ -12,6 +12,12 @@ export interface ActionButtonsProps {
   onPlay: (cards: CardWithWild[]) => void;
   onPass: () => void;
   isSubmitting?: boolean;
+  // True while a selected level-rank heart still needs its wild
+  // interpretation resolved (WildCardSelector is open) - Play stays disabled
+  // until the player explicitly decides, even if the raw selection would
+  // already be a legal play as-is. Pass is unaffected, since passing doesn't
+  // depend on how the selection resolves.
+  hasPendingWildChoice?: boolean;
 }
 
 // Play/Pass controls for the viewer's turn. Play re-runs the same
@@ -28,9 +34,10 @@ export default function ActionButtons({
   onPlay,
   onPass,
   isSubmitting = false,
+  hasPendingWildChoice = false,
 }: ActionButtonsProps) {
   const playValidation = canPlayCards(selectedCards, hand, currentTrick, levelRank);
-  const canPlay = isMyTurn && !isSubmitting && playValidation.valid;
+  const canPlay = isMyTurn && !isSubmitting && !hasPendingWildChoice && playValidation.valid;
   const canPass = isMyTurn && !isSubmitting && currentTrick.length > 0;
 
   return (

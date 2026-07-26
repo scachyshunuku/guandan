@@ -5,24 +5,37 @@ import { RANK_LABELS, STANDARD_RANK_ORDER, SUIT_SYMBOLS } from "@/lib/cardUtils"
 import type { StandardRank, Suit } from "@/lib/types";
 
 const SUITS: readonly Suit[] = ["CLUBS", "DIAMONDS", "HEARTS", "SPADES"];
+const RED_SUITS = new Set<Suit>(["HEARTS", "DIAMONDS"]);
 
 export interface WildCardSelectorProps {
+  card: { rank: StandardRank; suit: Suit };
   onConfirm: (actsAs: { rank: StandardRank; suit: Suit }) => void;
   onCancel?: () => void;
 }
 
-// Shown when the player plays their level-rank heart as a wild card
-// (RULES.md "Level Cards & Wild Cards": it can stand in for any card except a
-// joker), to pick what it impersonates. Rank and suit are chosen
-// independently — 13 ranks x 4 suits, never a joker — then Confirm submits
-// the pair together, since `actsAs` needs both at once.
-export default function WildCardSelector({ onConfirm, onCancel }: WildCardSelectorProps) {
+// Shown for every level-rank heart in the selection (RULES.md "Level Cards &
+// Wild Cards": it can stand in for any card except a joker), so the player
+// always decides the interpretation instead of it being inferred from
+// whether the raw play happened to already be legal. Rank and suit are
+// chosen independently — 13 ranks x 4 suits, never a joker — then Confirm
+// submits the pair together, since `actsAs` needs both at once. "Play as
+// itself" is a shortcut for the common case of not substituting at all.
+export default function WildCardSelector({ card, onConfirm, onCancel }: WildCardSelectorProps) {
   const [rank, setRank] = useState<StandardRank | null>(null);
   const [suit, setSuit] = useState<Suit | null>(null);
 
   return (
     <div data-testid="wild-card-selector" className="flex flex-col gap-3">
       <p className="text-sm font-medium text-gray-700">Play wild card as...</p>
+
+      <button
+        type="button"
+        data-testid="wild-card-play-as-itself-button"
+        onClick={() => onConfirm({ rank: card.rank, suit: card.suit })}
+        className="self-start rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50"
+      >
+        Play as itself ({RANK_LABELS[card.rank]} {SUIT_SYMBOLS[card.suit]})
+      </button>
 
       <div data-testid="wild-card-rank-options" className="flex flex-wrap gap-1">
         {STANDARD_RANK_ORDER.map((r) => (
@@ -34,8 +47,10 @@ export default function WildCardSelector({ onConfirm, onCancel }: WildCardSelect
             aria-label={RANK_LABELS[r]}
             aria-pressed={rank === r}
             onClick={() => setRank(r)}
-            className={`rounded-md border px-2 py-1 text-sm ${
-              rank === r ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200"
+            className={`rounded-md border px-2 py-1 text-sm font-medium ${
+              rank === r
+                ? "border-blue-600 bg-blue-600 text-white"
+                : "border-gray-300 bg-white text-gray-800 hover:border-gray-400 hover:bg-gray-50"
             }`}
           >
             {RANK_LABELS[r]}
@@ -44,22 +59,30 @@ export default function WildCardSelector({ onConfirm, onCancel }: WildCardSelect
       </div>
 
       <div data-testid="wild-card-suit-options" className="flex flex-wrap gap-1">
-        {SUITS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            data-testid="wild-card-suit-option"
-            data-suit={s}
-            aria-label={s.toLowerCase()}
-            aria-pressed={suit === s}
-            onClick={() => setSuit(s)}
-            className={`rounded-md border px-3 py-1 text-lg ${
-              suit === s ? "border-blue-500 bg-blue-50" : "border-gray-200"
-            }`}
-          >
-            {SUIT_SYMBOLS[s]}
-          </button>
-        ))}
+        {SUITS.map((s) => {
+          const red = RED_SUITS.has(s);
+          const selected = suit === s;
+          return (
+            <button
+              key={s}
+              type="button"
+              data-testid="wild-card-suit-option"
+              data-suit={s}
+              aria-label={s.toLowerCase()}
+              aria-pressed={selected}
+              onClick={() => setSuit(s)}
+              className={`rounded-md border px-3 py-1 text-lg ${
+                selected
+                  ? "border-blue-600 bg-blue-600 text-white"
+                  : `border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50 ${
+                      red ? "text-red-600" : "text-gray-900"
+                    }`
+              }`}
+            >
+              {SUIT_SYMBOLS[s]}
+            </button>
+          );
+        })}
       </div>
 
       <div className="flex gap-2">

@@ -388,12 +388,14 @@ describe("GamePage", () => {
     expect(screen.queryByTestId("giver-card-choice-modal")).not.toBeInTheDocument();
   });
 
-  it("lets a lone wild card be played as itself without opening the selector", async () => {
+  it("always opens the selector for a selected wild card, even when playing it as itself would already be legal", async () => {
     const playCardsMock = jest.fn().mockResolvedValue(undefined);
     useGameContextMock.mockReturnValue(
       baseContext({
-        // Level rank is "2" for teamLevels [2, 2] - the heart 2 is wild, but
-        // a lone card is already a valid single on an empty trick.
+        // Level rank is "2" for teamLevels [2, 2] - the heart 2 is wild, and
+        // a lone card is already a valid single on an empty trick. The
+        // selector should still open so the player can decide how it's
+        // played rather than that being inferred silently.
         hand: [{ suit: "HEARTS", rank: "2" }],
         currentTrick: [],
         playCards: playCardsMock,
@@ -405,11 +407,17 @@ describe("GamePage", () => {
     const cards = screen.getByTestId("player-hand").querySelectorAll('[data-testid="card"]');
     await user.click(cards[0]);
 
-    expect(screen.queryByTestId("wild-card-selector")).not.toBeInTheDocument();
-    expect(screen.getByTestId("play-button")).toBeEnabled();
+    expect(screen.getByTestId("wild-card-selector")).toBeInTheDocument();
+    expect(screen.getByTestId("play-button")).toBeDisabled();
 
+    await user.click(screen.getByTestId("wild-card-play-as-itself-button"));
+
+    expect(screen.queryByTestId("wild-card-selector")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("play-button")).toBeEnabled());
     await user.click(screen.getByTestId("play-button"));
-    expect(playCardsMock).toHaveBeenCalledWith([{ suit: "HEARTS", rank: "2" }]);
+    expect(playCardsMock).toHaveBeenCalledWith([
+      { suit: "HEARTS", rank: "2", actsAs: { rank: "2", suit: "HEARTS" } },
+    ]);
   });
 
   it("prompts for a wild-card interpretation when the raw selection isn't already legal, then plays with actsAs attached", async () => {

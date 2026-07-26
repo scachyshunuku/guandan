@@ -73,6 +73,22 @@ describe("ActionButtons", () => {
     expect(screen.queryByTestId("play-invalid-reason")).not.toBeInTheDocument();
   });
 
+  it("disables Play while a wild-card choice is pending, even with an otherwise-valid selection", () => {
+    render(
+      <ActionButtons
+        hand={HAND}
+        selectedCards={[HAND[0]]}
+        currentTrick={[]}
+        levelRank="2"
+        isMyTurn={true}
+        onPlay={jest.fn()}
+        onPass={jest.fn()}
+        hasPendingWildChoice={true}
+      />,
+    );
+    expect(screen.getByTestId("play-button")).toBeDisabled();
+  });
+
   it("disables Pass on an empty trick (the leader must play)", () => {
     render(
       <ActionButtons
