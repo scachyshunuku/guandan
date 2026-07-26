@@ -207,6 +207,15 @@ async function finalizeContinuingHand(
   if (plan.cancelled) {
     return finalizeCancelledTribute(game, round, finishingPositions, teamALevel, teamBLevel);
   }
+  // RULES.md "Card Exchange" → "Best card, when tied": one or both givers'
+  // own hands have a tie for their best card — pause on
+  // 'awaiting_giver_choice' for them to decide (choose-giver-card/route.ts)
+  // before anything past that (including the cross-giver comparison below)
+  // can even be computed. Checked before needsChoice: a genuine cross-giver
+  // tie can't be detected until each giver's own contribution is settled.
+  if (plan.needsGiverChoice) {
+    return finalizePendingGiverChoice(game, round, finishingPositions, plan, levelRank, teamALevel, teamBLevel);
+  }
   // RULES.md "Two-Team Lead": 3rd/4th's best cards tied in rank — pause on
   // 'awaiting_tribute_choice' for 1st place to decide (choose-tribute/
   // route.ts) rather than resolving the tie arbitrarily. Level promotion
@@ -391,6 +400,89 @@ async function finalizeCancelledTribute(
   // level change (and, for a cancelled tribute, the fact that nothing else
   // changed hands) is this function's own news to announce.
   await broadcastToGame(game.id, "game_updated", gameUpdateResult.data[0]);
+
+  const response: EndHandResponse = { success: true };
+  return NextResponse.json(response);
+}
+
+// RULES.md "Card Exchange" → "Best card, when tied": one or both givers'
+// own hands have multiple cards tied for their best card — they must
+// choose which to give (choose-giver-card/route.ts resolves each choice)
+// before there's anything to hand off further, including the cross-giver
+// comparison finalizePendingTributeChoice handles. Level promotion still
+// applies now, same as every other continuing-hand path; only the
+// transfers themselves wait on the choice(s).
+async function finalizePendingGiverChoice(
+  game: GameRow,
+  round: GameRoundRow,
+  finishingPositions: number[],
+  plan: Extract<ExchangePlan, { needsGiverChoice: true }>,
+  levelRank: StandardRank,
+  teamALevel: number,
+  teamBLevel: number,
+) {
+  const originalFinishingPositions = round.finishing_positions;
+
+  const newGameState: GameState = {
+    currentTrick: round.game_state.currentTrick,
+    trickCount: round.game_state.trickCount,
+    finishOrder: round.game_state.finishOrder,
+    pendingGiverChoice: {
+      levelRank,
+      pendingPositions: plan.givers.map((g) => g.position),
+      resolvedCards: {},
+    },
+  };
+
+  const roundClaimResult = await supabaseAdmin
+    .from("game_rounds")
+    .update({
+      finishing_positions: finishingPositions,
+      status: "awaiting_giver_choice",
+      game_state: newGameState,
+    })
+    .eq("id", round.id)
+    .eq("status", "in_progress")
+    .select("*");
+  if (roundClaimResult.error) {
+    console.error("Failed to claim end-hand transition", roundClaimResult.error);
+    return NextResponse.json({ error: "Failed to end hand" }, { status: 500 });
+  }
+  const claimedRound = roundClaimResult.data?.[0];
+  if (!claimedRound) {
+    return NextResponse.json(
+      { error: "hand was already ended by another request" },
+      { status: 409 },
+    );
+  }
+
+  const gameUpdateResult = await supabaseAdmin
+    .from("games")
+    .update({ team_a_level: teamALevel, team_b_level: teamBLevel })
+    .eq("id", game.id)
+    .eq("status", "in_progress")
+    .select("*");
+  if (gameUpdateResult.error || !gameUpdateResult.data?.length) {
+    console.error(
+      "Failed to persist level promotion while pausing for a giver card choice; rolling back",
+      gameUpdateResult.error,
+    );
+    await supabaseAdmin
+      .from("game_rounds")
+      .update({
+        finishing_positions: originalFinishingPositions,
+        status: "in_progress",
+        game_state: round.game_state,
+      })
+      .eq("id", round.id)
+      .eq("status", "awaiting_giver_choice");
+    return NextResponse.json({ error: "Failed to end hand" }, { status: 500 });
+  }
+
+  await Promise.all([
+    broadcastToGame(game.id, "round_updated", claimedRound),
+    broadcastToGame(game.id, "game_updated", gameUpdateResult.data[0]),
+  ]);
 
   const response: EndHandResponse = { success: true };
   return NextResponse.json(response);

@@ -8,8 +8,10 @@ import TrickDisplay from "@/components/game/TrickDisplay";
 import ScoreBoard from "@/components/game/ScoreBoard";
 import ActionButtons from "@/components/game/ActionButtons";
 import CardExchangeModal from "@/components/game/CardExchangeModal";
+import GiverCardChoiceModal from "@/components/game/GiverCardChoiceModal";
 import TributeChoiceModal from "@/components/game/TributeChoiceModal";
 import WildCardSelector from "@/components/game/WildCardSelector";
+import { bestCardCandidates } from "@/lib/gameRules/cardExchange";
 import { canPlayCards } from "@/lib/gameRules/validation";
 import { levelRankForLevels } from "@/lib/cardUtils";
 import { gameShareLink, pluralize } from "@/lib/format";
@@ -41,6 +43,7 @@ export default function GamePage() {
     roundStatus,
     finishingPositions,
     pendingTributeChoice,
+    pendingGiverChoice,
     roundActions,
     teamLevels,
     winningTeam,
@@ -62,6 +65,9 @@ export default function GamePage() {
     chooseTribute,
     isChoosingTribute,
     chooseTributeError,
+    chooseGiverCard,
+    isChoosingGiverCard,
+    chooseGiverCardError,
     startGame,
     isStartingGame,
     startGameError,
@@ -199,6 +205,12 @@ export default function GamePage() {
     });
   }
 
+  function handleChooseGiverCard(card: Card) {
+    chooseGiverCard(card).catch(() => {
+      // Failure surfaces via chooseGiverCardError below.
+    });
+  }
+
   return (
     <main
       data-testid="game-page"
@@ -233,6 +245,19 @@ export default function GamePage() {
           onSubmitReturn={handleSubmitReturn}
           isSubmitting={isExchangingCards}
         />
+      ) : roundStatus === "awaiting_giver_choice" && pendingGiverChoice ? (
+        pendingGiverChoice.pendingPositions.includes(myPosition) ? (
+          <GiverCardChoiceModal
+            candidates={bestCardCandidates(hand, pendingGiverChoice.levelRank)}
+            onChoose={handleChooseGiverCard}
+            isSubmitting={isChoosingGiverCard}
+          />
+        ) : (
+          <p data-testid="giver-choice-waiting" className="text-sm text-slate-500">
+            Waiting for position {pendingGiverChoice.pendingPositions.join(", ")} to choose which
+            card to give…
+          </p>
+        )
       ) : roundStatus === "awaiting_tribute_choice" && pendingTributeChoice ? (
         <TributeChoiceModal
           thirdPosition={pendingTributeChoice.thirdPosition}
@@ -292,6 +317,11 @@ export default function GamePage() {
       {chooseTributeError && (
         <p data-testid="tribute-choice-error" className="text-xs text-red-500">
           {chooseTributeError.message}
+        </p>
+      )}
+      {chooseGiverCardError && (
+        <p data-testid="giver-choice-error" className="text-xs text-red-500">
+          {chooseGiverCardError.message}
         </p>
       )}
     </main>

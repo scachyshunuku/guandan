@@ -22,6 +22,7 @@ import { encodeCard } from "@/lib/cardUtils";
 import { HEARTBEAT_STALE_MS } from "@/lib/presence";
 import { PASS } from "@/lib/types";
 import type {
+  Card,
   CardExchangeActionData,
   CardWithWild,
   GameAction,
@@ -112,6 +113,7 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
   const roundStatus = useGameStore((s) => s.roundStatus);
   const finishingPositions = useGameStore((s) => s.finishingPositions);
   const pendingTributeChoice = useGameStore((s) => s.pendingTributeChoice);
+  const pendingGiverChoice = useGameStore((s) => s.pendingGiverChoice);
   const roundActions = useGameStore((s) => s.roundActions);
   const teamLevels = useGameStore((s) => s.teamLevels);
   const winningTeam = useGameStore((s) => s.winningTeam);
@@ -293,6 +295,11 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     [],
   );
 
+  const chooseGiverCard = useCallback(
+    (card: Card) => actionsRef.current.chooseGiverCard(card),
+    [],
+  );
+
   const playCards = useCallback(
     (cards: CardWithWild[]) =>
       withOptimisticUpdate(() => {
@@ -385,6 +392,7 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     roundStatus,
     finishingPositions,
     pendingTributeChoice,
+    pendingGiverChoice,
     roundActions,
     teamLevels,
     winningTeam,
@@ -415,6 +423,10 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     chooseTribute,
     isChoosingTribute: actions.isChoosingTribute,
     chooseTributeError: actions.chooseTributeError,
+
+    chooseGiverCard,
+    isChoosingGiverCard: actions.isChoosingGiverCard,
+    chooseGiverCardError: actions.chooseGiverCardError,
 
     startGame,
     isStartingGame: actions.isStartingGame,

@@ -47,6 +47,7 @@ function baseContext(overrides: Partial<GameContextValue> = {}): GameContextValu
     roundStatus: "in_progress",
     finishingPositions: null,
     pendingTributeChoice: null,
+    pendingGiverChoice: null,
     roundActions: [],
     teamLevels: [2, 2],
     winningTeam: null,
@@ -68,6 +69,9 @@ function baseContext(overrides: Partial<GameContextValue> = {}): GameContextValu
     chooseTribute: jest.fn(),
     isChoosingTribute: false,
     chooseTributeError: null,
+    chooseGiverCard: jest.fn(),
+    isChoosingGiverCard: false,
+    chooseGiverCardError: null,
     startGame: jest.fn().mockResolvedValue({ success: true, hand: [] }),
     isStartingGame: false,
     startGameError: null,
@@ -325,6 +329,44 @@ describe("GamePage", () => {
     );
     render(<GamePage />);
     expect(screen.getByTestId("tribute-choice-waiting")).toBeInTheDocument();
+  });
+
+  it("lets a pending giver resolve their own tied best-card choice", async () => {
+    const chooseGiverCardMock = jest.fn().mockResolvedValue(undefined);
+    useGameContextMock.mockReturnValue(
+      baseContext({
+        roundStatus: "awaiting_giver_choice",
+        // Level rank is "2" for teamLevels [2, 2] - neither King is wild, so
+        // they're a genuine tie.
+        hand: [
+          { suit: "SPADES", rank: "KING" },
+          { suit: "HEARTS", rank: "KING" },
+        ],
+        pendingGiverChoice: { levelRank: "2", pendingPositions: [0], resolvedCards: {} },
+        chooseGiverCard: chooseGiverCardMock,
+      }),
+    );
+    const user = userEvent.setup();
+    render(<GamePage />);
+
+    expect(screen.getByTestId("giver-card-choice-modal")).toBeInTheDocument();
+    const cards = screen.getByTestId("giver-card-choice-options").querySelectorAll('[data-testid="card"]');
+    expect(cards).toHaveLength(2);
+    await user.click(cards[1]);
+    expect(chooseGiverCardMock).toHaveBeenCalledWith({ suit: "HEARTS", rank: "KING" });
+  });
+
+  it("shows a waiting message for the giver choice when the viewer isn't the one who owes it", () => {
+    useGameContextMock.mockReturnValue(
+      baseContext({
+        myPosition: 0,
+        roundStatus: "awaiting_giver_choice",
+        pendingGiverChoice: { levelRank: "2", pendingPositions: [1], resolvedCards: {} },
+      }),
+    );
+    render(<GamePage />);
+    expect(screen.getByTestId("giver-choice-waiting")).toBeInTheDocument();
+    expect(screen.queryByTestId("giver-card-choice-modal")).not.toBeInTheDocument();
   });
 
   it("lets a lone wild card be played as itself without opening the selector", async () => {

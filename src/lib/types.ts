@@ -124,6 +124,23 @@ export interface GameState {
     fourthPosition: PlayerPosition;
     fourthCard: Card;
   };
+  // RULES.md "Card Exchange" → "Best card, when tied": a giver (3rd and/or
+  // 4th place) whose own hand has multiple cards tied for their best card
+  // must choose which one to give — mirrors pendingTributeChoice, but for
+  // the giver's side of the exchange instead of the recipient's. Set only
+  // while roundStatus is 'awaiting_giver_choice'; cleared once every
+  // pending position has resolved (round moves on to
+  // 'awaiting_tribute_choice' if the two givers' resolved cards now tie
+  // with each other, or straight to 'card_exchange' otherwise).
+  pendingGiverChoice?: {
+    // The just-finished hand's level (RULES.md "Level Cards & Wild Cards"),
+    // captured once here rather than re-derived from the game's team
+    // levels later — those may already have been promoted by the time a
+    // later giver's choice or the final cross-giver comparison needs it.
+    levelRank: StandardRank;
+    pendingPositions: PlayerPosition[];
+    resolvedCards: Partial<Record<PlayerPosition, Card>>;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -131,12 +148,18 @@ export interface GameState {
 // ---------------------------------------------------------------------------
 
 export type GameStatus = "waiting" | "in_progress" | "completed";
+// 'awaiting_giver_choice': a giver (3rd and/or 4th place) whose own hand has
+// multiple cards tied for their best card — waiting on POST
+// /api/game/[id]/choose-giver-card before the round can move on (either to
+// 'awaiting_tribute_choice', if the resolved cards then tie with each
+// other, or straight to 'card_exchange').
 // 'awaiting_tribute_choice': a two-team-lead (1-2) finish whose 3rd/4th
 // tribute cards tied in rank (RULES.md "Two-Team Lead") — waiting on 1st
 // place to choose via POST /api/game/[id]/choose-tribute before the round
 // can move on to 'card_exchange'.
 export type RoundStatus =
   | "in_progress"
+  | "awaiting_giver_choice"
   | "awaiting_tribute_choice"
   | "card_exchange"
   | "completed";
@@ -309,6 +332,19 @@ export interface EndHandRequest {
 export interface EndHandResponse {
   success: true;
 }
+
+// RULES.md "Card Exchange" → "Best card, when tied": a giver (3rd and/or
+// 4th place) whose own hand has multiple cards tied for their best card
+// chooses which one to give — `card` must be one of those tied candidates.
+// No `position` field (see PlayCardsRequest's comment).
+export interface ChooseGiverCardRequest {
+  playerId: string;
+  card: Card;
+}
+
+export type ChooseGiverCardResponse =
+  | { success: true }
+  | { success: false; error: string; reason: string };
 
 // RULES.md "Two-Team Lead": "If the two cards are the same rank, 1st place
 // chooses which card to take (then 2nd place gets the other)." `take`

@@ -41,7 +41,10 @@ game_rounds (per-round state, one per hand)
 ├── game_state (JSONB) -- {playedCards: {}, playedThisTrick: {...}, trickCount: int, ...}
 ├── current_player_turn (INT: 0-3) -- whose turn it is
 ├── leader_position (INT: 0-3) -- who led current trick
-├── status (TEXT: 'in_progress', 'awaiting_tribute_choice', 'card_exchange', 'completed'; validated in app code)
+├── status (TEXT: 'in_progress', 'awaiting_giver_choice', 'awaiting_tribute_choice', 'card_exchange', 'completed'; validated in app code)
+│   -- 'awaiting_giver_choice': RULES.md "Best card, when tied" - a giver
+│      (3rd and/or 4th place) whose own hand ties for their best card,
+│      paused for their choice via POST .../choose-giver-card
 │   -- 'awaiting_tribute_choice': RULES.md "Two-Team Lead" same-rank tribute tie,
 │      paused for 1st place's choice via POST .../choose-tribute
 ├── finishing_positions (INT[]) -- [p0_finish, p1_finish, p2_finish, p3_finish] e.g. [1, 4, 2, 3]
@@ -511,6 +514,19 @@ Note: no `type` or `recipientPosition` field — this route only ever accepts
 a 'return' exchange (so `type` could only ever be one legal value), and who
 it goes back to is derived from the 'initial' card_exchange game_actions
 history (who gave the caller their card), not trusted from the client.
+
+### `POST /api/game/[code]/choose-giver-card`
+RULES.md "Card Exchange" → "Best card, when tied": resolves a giver's (3rd
+and/or 4th place) own tie for their best card — only a giver who currently
+owes this choice can call it, and `card` must be one of their own tied
+candidates. Runs before, and independently of, `choose-tribute` below: a
+two-team lead's two givers can each owe (and resolve) this choice in either
+order or in parallel, and only once both are resolved does the round check
+whether their two cards now tie with each other.
+```
+Body: { playerId, card: {suit, rank} }
+Response: { success } OR { error, reason }
+```
 
 ### `POST /api/game/[code]/choose-tribute`
 RULES.md "Two-Team Lead": resolves a same-rank tie in the initial tribute

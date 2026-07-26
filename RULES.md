@@ -147,6 +147,8 @@ If a team reaches level A but fails to achieve 1-2 or 1-3, they remain at level 
 
 After each round, players exchange cards based on finishing positions. **All card exchanges are visible to all players.**
 
+**Best card, when tied**: if the player giving their "best card" (4th place, or 3rd/4th place in a two-team lead) holds more than one card tied for that best rank, **they choose which one to give** — the same choice 1st place gets when 3rd's and 4th's cards tie against each other (see "Two-Team Lead" below). They might prefer to keep one of the tied cards for a combination (a pair, a straight, etc.) still in their hand.
+
 ### Single-Team Lead (1-3 or 1-4 finish)
 - **4th place** gives their **best card** to **1st place**
 - **1st place** gives **any card of their choice** back to **4th place** (typically a low card)

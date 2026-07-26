@@ -13,7 +13,9 @@
 import { useMutation } from "@tanstack/react-query";
 import { postJson } from "@/lib/httpClient";
 import type {
+  Card,
   CardWithWild,
+  ChooseGiverCardResponse,
   ChooseTributeResponse,
   EndHandResponse,
   ExchangeCardsRequest,
@@ -142,6 +144,18 @@ export function useGameActions({
     },
   });
 
+  const chooseGiverCardMutation = useMutation({
+    mutationFn: (card: Card) => {
+      if (position === null) {
+        return Promise.reject(new Error("Must be seated to choose a giver card"));
+      }
+      return postJson<ChooseGiverCardResponse>(`/api/game/${gameId}/choose-giver-card`, {
+        playerId,
+        card,
+      }).then(throwIfUnsuccessful);
+    },
+  });
+
   return {
     playCards: playCardsMutation.mutateAsync,
     isPlayingCards: playCardsMutation.isPending,
@@ -166,6 +180,10 @@ export function useGameActions({
     chooseTribute: chooseTributeMutation.mutateAsync,
     isChoosingTribute: chooseTributeMutation.isPending,
     chooseTributeError: chooseTributeMutation.error,
+
+    chooseGiverCard: chooseGiverCardMutation.mutateAsync,
+    isChoosingGiverCard: chooseGiverCardMutation.isPending,
+    chooseGiverCardError: chooseGiverCardMutation.error,
 
     sendHeartbeat: heartbeatMutation.mutateAsync,
 

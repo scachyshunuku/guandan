@@ -45,6 +45,12 @@ export interface GameStoreState {
   // Mirrors GameRound.gameState.pendingTributeChoice — set only while
   // roundStatus is 'awaiting_tribute_choice' (RULES.md "Two-Team Lead").
   pendingTributeChoice: GameRound["gameState"]["pendingTributeChoice"] | null;
+  // Mirrors GameRound.gameState.pendingGiverChoice — set only while
+  // roundStatus is 'awaiting_giver_choice' (RULES.md "Card Exchange" ->
+  // "Best card, when tied"). `pendingPositions` here is safe to broadcast
+  // to everyone (unlike each giver's actual candidate cards, which the
+  // viewer derives client-side from their own private hand).
+  pendingGiverChoice: GameRound["gameState"]["pendingGiverChoice"] | null;
   // This round's game_actions (all types, matching GameStateResponse.
   // roundActions) — hydrated on load, appended to via `game_action`
   // broadcasts, and reset whenever roundId changes. CardExchangeModal reads
@@ -90,6 +96,7 @@ const initialState = {
   roundStatus: "in_progress" as RoundStatus,
   finishingPositions: null as number[] | null,
   pendingTributeChoice: null as GameRound["gameState"]["pendingTributeChoice"] | null,
+  pendingGiverChoice: null as GameRound["gameState"]["pendingGiverChoice"] | null,
   roundActions: [] as GameAction[],
   teamLevels: [2, 2] as [number, number],
   winningTeam: null as Team | null,
@@ -112,6 +119,7 @@ export const useGameStore = create<GameStoreState>((set) => ({
       currentPlayerTurn: round.currentPlayerTurn,
       finishingPositions: round.finishingPositions,
       pendingTributeChoice: round.gameState.pendingTributeChoice ?? null,
+      pendingGiverChoice: round.gameState.pendingGiverChoice ?? null,
       // A fresh round (dealNextRound's insert) starts its action history
       // over; the same round updating again (e.g. a status transition)
       // keeps whatever's already been recorded.
