@@ -47,10 +47,10 @@ export async function POST(
 
   const parsed = await parseJsonBody<Partial<ExchangeCardsRequest>>(request);
   if (parsed.errorResponse) return parsed.errorResponse;
-  const { playerId, position, cardToGive, type, recipientPosition } = parsed.body;
-  if (!playerId || !isPlayerPosition(position) || !cardToGive || !isPlayerPosition(recipientPosition)) {
+  const { playerId, cardToGive, type, recipientPosition } = parsed.body;
+  if (!playerId || !cardToGive || !isPlayerPosition(recipientPosition)) {
     return NextResponse.json(
-      { error: "playerId, a valid position, cardToGive, and a valid recipientPosition are required" },
+      { error: "playerId, cardToGive, and a valid recipientPosition are required" },
       { status: 400 },
     );
   }
@@ -74,9 +74,10 @@ export async function POST(
       { status: 400 },
     );
   }
-  if (!caller || caller.position === null || caller.position !== position) {
-    return invalidExchangeResponse("playerId does not match position", 403);
+  if (!caller || caller.position === null) {
+    return invalidExchangeResponse("playerId is not a seated participant", 403);
   }
+  const position = caller.position;
 
   const actionRows = await getRoundCardExchangeActions(round.id);
   const initialActions = actionRows.filter((a) => asCardExchangeData(a).type === "initial");

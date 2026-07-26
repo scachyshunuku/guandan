@@ -114,7 +114,7 @@ describe("POST /api/game/[id]/choose-tribute", () => {
     const roundId = await seedAwaitingChoiceRound(gameId);
     await seedStandardParticipants(gameId);
 
-    const response = await callChooseTribute(gameId, { playerId: "p0", position: 0, take: 1 });
+    const response = await callChooseTribute(gameId, { playerId: "p0", take: 1 });
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body).toEqual({ success: true });
@@ -147,7 +147,7 @@ describe("POST /api/game/[id]/choose-tribute", () => {
     await seedAwaitingChoiceRound(gameId);
     await seedStandardParticipants(gameId);
 
-    const response = await callChooseTribute(gameId, { playerId: "p0", position: 0, take: 3 });
+    const response = await callChooseTribute(gameId, { playerId: "p0", take: 3 });
     expect(response.status).toBe(200);
 
     expect(handOf(gameId, 0)).toEqual([{ rank: "9", suit: "SPADES" }]);
@@ -159,7 +159,7 @@ describe("POST /api/game/[id]/choose-tribute", () => {
     await seedAwaitingChoiceRound(gameId);
     await seedStandardParticipants(gameId);
 
-    const response = await callChooseTribute(gameId, { playerId: "p2", position: 2, take: 1 });
+    const response = await callChooseTribute(gameId, { playerId: "p2", take: 1 });
     expect(response.status).toBe(403);
     const body = await response.json();
     expect(body.reason).toMatch(/1st place/);
@@ -170,7 +170,7 @@ describe("POST /api/game/[id]/choose-tribute", () => {
     await seedAwaitingChoiceRound(gameId);
     await seedStandardParticipants(gameId);
 
-    const response = await callChooseTribute(gameId, { playerId: "p0", position: 0, take: 2 });
+    const response = await callChooseTribute(gameId, { playerId: "p0", take: 2 });
     expect(response.status).toBe(400);
     const body = await response.json();
     expect(body.reason).toMatch(/tied positions/);
@@ -189,7 +189,7 @@ describe("POST /api/game/[id]/choose-tribute", () => {
       });
     await seedStandardParticipants(gameId);
 
-    const response = await callChooseTribute(gameId, { playerId: "p0", position: 0, take: 1 });
+    const response = await callChooseTribute(gameId, { playerId: "p0", take: 1 });
     expect(response.status).toBe(400);
   });
 
@@ -198,10 +198,10 @@ describe("POST /api/game/[id]/choose-tribute", () => {
     await seedAwaitingChoiceRound(gameId);
     await seedStandardParticipants(gameId);
 
-    const first = await callChooseTribute(gameId, { playerId: "p0", position: 0, take: 1 });
+    const first = await callChooseTribute(gameId, { playerId: "p0", take: 1 });
     expect(first.status).toBe(200);
 
-    const second = await callChooseTribute(gameId, { playerId: "p0", position: 0, take: 1 });
+    const second = await callChooseTribute(gameId, { playerId: "p0", take: 1 });
     expect(second.status).toBe(400);
   });
 });

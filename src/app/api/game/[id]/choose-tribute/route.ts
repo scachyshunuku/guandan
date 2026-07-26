@@ -41,10 +41,10 @@ export async function POST(
 
   const parsed = await parseJsonBody<Partial<ChooseTributeRequest>>(request);
   if (parsed.errorResponse) return parsed.errorResponse;
-  const { playerId, position, take } = parsed.body;
-  if (!playerId || !isPlayerPosition(position) || !isPlayerPosition(take)) {
+  const { playerId, take } = parsed.body;
+  if (!playerId || !isPlayerPosition(take)) {
     return NextResponse.json(
-      { error: "playerId, a valid position, and a valid take are required" },
+      { error: "playerId and a valid take are required" },
       { status: 400 },
     );
   }
@@ -63,9 +63,10 @@ export async function POST(
       { status: 400 },
     );
   }
-  if (!caller || caller.position === null || caller.position !== position) {
-    return invalidChoiceResponse("playerId does not match position", 403);
+  if (!caller || caller.position === null) {
+    return invalidChoiceResponse("playerId is not a seated participant", 403);
   }
+  const position = caller.position;
 
   const pending = round.game_state.pendingTributeChoice;
   if (!pending) {

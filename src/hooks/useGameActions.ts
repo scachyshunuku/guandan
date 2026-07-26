@@ -1,9 +1,13 @@
 // hooks/useGameActions.ts — Task 4.3 (IMPLEMENTATION.md). Thin TanStack Query
 // wrappers (ARCHITECTURE.md section 1, "HTTP Client: TanStack Query") around
 // the mutation routes from Task 3.1/3.2/3.3, so callers get loading/error
-// state without hand-rolling fetch + useState per action. playerId/position
-// are bound once here rather than passed at each call site, since every
-// mutation needs them and the caller (Task 4.4's useGame) already has them.
+// state without hand-rolling fetch + useState per action. playerId is bound
+// once here rather than passed at each call site, since every mutation
+// needs it and the caller (Task 4.4's useGame) already has it. `position`
+// is bound the same way but only used for a local "must be seated" guard —
+// the routes themselves derive the caller's actual seat server-side from
+// `playerId` (see gameDb.ts's resolveTurn), so it's never sent in a request
+// body.
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
@@ -47,12 +51,9 @@ export interface UseGameActionsOptions {
   position: PlayerPosition | null;
 }
 
-// Only the fields the caller needs to choose - playerId/position come from
-// the bound options above, not the caller.
-export type ExchangeCardsInput = Omit<
-  ExchangeCardsRequest,
-  "playerId" | "position"
->;
+// Only the fields the caller needs to choose - playerId comes from the
+// bound options above, not the caller.
+export type ExchangeCardsInput = Omit<ExchangeCardsRequest, "playerId">;
 
 export function useGameActions({
   gameId,
@@ -67,7 +68,6 @@ export function useGameActions({
       return postJson<PlayCardsResponse>(`/api/game/${gameId}/play-cards`, {
         cards,
         playerId,
-        position,
       }).then(throwIfUnsuccessful);
     },
   });
@@ -77,10 +77,7 @@ export function useGameActions({
       if (position === null) {
         return Promise.reject(new Error("Must be seated to pass"));
       }
-      return postJson<PassResponse>(`/api/game/${gameId}/pass`, {
-        playerId,
-        position,
-      });
+      return postJson<PassResponse>(`/api/game/${gameId}/pass`, { playerId });
     },
   });
 
@@ -112,7 +109,7 @@ export function useGameActions({
       }
       return postJson<ExchangeCardsResponse>(
         `/api/game/${gameId}/exchange-cards`,
-        { ...input, playerId, position },
+        { ...input, playerId },
       ).then(throwIfUnsuccessful);
     },
   });
@@ -140,7 +137,6 @@ export function useGameActions({
       }
       return postJson<ChooseTributeResponse>(`/api/game/${gameId}/choose-tribute`, {
         playerId,
-        position,
         take,
       }).then(throwIfUnsuccessful);
     },

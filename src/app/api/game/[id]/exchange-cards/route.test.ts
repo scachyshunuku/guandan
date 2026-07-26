@@ -110,7 +110,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
   it("404s for a nonexistent game", async () => {
     const response = await callExchange("does-not-exist", {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "3", suit: "HEARTS" },
       type: "return",
       recipientPosition: 2,
@@ -125,7 +124,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const response = await callExchange(gameId, {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "3", suit: "HEARTS" },
       type: "return",
       recipientPosition: 2,
@@ -133,15 +131,14 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     expect(response.status).toBe(400);
   });
 
-  it("rejects a playerId that doesn't match the claimed position", async () => {
+  it("rejects an unknown playerId", async () => {
     const gameId = await seedGame();
     const roundId = await seedRound(gameId, [1, 2, 4, 3]);
     await seedInitialExchange(gameId, roundId, 2, 0, { rank: "KING", suit: "CLUBS" });
     await seedParticipant(gameId, 0, "p0", [{ rank: "KING", suit: "CLUBS" }]);
 
     const response = await callExchange(gameId, {
-      playerId: "p0",
-      position: 1,
+      playerId: "not-a-participant",
       cardToGive: { rank: "KING", suit: "CLUBS" },
       type: "return",
       recipientPosition: 2,
@@ -157,7 +154,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const response = await callExchange(gameId, {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "3", suit: "HEARTS" },
       type: "initial",
       recipientPosition: 2,
@@ -175,7 +171,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const response = await callExchange(gameId, {
       playerId: "p1",
-      position: 1,
       cardToGive: { rank: "3", suit: "HEARTS" },
       type: "return",
       recipientPosition: 2,
@@ -193,7 +188,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const response = await callExchange(gameId, {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "3", suit: "HEARTS" },
       type: "return",
       recipientPosition: 1, // should be 2 (who actually gave the card)
@@ -209,7 +203,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const response = await callExchange(gameId, {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "9", suit: "DIAMONDS" },
       type: "return",
       recipientPosition: 2,
@@ -229,7 +222,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const first = await callExchange(gameId, {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "4", suit: "SPADES" },
       type: "return",
       recipientPosition: 2,
@@ -238,7 +230,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const second = await callExchange(gameId, {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "KING", suit: "CLUBS" },
       type: "return",
       recipientPosition: 2,
@@ -260,7 +251,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const response = await callExchange(gameId, {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "3", suit: "HEARTS" },
       type: "return",
       recipientPosition: 2,
@@ -326,7 +316,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const firstReturn = await callExchange(gameId, {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "5", suit: "DIAMONDS" },
       type: "return",
       recipientPosition: 3,
@@ -339,7 +328,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const secondReturn = await callExchange(gameId, {
       playerId: "p2",
-      position: 2,
       cardToGive: { rank: "6", suit: "DIAMONDS" },
       type: "return",
       recipientPosition: 1,
@@ -376,7 +364,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const first = await callExchange(gameId, {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "5", suit: "DIAMONDS" },
       type: "return",
       recipientPosition: 1,
@@ -384,7 +371,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     expect(first.status).toBe(200);
     const second = await callExchange(gameId, {
       playerId: "p3",
-      position: 3,
       cardToGive: { rank: "6", suit: "DIAMONDS" },
       type: "return",
       recipientPosition: 2,
@@ -415,14 +401,12 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     const [r1, r2] = await Promise.all([
       callExchange(gameId, {
         playerId: "p0",
-        position: 0,
         cardToGive: { rank: "5", suit: "DIAMONDS" },
         type: "return",
         recipientPosition: 3,
       }),
       callExchange(gameId, {
         playerId: "p2",
-        position: 2,
         cardToGive: { rank: "6", suit: "DIAMONDS" },
         type: "return",
         recipientPosition: 1,
@@ -453,7 +437,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const response = await callExchange(gameId, {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "3", suit: "HEARTS" },
       type: "return",
       recipientPosition: 2,
@@ -489,7 +472,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const response = await callExchange(gameId, {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "3", suit: "HEARTS" },
       type: "return",
       recipientPosition: 2,
@@ -506,7 +488,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     // A retry isn't blocked by a phantom "already submitted" 409.
     const retry = await callExchange(gameId, {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "3", suit: "HEARTS" },
       type: "return",
       recipientPosition: 2,
@@ -554,7 +535,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const response = await callExchange(gameId, {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "3", suit: "HEARTS" },
       type: "return",
       recipientPosition: 2,
@@ -611,7 +591,6 @@ describe("POST /api/game/[id]/exchange-cards", () => {
 
     const body = {
       playerId: "p0",
-      position: 0,
       cardToGive: { rank: "3", suit: "HEARTS" },
       type: "return",
       recipientPosition: 2,

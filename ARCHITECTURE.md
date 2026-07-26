@@ -41,7 +41,9 @@ game_rounds (per-round state, one per hand)
 ├── game_state (JSONB) -- {playedCards: {}, playedThisTrick: {...}, trickCount: int, ...}
 ├── current_player_turn (INT: 0-3) -- whose turn it is
 ├── leader_position (INT: 0-3) -- who led current trick
-├── status (TEXT: 'in_progress', 'card_exchange', 'completed'; validated in app code)
+├── status (TEXT: 'in_progress', 'awaiting_tribute_choice', 'card_exchange', 'completed'; validated in app code)
+│   -- 'awaiting_tribute_choice': RULES.md "Two-Team Lead" same-rank tribute tie,
+│      paused for 1st place's choice via POST .../choose-tribute
 ├── finishing_positions (INT[]) -- [p0_finish, p1_finish, p2_finish, p3_finish] e.g. [1, 4, 2, 3]
 ├── created_at
 └── updated_at
@@ -481,24 +483,38 @@ Response: { success, hand }
 ### `POST /api/game/[code]/play-cards`
 Play a combination of cards (with server-side validation).
 ```
-Body: { cards: [{suit, rank}, ...], playerId, position }
+Body: { cards: [{suit, rank}, ...], playerId }
 Response: { success } OR { error, reason }
 ```
+Note: no `position` field — a participant's seat is assigned once at join
+and never reassigned, so the server derives it from `playerId` rather than
+trusting a client-submitted copy of the same value (`gameDb.ts`'s
+`resolveTurn`). Same applies to `pass`, `exchange-cards`, and
+`choose-tribute` below.
 
 ### `POST /api/game/[code]/pass`
 Pass the current trick.
 ```
-Body: { playerId, position }
+Body: { playerId }
 Response: { success }
 ```
 
 ### `POST /api/game/[code]/exchange-cards`
 Submit card exchange during the exchange phase (initial or return).
 ```
-Body: { playerId, position, cardToGive: {suit, rank}, type: 'initial'|'return', recipientPosition: int }
+Body: { playerId, cardToGive: {suit, rank}, type: 'initial'|'return', recipientPosition: int }
 Response: { success } OR { error, reason }
 ```
 Note: Initial exchanges are automatic (best card). Return exchanges require player selection of which card to give back.
+
+### `POST /api/game/[code]/choose-tribute`
+RULES.md "Two-Team Lead": resolves a same-rank tie in the initial tribute
+exchange — only 1st place can call this, choosing which of the two tied
+tribute givers' cards to take (the other goes to 2nd place automatically).
+```
+Body: { playerId, take: int }
+Response: { success } OR { error, reason }
+```
 
 ### `GET /api/game/[code]/state`
 Get current game state (used on initial load & reconnect).
@@ -586,20 +602,25 @@ exactly what's in the payload (e.g. never a player's hand).
   blindly appending, since a rejoin after a brief disconnect reuses the same
   participant id.
 - `game_action`, payload = the inserted `game_actions` row — sent by
-  whichever route inserts one (`play-cards`, `pass`, `exchange-cards` —
-  Tasks 3.2/3.3, not yet implemented; `join` inserts a `game_actions` row
-  too but broadcasts `participant_joined` instead, not this). No store field
-  holds raw action history, so `useGameRealtimeSync` forwards the mapped
-  `GameAction` to an `onGameAction` callback instead of syncing it directly.
+  whichever route inserts one (`play-cards`, `pass`, `exchange-cards`,
+  `choose-tribute`; `join` inserts a `game_actions` row too but broadcasts
+  `participant_joined` instead, not this). No store field holds raw action
+  history except the current round's own (`roundActions`, appended to via
+  this event — see Task 6.2), so `useGameRealtimeSync` also forwards the
+  mapped `GameAction` to an `onGameAction` callback for callers that need to
+  react to a specific action (e.g. a received card-exchange card).
+- `participant_updated`, payload = the updated `game_participants` row
+  (same `hand: []` redaction as `participant_joined`) — sent by
+  `POST /api/game/[id]/heartbeat` whenever a participant's connected status
+  changes (their own heartbeat lands, or they're swept as stale by someone
+  else's heartbeat call). Synced via the same `addParticipant` upsert-by-id
+  as `participant_joined` (Task 6.2, "Player disconnects/reconnects").
 
-No `participant_left` event: there's no `leave` route, or disconnect/
-heartbeat detection, anywhere in the codebase yet — that's
-IMPLEMENTATION.md Task 6.2 ("Player disconnects/reconnects"), still blocked
-on all of Phase 3-5. Real-time participant sync currently only covers joins.
-
-As of Task 4.2, `start` sends `game_updated`/`round_updated` and `join`
-sends `participant_joined`; `game_action` remains a contract Tasks 3.2/3.3
-must satisfy.
+Still no `participant_left` event: there's no `leave` route. Disconnect
+detection instead works by deriving `isConnected` from `lastHeartbeat`
+freshness — both at read time (`gameStateResponse.ts`, self-healing even if
+no heartbeat has swept recently) and live via the `participant_updated`
+broadcast above.
 
 ---
 

@@ -23,7 +23,7 @@ describe("useGameActions", () => {
     jest.restoreAllMocks();
   });
 
-  it("playCards posts cards, playerId and position to play-cards", async () => {
+  it("playCards posts cards and playerId to play-cards (position isn't sent - the server derives it from playerId)", async () => {
     mockFetchOnce(200, { success: true });
     const { result } = renderHook(
       () =>
@@ -40,7 +40,7 @@ describe("useGameActions", () => {
       "/api/game/game-1/play-cards",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ cards, playerId: "player-1", position: 2 }),
+        body: JSON.stringify({ cards, playerId: "player-1" }),
       }),
     );
   });
@@ -59,7 +59,7 @@ describe("useGameActions", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("pass posts playerId and position to pass", async () => {
+  it("pass posts only playerId to pass", async () => {
     mockFetchOnce(200, { success: true });
     const { result } = renderHook(
       () =>
@@ -74,7 +74,7 @@ describe("useGameActions", () => {
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/game/game-1/pass",
       expect.objectContaining({
-        body: JSON.stringify({ playerId: "player-1", position: 1 }),
+        body: JSON.stringify({ playerId: "player-1" }),
       }),
     );
   });
@@ -137,7 +137,7 @@ describe("useGameActions", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("exchangeCards posts cardToGive plus the bound playerId/position", async () => {
+  it("exchangeCards posts cardToGive plus the bound playerId (not position)", async () => {
     mockFetchOnce(200, { success: true });
     const { result } = renderHook(
       () =>
@@ -162,7 +162,6 @@ describe("useGameActions", () => {
           type: "return",
           recipientPosition: 3,
           playerId: "player-1",
-          position: 0,
         }),
       }),
     );

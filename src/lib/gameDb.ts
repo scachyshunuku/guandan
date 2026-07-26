@@ -121,13 +121,11 @@ export async function getGameContext(
 
 const ALL_POSITIONS = [0, 1, 2, 3] as const;
 
-// `position` comes from an untrusted request body typed only as
-// `PlayerPosition | undefined` by the caller's `Partial<...Request>` cast —
-// that cast is compile-time only, so a malicious/malformed body (e.g.
-// `position: null`) still reaches here at runtime as whatever JSON.parse
-// produced. Without this check, `null` in particular would slip past a naive
-// `caller.position !== position` comparison by matching a spectator's
-// `position: null` row.
+// Validates a client-submitted seat reference that isn't the caller's own
+// (e.g. exchange-cards' recipientPosition, choose-tribute's take) — typed
+// only as `PlayerPosition | undefined` by the caller's `Partial<...Request>`
+// cast, which is compile-time only, so a malformed body (e.g. a bare
+// `null`) still reaches here at runtime as whatever JSON.parse produced.
 export function isPlayerPosition(value: unknown): value is PlayerPosition {
   return (ALL_POSITIONS as readonly unknown[]).includes(value);
 }
@@ -142,7 +140,7 @@ export interface ActiveRoundRow
 }
 
 export type TurnContext =
-  | { ok: true; game: GameRow; round: ActiveRoundRow; caller: ParticipantRow }
+  | { ok: true; game: GameRow; round: ActiveRoundRow; caller: ParticipantRow; position: PlayerPosition }
   | { ok: false; status: number; error: string };
 
 // Shared preamble for the play-cards and pass routes (IMPLEMENTATION.md
@@ -150,10 +148,16 @@ export type TurnContext =
 // participant, and checks that it's actually their turn to act. Returns a
 // plain result rather than a NextResponse so each route can shape its own
 // JSON error body (their declared response types differ).
+//
+// `position` isn't a parameter here: a participant's seat is assigned once
+// at join and never reassigned afterward (no route ever updates
+// game_participants.position), so `caller.position` looked up via
+// `playerId` alone is already the authoritative answer — there's nothing a
+// client-submitted position could add except a redundant, exploitable
+// (client could just lie) copy of the same value.
 export async function resolveTurn(
   gameId: string,
   playerId: string,
-  position: PlayerPosition,
 ): Promise<TurnContext> {
   const game = await getGame(gameId);
   if (!game) return { ok: false, status: 404, error: "Game not found" };
@@ -171,15 +175,19 @@ export async function resolveTurn(
 
   const participants = await getParticipants(gameId);
   const caller = participants.find((p) => p.player_id === playerId);
-  // A spectator (position === null) can never equal a concrete position, but
-  // spelled out explicitly rather than relying on that coincidence — see
-  // isPlayerPosition's comment above.
-  if (!caller || caller.position === null || caller.position !== position) {
-    return { ok: false, status: 403, error: "playerId does not match position" };
+  if (!caller || caller.position === null) {
+    return { ok: false, status: 403, error: "playerId is not a seated participant" };
   }
+  const position = caller.position;
   if (round.current_player_turn !== position) {
     return { ok: false, status: 400, error: "not your turn" };
   }
 
-  return { ok: true, game, round: { ...round, leader_position: round.leader_position, current_player_turn: position }, caller };
+  return {
+    ok: true,
+    game,
+    round: { ...round, leader_position: round.leader_position, current_player_turn: position },
+    caller,
+    position,
+  };
 }

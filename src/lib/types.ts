@@ -280,19 +280,22 @@ export interface StartGameResponse {
   hand: CardWithWild[];
 }
 
+// No `position` field: the server derives it from `playerId` (a
+// participant's seat is fixed at join and never reassigned — see
+// gameDb.ts's resolveTurn), so a client-submitted one would only be a
+// redundant, spoofable copy of a value the server already knows.
 export interface PlayCardsRequest {
   cards: CardWithWild[];
   playerId: string;
-  position: PlayerPosition;
 }
 
 export type PlayCardsResponse =
   | { success: true }
   | { success: false; error: string; reason: string };
 
+// See PlayCardsRequest's comment on why there's no `position` field.
 export interface PassRequest {
   playerId: string;
-  position: PlayerPosition;
 }
 
 export interface PassResponse {
@@ -310,10 +313,11 @@ export interface EndHandResponse {
 // RULES.md "Two-Team Lead": "If the two cards are the same rank, 1st place
 // chooses which card to take (then 2nd place gets the other)." `take`
 // identifies whose tribute card 1st place is taking — the other tied
-// position's card goes to 2nd place instead.
+// position's card goes to 2nd place instead. No `position` field: see
+// PlayCardsRequest's comment — the caller's own seat is derived server-side,
+// though `take` itself is a genuine choice only the client can make.
 export interface ChooseTributeRequest {
   playerId: string;
-  position: PlayerPosition;
   take: PlayerPosition;
 }
 
@@ -321,9 +325,11 @@ export type ChooseTributeResponse =
   | { success: true }
   | { success: false; error: string; reason: string };
 
+// No `position` field (see PlayCardsRequest's comment) — `recipientPosition`
+// stays, since which position gets the return isn't the caller's own seat,
+// it's who exchange-cards' 'initial' half already recorded as owed a return.
 export interface ExchangeCardsRequest {
   playerId: string;
-  position: PlayerPosition;
   cardToGive: Card;
   type: "initial" | "return";
   recipientPosition: PlayerPosition;

@@ -6,7 +6,7 @@
 // Selection").
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { isPlayerPosition, resolveTurn, type ActiveRoundRow } from "@/lib/gameDb";
+import { resolveTurn, type ActiveRoundRow } from "@/lib/gameDb";
 import { parseJsonBody } from "@/lib/http";
 import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import { PASS } from "@/lib/types";
@@ -21,19 +21,19 @@ export async function POST(
 
   const parsed = await parseJsonBody<Partial<PassRequest>>(request);
   if (parsed.errorResponse) return parsed.errorResponse;
-  const { playerId, position } = parsed.body;
-  if (!playerId || !isPlayerPosition(position)) {
+  const { playerId } = parsed.body;
+  if (!playerId) {
     return NextResponse.json(
-      { error: "playerId and a valid position (0-3) are required" },
+      { error: "playerId is required" },
       { status: 400 },
     );
   }
 
-  const turn = await resolveTurn(gameId, playerId, position);
+  const turn = await resolveTurn(gameId, playerId);
   if (!turn.ok) {
     return NextResponse.json({ error: turn.error }, { status: turn.status });
   }
-  const { round } = turn;
+  const { round, position } = turn;
 
   // Leading (an empty trick) has nothing to beat, so there's no pass option
   // (RULES.md "When Leading").
