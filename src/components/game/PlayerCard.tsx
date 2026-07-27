@@ -1,31 +1,33 @@
 "use client";
 
 import { pluralize } from "@/lib/format";
-import type { SeatLabel } from "@/lib/seating";
 import type { PlayerPosition } from "@/lib/types";
 
 export interface PlayerCardProps {
   playerName: string;
   position: PlayerPosition;
-  seatLabel: SeatLabel;
   isConnected: boolean;
   cardCount: number;
   isCurrentTurn?: boolean;
   isSelf?: boolean;
 }
 
-// A single player's bubble on the GameTable: name, seat, connection status,
+// A single player's bubble on the GameTable: name, team, connection status,
 // and remaining card count. Doesn't render for empty/spectator seats — the
 // caller (GameTable) decides what to show there.
 export default function PlayerCard({
   playerName,
   position,
-  seatLabel,
   isConnected,
   cardCount,
   isCurrentTurn = false,
   isSelf = false,
 }: PlayerCardProps) {
+  // Team A = positions 0 & 2, Team B = positions 1 & 3 (lib/types.ts's
+  // `Team` type) — shown instead of the compass seat (north/south/east/west)
+  // since players care which team someone's on, not where they're sitting.
+  const teamLabel = position % 2 === 0 ? "Team A" : "Team B";
+
   return (
     <div
       data-testid="player-card"
@@ -40,8 +42,11 @@ export default function PlayerCard({
         {playerName}
         {isSelf && " (You)"}
       </span>
-      <span data-testid="seat-label" className="text-xs uppercase text-gray-400">
-        {seatLabel}
+      <span
+        data-testid="team-label"
+        className="text-xs uppercase text-gray-400"
+      >
+        {teamLabel}
       </span>
       <span
         data-testid="connection-status"
@@ -53,7 +58,10 @@ export default function PlayerCard({
         {pluralize(cardCount, "card")}
       </span>
       {isCurrentTurn && (
-        <span data-testid="current-turn-indicator" className="text-xs font-medium text-amber-600">
+        <span
+          data-testid="current-turn-indicator"
+          className="text-xs font-medium text-amber-600"
+        >
           Current turn
         </span>
       )}

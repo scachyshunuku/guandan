@@ -87,7 +87,6 @@ export default function GameTable({
             >
               {renderSeat(
                 position,
-                seatLabel,
                 byPosition.get(position),
                 round,
                 myPosition,
@@ -103,7 +102,6 @@ export default function GameTable({
 
 function renderSeat(
   position: PlayerPosition,
-  seatLabel: SeatLabel,
   participant: (GameParticipant & { position: PlayerPosition }) | undefined,
   round: GameTableProps["round"],
   myPosition: PlayerPosition | null,
@@ -123,7 +121,6 @@ function renderSeat(
     <PlayerCard
       playerName={participant.playerName}
       position={position}
-      seatLabel={seatLabel}
       isConnected={participant.isConnected}
       cardCount={participant.handCount}
       isCurrentTurn={round?.currentPlayerTurn === position}
