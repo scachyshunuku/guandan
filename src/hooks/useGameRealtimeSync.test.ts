@@ -96,6 +96,25 @@ describe("useGameRealtimeSync", () => {
     expect(state.teamLevels).toEqual([5, 3]);
   });
 
+  it("calls onGameUpdate with the mapped game before syncing gameStatus", () => {
+    const onGameUpdate = jest.fn();
+    renderHook(() => useGameRealtimeSync("game-1", undefined, undefined, onGameUpdate));
+
+    channels[0].fire("game_updated", {
+      id: "game-1",
+      status: "in_progress",
+      team_a_level: 5,
+      team_b_level: 3,
+      winning_team: null,
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(onGameUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "game-1", status: "in_progress", teamALevel: 5, teamBLevel: 3 }),
+    );
+  });
+
   it("syncs round_updated broadcasts to currentTrick and currentPlayerTurn", () => {
     renderHook(() => useGameRealtimeSync("game-1"));
 
@@ -147,6 +166,7 @@ describe("useGameRealtimeSync", () => {
       playerId: "alice",
       position: 0,
       hand: [],
+      handCount: 0,
       isConnected: true,
       connectedAt: "2026-01-01T00:00:00.000Z",
       lastHeartbeat: "2026-01-01T00:00:00.000Z",

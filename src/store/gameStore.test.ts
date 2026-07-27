@@ -18,6 +18,7 @@ function makeParticipant(
     playerId: "player-1",
     position: null,
     hand: [],
+    handCount: overrides.hand?.length ?? 0,
     isConnected: true,
     connectedAt: "2026-01-01T00:00:00.000Z",
     lastHeartbeat: "2026-01-01T00:00:00.000Z",
@@ -109,6 +110,32 @@ describe("gameStore", () => {
     useGameStore.getState().addParticipant(updated);
 
     expect(useGameStore.getState().participants).toEqual([updated]);
+  });
+
+  it("adjustHandCounts applies deltas by position, leaving other participants and fields untouched", () => {
+    const p0 = makeParticipant({ id: "p0", position: 0, handCount: 27, playerName: "Alice" });
+    const p1 = makeParticipant({ id: "p1", position: 1, handCount: 27 });
+    const spectator = makeParticipant({ id: "s0", position: null, handCount: 0 });
+    useGameStore.getState().updateParticipants([p0, p1, spectator]);
+
+    useGameStore.getState().adjustHandCounts([
+      { position: 0, delta: -2 },
+      { position: 1, delta: 1 },
+    ]);
+
+    const [gotP0, gotP1, gotSpectator] = useGameStore.getState().participants;
+    expect(gotP0).toMatchObject({ id: "p0", handCount: 25, playerName: "Alice" });
+    expect(gotP1).toMatchObject({ id: "p1", handCount: 28 });
+    expect(gotSpectator).toEqual(spectator);
+  });
+
+  it("adjustHandCounts ignores deltas for positions with no seated participant", () => {
+    const p0 = makeParticipant({ id: "p0", position: 0, handCount: 10 });
+    useGameStore.getState().updateParticipants([p0]);
+
+    useGameStore.getState().adjustHandCounts([{ position: 3, delta: -1 }]);
+
+    expect(useGameStore.getState().participants).toEqual([p0]);
   });
 
   it("setTeamLevels updates both team levels", () => {

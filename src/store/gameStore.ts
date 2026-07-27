@@ -81,6 +81,14 @@ export interface GameStoreState {
   setRoundActions: (actions: GameAction[]) => void;
   updateParticipants: (participants: GameParticipant[]) => void;
   addParticipant: (participant: GameParticipant) => void;
+  // Adjusts handCount by seat position rather than participant id - fed by
+  // useGame.ts's handleGameAction, which only ever has a card_played/
+  // card_exchange action's `position`/`from`/`to` fields to work with, not
+  // full participant rows. Deliberately not a broadcast of its own: those
+  // action types are already public (history/route.ts) and already
+  // broadcast in full, so this derives the delta from data already in
+  // flight instead of adding a redundant server round-trip.
+  adjustHandCounts: (deltas: readonly { position: PlayerPosition; delta: number }[]) => void;
   setTeamLevels: (teamALevel: number, teamBLevel: number) => void;
   setWinningTeam: (winningTeam: Team | null) => void;
   reset: () => void;
@@ -143,6 +151,17 @@ export const useGameStore = create<GameStoreState>((set) => ({
       const participants = [...state.participants];
       participants[existingIndex] = participant;
       return { participants };
+    }),
+  adjustHandCounts: (deltas) =>
+    set((state) => {
+      const byPosition = new Map(deltas.map((d) => [d.position, d.delta]));
+      return {
+        participants: state.participants.map((p) =>
+          p.position !== null && byPosition.has(p.position)
+            ? { ...p, handCount: p.handCount + byPosition.get(p.position)! }
+            : p,
+        ),
+      };
     }),
   setTeamLevels: (teamALevel, teamBLevel) =>
     set({ teamLevels: [teamALevel, teamBLevel] }),

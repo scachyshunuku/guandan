@@ -31,7 +31,7 @@ import {
   type GameRoundRow,
   type GameRow,
 } from "@/lib/db/mappers";
-import type { GameAction, GameRound } from "@/lib/types";
+import type { Game, GameAction, GameRound } from "@/lib/types";
 
 export function useGameRealtimeSync(
   gameId: string | null,
@@ -41,6 +41,14 @@ export function useGameRealtimeSync(
   // *previous* round id/status to detect a freshly-dealt hand (hands are
   // deliberately never broadcast; see useGame.ts's onRoundUpdate).
   onRoundUpdate?: (round: GameRound) => void,
+  // Fires with every game_updated payload, before it's applied to the store
+  // - lets callers (Task 4.4's useGame) compare against the store's
+  // *previous* status to detect the one deal with no round_updated-driven
+  // signal of its own: start/route.ts's initial deal flips status straight
+  // from 'waiting' to 'in_progress' on the *same* round id it just inserted
+  // (see start/route.ts), so onRoundUpdate's isNewRound/tributeJustResolved
+  // checks never fire for it.
+  onGameUpdate?: (game: Game) => void,
   // Surfaces the channel's subscribe status (SUBSCRIBED/CHANNEL_ERROR/
   // TIMED_OUT/CLOSED) so callers (Task 4.4's useGame) can tell a dropped
   // connection from a healthy one - broadcasts are missed while down, since
@@ -57,6 +65,11 @@ export function useGameRealtimeSync(
     onRoundUpdateRef.current = onRoundUpdate;
   }, [onRoundUpdate]);
 
+  const onGameUpdateRef = useRef(onGameUpdate);
+  useEffect(() => {
+    onGameUpdateRef.current = onGameUpdate;
+  }, [onGameUpdate]);
+
   const onStatusChangeRef = useRef(onStatusChange);
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
@@ -69,6 +82,7 @@ export function useGameRealtimeSync(
       .channel(`games:${gameId}`)
       .on("broadcast", { event: "game_updated" }, ({ payload }: { payload: GameRow }) => {
         const game = mapGameRow(payload);
+        onGameUpdateRef.current?.(game);
         useGameStore.getState().setGameStatus(game.status);
         useGameStore.getState().setTeamLevels(game.teamALevel, game.teamBLevel);
       })

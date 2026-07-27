@@ -23,6 +23,7 @@ function makeParticipant(overrides: Partial<GameParticipant>): GameParticipant {
     playerId: "player-1",
     position: 0,
     hand: [],
+    handCount: overrides.hand?.length ?? 0,
     isConnected: true,
     connectedAt: "2026-01-01T00:00:00.000Z",
     lastHeartbeat: "2026-01-01T00:00:00.000Z",

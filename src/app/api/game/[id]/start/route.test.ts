@@ -24,15 +24,11 @@ beforeEach(() => {
   mockBroadcastToGame.mockClear();
 });
 
+// No round is seeded - create/route.ts no longer creates one eagerly, and
+// start/route.ts (under test) is what inserts round 1.
 async function seedGame(overrides: Record<string, unknown> = {}): Promise<string> {
   const { data: game } = await fake.from("games").insert(overrides).select("id").single();
-  const gameId = (game as { id: string }).id;
-  await fake.from("game_rounds").insert({
-    game_id: gameId,
-    round_number: 1,
-    game_state: { currentTrick: [], trickCount: 0 },
-  });
-  return gameId;
+  return (game as { id: string }).id;
 }
 
 async function seedParticipant(
@@ -175,9 +171,11 @@ describe("POST /api/game/[id]/start", () => {
     const gameRow = fake._tables.games.find((g) => g.id === gameId);
     expect(gameRow?.status).toBe("waiting");
 
+    // Rolled back by deleting the round this attempt inserted (there's no
+    // pre-existing one to reset back to) - so a retry's own insert doesn't
+    // collide with a leftover round_number 1 row.
     const round = fake._tables.game_rounds.find((r) => r.game_id === gameId);
-    expect(round?.leader_position).toBeNull();
-    expect(round?.current_player_turn).toBeNull();
+    expect(round).toBeUndefined();
 
     const hands = fake._tables.game_participants
       .filter((p) => p.game_id === gameId)

@@ -49,6 +49,12 @@ export interface GameParticipantRow {
   player_id: string;
   position: number | null;
   hand: CardWithWild[];
+  // Only ever present on broadcast payloads that zero out `hand` for
+  // privacy (join/heartbeat) — carries the real count those routes already
+  // know but can't put in `hand` itself. Absent (and falls back to
+  // `hand.length`) on rows read straight from the DB, where `hand` is
+  // always the true, un-redacted value.
+  hand_count?: number;
   is_connected: boolean;
   connected_at: string;
   last_heartbeat: string;
@@ -58,7 +64,9 @@ export interface GameParticipantRow {
 export interface GameActionRow {
   id: string;
   game_id: string;
-  round_id: string;
+  // null for a 'join' action logged before any round exists (see
+  // join/route.ts) - see GameAction.roundId's doc comment in types.ts.
+  round_id: string | null;
   player_id: string;
   action_type: string;
   action_data: GameActionData;
@@ -100,6 +108,7 @@ export function mapGameParticipantRow(row: GameParticipantRow): GameParticipant 
     playerId: row.player_id,
     position: row.position as PlayerPosition | null,
     hand: row.hand,
+    handCount: row.hand_count ?? row.hand.length,
     isConnected: row.is_connected,
     connectedAt: row.connected_at,
     lastHeartbeat: row.last_heartbeat,

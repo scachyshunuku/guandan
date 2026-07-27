@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useGame } from "./useGame";
 import { useGameStore } from "@/store/gameStore";
-import type { CurrentTrick, GameAction, GameRound, GameStateResponse } from "@/lib/types";
+import type { CurrentTrick, Game, GameAction, GameRound, GameStateResponse } from "@/lib/types";
 
 function wrapper({ children }: { children: ReactNode }) {
   const queryClient = new QueryClient({
@@ -22,6 +22,7 @@ const realtimeSyncCalls: {
   gameId: string | null;
   onGameAction?: (action: GameAction) => void;
   onRoundUpdate?: (round: GameRound) => void;
+  onGameUpdate?: (game: Game) => void;
   onStatusChange?: (status: string) => void;
 }[] = [];
 
@@ -30,9 +31,10 @@ jest.mock("./useGameRealtimeSync", () => ({
     gameId: string | null,
     onGameAction?: (action: GameAction) => void,
     onRoundUpdate?: (round: GameRound) => void,
+    onGameUpdate?: (game: Game) => void,
     onStatusChange?: (status: string) => void,
   ) => {
-    realtimeSyncCalls.push({ gameId, onGameAction, onRoundUpdate, onStatusChange });
+    realtimeSyncCalls.push({ gameId, onGameAction, onRoundUpdate, onGameUpdate, onStatusChange });
   },
 }));
 
@@ -107,6 +109,7 @@ function gameStateResponse(
         playerId: "player-1",
         position: 0,
         hand: [{ rank: "5", suit: "HEARTS" }],
+        handCount: 1,
         isConnected: true,
         connectedAt: "2026-01-01T00:00:00.000Z",
         lastHeartbeat: "2026-01-01T00:00:00.000Z",
@@ -484,6 +487,133 @@ describe("useGame", () => {
     expect(result.current.hand).toEqual([{ rank: "5", suit: "HEARTS" }]);
   });
 
+  it("decrements the player's handCount by the number of cards played", async () => {
+    mockFetchOnce(
+      200,
+      gameStateResponse({
+        participants: [
+          {
+            id: "participant-1",
+            gameId: "game-1",
+            playerName: "Alice",
+            playerId: "player-1",
+            position: 0,
+            hand: [{ rank: "5", suit: "HEARTS" }],
+            handCount: 1,
+            isConnected: true,
+            connectedAt: "2026-01-01T00:00:00.000Z",
+            lastHeartbeat: "2026-01-01T00:00:00.000Z",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            id: "participant-2",
+            gameId: "game-1",
+            playerName: "Bob",
+            playerId: "player-2",
+            position: 2,
+            hand: [],
+            handCount: 27,
+            isConnected: true,
+            connectedAt: "2026-01-01T00:00:00.000Z",
+            lastHeartbeat: "2026-01-01T00:00:00.000Z",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    const { result } = renderHook(
+      () => useGame({ gameId: "game-1", playerId: "player-1" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const onGameAction = realtimeSyncCalls[realtimeSyncCalls.length - 1].onGameAction!;
+    act(() => {
+      onGameAction({
+        id: "action-1",
+        gameId: "game-1",
+        roundId: "round-1",
+        playerId: "player-2",
+        actionType: "card_played",
+        actionData: {
+          position: 2,
+          cards: [
+            { rank: "3", suit: "HEARTS" },
+            { rank: "3", suit: "SPADES" },
+          ],
+        },
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+    });
+
+    const bob = result.current.participants.find((p) => p.id === "participant-2");
+    expect(bob?.handCount).toBe(25);
+  });
+
+  it("adjusts both participants' handCounts by 1 for a card_exchange action", async () => {
+    mockFetchOnce(
+      200,
+      gameStateResponse({
+        participants: [
+          {
+            id: "participant-1",
+            gameId: "game-1",
+            playerName: "Alice",
+            playerId: "player-1",
+            position: 0,
+            hand: [{ rank: "5", suit: "HEARTS" }],
+            handCount: 1,
+            isConnected: true,
+            connectedAt: "2026-01-01T00:00:00.000Z",
+            lastHeartbeat: "2026-01-01T00:00:00.000Z",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            id: "participant-3",
+            gameId: "game-1",
+            playerName: "Carol",
+            playerId: "player-3",
+            position: 3,
+            hand: [],
+            handCount: 5,
+            isConnected: true,
+            connectedAt: "2026-01-01T00:00:00.000Z",
+            lastHeartbeat: "2026-01-01T00:00:00.000Z",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    const { result } = renderHook(
+      () => useGame({ gameId: "game-1", playerId: "player-1" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const onGameAction = realtimeSyncCalls[realtimeSyncCalls.length - 1].onGameAction!;
+    act(() => {
+      onGameAction({
+        id: "action-1",
+        gameId: "game-1",
+        roundId: "round-1",
+        playerId: "player-3",
+        actionType: "card_exchange",
+        actionData: {
+          from: 3,
+          to: 0,
+          card: { rank: "ACE", suit: "SPADES" },
+          type: "return",
+        },
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+    });
+
+    const alice = result.current.participants.find((p) => p.id === "participant-1");
+    const carol = result.current.participants.find((p) => p.id === "participant-3");
+    expect(alice?.handCount).toBe(2);
+    expect(carol?.handCount).toBe(4);
+  });
+
   it("refetches game state after the channel reconnects following an error", async () => {
     mockFetchOnce(200, gameStateResponse());
     const { result } = renderHook(
@@ -652,6 +782,76 @@ describe("useGame", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("refetches game state when the game flips from waiting to in_progress (start/route.ts's deal)", async () => {
+    mockFetchOnce(
+      200,
+      gameStateResponse({
+        game: {
+          id: "game-1",
+          status: "waiting",
+          teamALevel: 2,
+          teamBLevel: 2,
+          winningTeam: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+        round: null,
+        roundActions: [],
+      }),
+    );
+    const { result } = renderHook(
+      () => useGame({ gameId: "game-1", playerId: "player-1" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    const onGameUpdate = realtimeSyncCalls[realtimeSyncCalls.length - 1].onGameUpdate!;
+
+    mockFetchOnce(200, gameStateResponse({ myHand: [{ rank: "9", suit: "CLUBS" }] }));
+    await act(async () => {
+      onGameUpdate({
+        id: "game-1",
+        status: "in_progress",
+        teamALevel: 2,
+        teamBLevel: 2,
+        winningTeam: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      });
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.hand).toEqual([{ rank: "9", suit: "CLUBS" }]));
+  });
+
+  it("does not refetch for a game_updated that isn't the waiting-to-in_progress transition", async () => {
+    mockFetchOnce(200, gameStateResponse());
+    const { result } = renderHook(
+      () => useGame({ gameId: "game-1", playerId: "player-1" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    const onGameUpdate = realtimeSyncCalls[realtimeSyncCalls.length - 1].onGameUpdate!;
+    act(() => {
+      // Already 'in_progress' in the store (gameStateResponse()'s default) -
+      // a level-promotion-only update, not the waiting->in_progress deal.
+      onGameUpdate({
+        id: "game-1",
+        status: "in_progress",
+        teamALevel: 5,
+        teamBLevel: 2,
+        winningTeam: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      });
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("sends a heartbeat immediately on mount", async () => {
     mockFetchOnce(200, gameStateResponse());
     renderHook(() => useGame({ gameId: "game-1", playerId: "player-1" }), { wrapper });
@@ -728,6 +928,7 @@ describe("useGame", () => {
             playerId: "someone-else",
             position: 0,
             hand: [],
+            handCount: 0,
             isConnected: true,
             connectedAt: "2026-01-01T00:00:00.000Z",
             lastHeartbeat: "2026-01-01T00:00:00.000Z",

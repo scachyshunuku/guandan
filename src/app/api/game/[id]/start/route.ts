@@ -5,16 +5,18 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { dealHands } from "@/lib/deck";
-import { getGame, getLatestRound, getParticipants, levelRankForGame } from "@/lib/gameDb";
+import { getGame, getParticipants, levelRankForGame } from "@/lib/gameDb";
 import { parseJsonBody } from "@/lib/http";
 import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import type {
+  GameState,
   PlayerPosition,
   StartGameRequest,
   StartGameResponse,
 } from "@/lib/types";
 
 const ALL_POSITIONS = [0, 1, 2, 3] as const;
+const INITIAL_GAME_STATE: GameState = { currentTrick: [], trickCount: 0, finishOrder: [] };
 
 export async function POST(
   request: Request,
@@ -63,14 +65,6 @@ export async function POST(
     );
   }
 
-  const round = await getLatestRound(gameId);
-  if (!round) {
-    return NextResponse.json(
-      { error: "Game round not initialized" },
-      { status: 500 },
-    );
-  }
-
   // Claim the right to deal by atomically flipping status only if it's
   // still 'waiting'. This is the concurrency guard: if two seated players
   // click "Start" at nearly the same time, only one of these conditional
@@ -101,31 +95,54 @@ export async function POST(
   const hands = dealHands(levelRankForGame(game));
   const leader = Math.floor(Math.random() * 4) as PlayerPosition;
 
-  const roundUpdate = supabaseAdmin
+  // Round 1 no longer exists eagerly (see create/route.ts) — this is its
+  // first appearance, inserted here rather than updated, the same pattern
+  // startNextRound.ts uses for every round after it.
+  const roundInsert = await supabaseAdmin
     .from("game_rounds")
-    .update({ leader_position: leader, current_player_turn: leader })
-    .eq("id", round.id)
+    .insert({
+      game_id: gameId,
+      round_number: 1,
+      game_state: INITIAL_GAME_STATE,
+      leader_position: leader,
+      current_player_turn: leader,
+    })
     .select("*")
     .single();
+  if (roundInsert.error || !roundInsert.data) {
+    console.error("Failed to create the first round after claiming start", roundInsert.error);
+    const { error: rollbackError } = await supabaseAdmin
+      .from("games")
+      .update({ status: "waiting" })
+      .eq("id", gameId)
+      .eq("status", "in_progress");
+    if (rollbackError) {
+      console.error("Failed to roll back game status after failed round creation", rollbackError);
+    }
+    return NextResponse.json(
+      { error: "Failed to start game, please retry" },
+      { status: 500 },
+    );
+  }
+  const round = roundInsert.data;
 
-  const [...results] = await Promise.all([
-    ...ALL_POSITIONS.map((position) =>
+  const dealResults = await Promise.all(
+    ALL_POSITIONS.map((position) =>
       supabaseAdmin
         .from("game_participants")
         .update({ hand: hands[position] })
         .eq("id", seated.get(position)!.id),
     ),
-    roundUpdate,
-  ]);
-  const roundUpdateResult = results[results.length - 1];
-  const failure = results.find((r) => r.error);
-  if (failure) {
-    console.error("Failed to persist deal after claiming start", failure.error);
-    // Revert the claim (and any hands this batch did manage to write) so a
-    // retry by any seated player deals cleanly instead of being stuck
-    // behind a half-dealt 'in_progress' game, and so a rejoin in the
-    // meantime doesn't see a stale dealt hand on a 'waiting' game. Scoped
-    // to status='in_progress' so this can't clobber a state change that
+  );
+  const dealFailure = dealResults.find((r) => r.error);
+  if (dealFailure) {
+    console.error("Failed to persist deal after claiming start", dealFailure.error);
+    // Revert the claim and delete the round just created (rather than
+    // resetting it in place - unlike before, there's no pre-existing round
+    // row to reset back to, only one to undo) so a retry by any seated
+    // player deals cleanly instead of being stuck behind a half-dealt
+    // 'in_progress' game with an orphaned round row. Scoped to
+    // status='in_progress' so this can't clobber a state change that
     // happened for an unrelated reason.
     const emptyHand: typeof hands[number] = [];
     const [rollback] = await Promise.all([
@@ -134,10 +151,7 @@ export async function POST(
         .update({ status: "waiting" })
         .eq("id", gameId)
         .eq("status", "in_progress"),
-      supabaseAdmin
-        .from("game_rounds")
-        .update({ leader_position: null, current_player_turn: null })
-        .eq("id", round.id),
+      supabaseAdmin.from("game_rounds").delete().eq("id", round.id),
       ...ALL_POSITIONS.map((position) =>
         supabaseAdmin
           .from("game_participants")
@@ -162,7 +176,7 @@ export async function POST(
   // succeeded — a client that misses it still catches up on refresh/rejoin.
   await Promise.all([
     broadcastToGame(gameId, "game_updated", claimed[0]),
-    broadcastToGame(gameId, "round_updated", roundUpdateResult.data),
+    broadcastToGame(gameId, "round_updated", round),
   ]);
 
   const response: StartGameResponse = {

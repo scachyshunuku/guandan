@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 
 describe("POST /api/game/create", () => {
-  it("creates a waiting game with an empty round 1", async () => {
+  it("creates a waiting game with no round yet (start/route.ts deals round 1)", async () => {
     const response = await POST();
     expect(response.status).toBe(201);
 
@@ -34,14 +34,7 @@ describe("POST /api/game/create", () => {
       team_b_level: 2,
     });
 
-    expect(fake._tables.game_rounds).toHaveLength(1);
-    expect(fake._tables.game_rounds[0]).toMatchObject({
-      game_id: body.gameId,
-      round_number: 1,
-      game_state: { currentTrick: [], trickCount: 0 },
-      leader_position: null,
-      current_player_turn: null,
-    });
+    expect(fake._tables.game_rounds ?? []).toHaveLength(0);
   });
 
   it("creates a fresh game (and code) on each call", async () => {

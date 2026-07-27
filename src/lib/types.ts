@@ -205,6 +205,12 @@ export interface GameParticipant {
   playerId: string; // session-based id generated per connection
   position: PlayerPosition | null; // null = spectator
   hand: CardWithWild[];
+  // How many cards this participant actually holds. Unlike `hand` (redacted
+  // to [] for every participant except the requesting client — see
+  // gameStateResponse.ts), this is always accurate for every seat, since the
+  // UI needs opponents' remaining card counts without ever seeing their
+  // contents.
+  handCount: number;
   isConnected: boolean;
   connectedAt: string;
   lastHeartbeat: string;
@@ -269,7 +275,10 @@ export type GameActionData =
 export interface GameAction {
   id: string;
   gameId: string;
-  roundId: string;
+  // null for a 'join' action logged before any round exists yet (a game
+  // still 'waiting' for start/route.ts to deal) - every other action type
+  // only ever happens once a round exists.
+  roundId: string | null;
   playerId: string;
   actionType: GameActionType;
   actionData: GameActionData;

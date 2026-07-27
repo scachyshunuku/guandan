@@ -116,11 +116,30 @@ describe("mapGameParticipantRow", () => {
       playerId: "session-abc",
       position: 0,
       hand: [{ rank: "ACE", suit: "SPADES" }],
+      handCount: 1,
       isConnected: true,
       connectedAt: "2026-01-01T00:00:00Z",
       lastHeartbeat: "2026-01-01T00:05:00Z",
       createdAt: "2026-01-01T00:00:00Z",
     });
+  });
+
+  it("prefers hand_count over hand.length when present, for rows whose hand has been redacted for broadcast", () => {
+    const row: GameParticipantRow = {
+      id: "participant-1",
+      game_id: "game-1",
+      player_name: "Alice",
+      player_id: "session-abc",
+      position: 0,
+      hand: [],
+      hand_count: 7,
+      is_connected: true,
+      connected_at: "2026-01-01T00:00:00Z",
+      last_heartbeat: "2026-01-01T00:05:00Z",
+      created_at: "2026-01-01T00:00:00Z",
+    };
+
+    expect(mapGameParticipantRow(row).handCount).toBe(7);
   });
 
   it("maps a null position for spectators", () => {

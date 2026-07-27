@@ -93,16 +93,20 @@ export async function POST(
   // arrival, the same as every other participant broadcast. `hand` is
   // explicitly zeroed rather than trusting the row's actual value, same
   // reasoning as participant_joined: this is player-identifying data going
-  // out unscoped to everyone in the game.
+  // out unscoped to everyone in the game. hand_count is carried separately
+  // (from this same row, before zeroing) so the recipient's card-count
+  // display doesn't get stomped back to 0 by this connectivity-only update.
   await Promise.all(
     [callerUpdate, ...staleUpdates]
       .filter((r) => !r.error && r.data != null)
-      .map((r) =>
-        broadcastToGame(gameId, "participant_updated", {
-          ...(r.data as GameParticipantRow),
+      .map((r) => {
+        const row = r.data as GameParticipantRow;
+        return broadcastToGame(gameId, "participant_updated", {
+          ...row,
           hand: [],
-        }),
-      ),
+          hand_count: row.hand.length,
+        });
+      }),
   );
 
   const response: HeartbeatResponse = { success: true };

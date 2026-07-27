@@ -633,10 +633,14 @@ exactly what's in the payload (e.g. never a player's hand).
   always forced to `[]` regardless of the row's actual value (defense in
   depth — a fresh join always has an empty hand anyway, but this is
   player-identifying data going out unscoped, so it's never trusted to the
-  DB value) — sent by `POST /api/game/[id]/join` on a genuine new join (not
-  the idempotent-rejoin path, which returns early and announces nothing new).
-  Synced via `addParticipant` in the store, which upserts by id rather than
-  blindly appending, since a rejoin after a brief disconnect reuses the same
+  DB value), plus a `hand_count` field carrying the real count separately
+  (`mapGameParticipantRow` falls back to `hand.length` when it's absent, but
+  every broadcast that redacts `hand` sends it explicitly rather than
+  relying on that fallback seeing the already-zeroed array) — sent by
+  `POST /api/game/[id]/join` on a genuine new join (not the idempotent-rejoin
+  path, which returns early and announces nothing new). Synced via
+  `addParticipant` in the store, which upserts by id rather than blindly
+  appending, since a rejoin after a brief disconnect reuses the same
   participant id.
 - `game_action`, payload = the inserted `game_actions` row — sent by
   whichever route inserts one (`play-cards`, `pass`, `exchange-cards`,
@@ -647,11 +651,15 @@ exactly what's in the payload (e.g. never a player's hand).
   mapped `GameAction` to an `onGameAction` callback for callers that need to
   react to a specific action (e.g. a received card-exchange card).
 - `participant_updated`, payload = the updated `game_participants` row
-  (same `hand: []` redaction as `participant_joined`) — sent by
+  (same `hand: []`/`hand_count` redaction as `participant_joined`) — sent by
   `POST /api/game/[id]/heartbeat` whenever a participant's connected status
   changes (their own heartbeat lands, or they're swept as stale by someone
   else's heartbeat call). Synced via the same `addParticipant` upsert-by-id
   as `participant_joined` (Task 6.2, "Player disconnects/reconnects").
+  `hand_count` here matters more than it looks: without it, this
+  connectivity-only update would otherwise stomp the recipient's card-count
+  display back to 0 every time it fires, since it necessarily also redacts
+  `hand`.
 
 Still no `participant_left` event: there's no `leave` route. Disconnect
 detection instead works by deriving `isConnected` from `lastHeartbeat`
