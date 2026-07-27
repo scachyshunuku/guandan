@@ -200,6 +200,41 @@ describe("useGameRealtimeSync", () => {
     expect(onGameAction).toHaveBeenCalledWith(expected);
   });
 
+  // RULES.md "Card Exchange": a round_updated broadcast for a fresh deal
+  // (or a resolved tribute tie) can trigger useGame.ts's onRoundUpdate to
+  // refetch full state - including this same action, via roundActions -
+  // before the corresponding game_action broadcast for it is delivered.
+  // Without a dedup guard, that would double-apply the action once via the
+  // refetch and again via this broadcast.
+  it("skips an action already present in roundActions (e.g. from a race with a refetch), instead of double-applying it", () => {
+    const onGameAction = jest.fn();
+    renderHook(() => useGameRealtimeSync("game-1", onGameAction));
+
+    const alreadyRecorded: GameAction = {
+      id: "action-1",
+      gameId: "game-1",
+      roundId: "round-1",
+      playerId: "player-1",
+      actionType: "card_exchange",
+      actionData: { from: 2, to: 0, card: { rank: "KING", suit: "CLUBS" }, type: "initial" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    useGameStore.getState().setRoundActions([alreadyRecorded]);
+
+    channels[0].fire("game_action", {
+      id: "action-1",
+      game_id: "game-1",
+      round_id: "round-1",
+      player_id: "player-1",
+      action_type: "card_exchange",
+      action_data: { from: 2, to: 0, card: { rank: "KING", suit: "CLUBS" }, type: "initial" },
+      created_at: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(onGameAction).not.toHaveBeenCalled();
+    expect(useGameStore.getState().roundActions).toEqual([alreadyRecorded]);
+  });
+
   it("calls the latest onGameAction callback without re-subscribing", () => {
     const first = jest.fn();
     const second = jest.fn();

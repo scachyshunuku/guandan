@@ -47,7 +47,14 @@ game_rounds (per-round state, one per hand)
 │      paused for their choice via POST .../choose-giver-card
 │   -- 'awaiting_tribute_choice': RULES.md "Two-Team Lead" same-rank tribute tie,
 │      paused for 1st place's choice via POST .../choose-tribute
-├── finishing_positions (INT[]) -- [p0_finish, p1_finish, p2_finish, p3_finish] e.g. [1, 4, 2, 3]
+├── finishing_positions (INT[]) -- [p0_finish, p1_finish, p2_finish, p3_finish] e.g. [1, 4, 2, 3].
+│   Set twice per round, for two different meanings distinguished only by
+│   `status`: startNextRound carries the *previous* hand's finishing order
+│   onto a round the moment it's created (status one of 'in_progress'/
+│   'awaiting_giver_choice'/'awaiting_tribute_choice'/'card_exchange') so the
+│   tribute exchange it's starting with knows who's 1st/2nd/3rd/4th; once
+│   this round eventually concludes on its own, end-hand overwrites it with
+│   *this* round's own finishing order and flips status to 'completed'.
 ├── created_at
 └── updated_at
 
@@ -429,19 +436,23 @@ useEffect(() => {
    - Who finished 3rd?
    - Who finished 4th?
 3. Calculate level promotions based on finishing position
-4. **Card Exchange Phase** (visible to all players):
+4. Reshuffle and deal 27 cards to each player for the next round —
+   immediately, before any tribute card is given or returned
+5. **Card Exchange Phase** (visible to all players), evaluated against the
+   hand just dealt in step 4, not whatever was left over from the hand that
+   just ended:
    - **Initial exchange** (automatic):
      - **Single-team lead (1-3 or 1-4 finish)**: 4th place's best card → 1st place
      - **Two-team lead (1-2 finish)**: 3rd and 4th place's best cards → 1st and 2nd place (higher rank to 1st; if tied, 1st chooses)
    - **Return exchange** (player selection):
      - Players who received cards select any card from their hand to give back to the player who gave them the card
      - All return exchanges happen simultaneously (all players choose at same time)
-5. Reshuffle and deal 27 cards to each player for the next round
 6. Start next hand with whoever gave up the tribute card that went to 1st
    place as leader (RULES.md "Leader Selection") — 4th place in a
    single-team lead; whichever of 3rd/4th gave the higher card in a
    two-team lead. If the tribute was cancelled (both Red Jokers held by
-   the losing side), 1st place leads instead
+   the losing side), 1st place leads instead. Play doesn't start until the
+   full exchange (step 5) has resolved
 7. Continue until a team wins with 1-2 or 1-3 finish at level A
 
 ### End Game
@@ -505,7 +516,12 @@ Response: { success }
 ### `POST /api/game/[code]/exchange-cards`
 Submit the player-selected "return" half of a card exchange (the "initial"
 half is automatic — best card, sender/recipient determined by finishing
-position — and isn't something a client can submit at all).
+position — and isn't something a client can submit at all). The next
+round's cards are already dealt by this point (`end-hand` deals them and
+computes the initial exchange up front — see "End Hand / Level" above); once
+every owed return is in, this route just activates that already-dealt round
+(sets it `in_progress` with the leader who gave up 1st place's tribute
+card) rather than dealing a new one.
 ```
 Body: { playerId, cardToGive: {suit, rank} }
 Response: { success } OR { error, reason }

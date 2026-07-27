@@ -26,6 +26,7 @@ import type {
   CardExchangeActionData,
   CardWithWild,
   GameAction,
+  GameRound,
   GameStateResponse,
   PlayerPosition,
 } from "@/lib/types";
@@ -237,6 +238,42 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     [handleGameAction],
   );
 
+  // RULES.md "Card Exchange": the next round's hand is dealt (and, for a
+  // resolved tribute, the initial exchange already applied) before this
+  // round_updated broadcast ever fires — but hands are deliberately never
+  // broadcast (privacy), so the only way this client learns its own new
+  // hand is a fresh authenticated fetch. Two situations change *my* hand
+  // without my own action: a brand-new round arriving (roundId differs from
+  // what the store already has), and this same round's tribute finally
+  // resolving into 'card_exchange' from an 'awaiting_giver_choice'/
+  // 'awaiting_tribute_choice' pause (a giver's chosen card actually leaves
+  // their hand only once the whole plan resolves - see
+  // choose-giver-card/route.ts, choose-tribute/route.ts). A receiving
+  // player's hand growing is covered separately by handleGameAction's
+  // card_exchange listener above; this covers the giver's side (and every
+  // other case) via a plain refetch instead of trying to replay each
+  // transfer client-side.
+  const onRoundUpdate = useCallback((round: GameRound) => {
+    const store = useGameStore.getState();
+    // Not gated on `store.roundId !== null`: a round_updated can in
+    // principle arrive before this client's own initial hydration fetch has
+    // resolved (the realtime channel subscribing faster than the REST
+    // round-trip) - store.roundId is still null then, but the round it
+    // describes could still be a different (newer) one than whatever that
+    // in-flight fetch ends up returning. Treating null as "different" too
+    // costs at most one extra, quickly-superseded refetch racing the
+    // already-in-flight initial one; treating it as "same" (the previous
+    // condition) would silently skip the refetch this exact race needs.
+    const isNewRound = store.roundId !== round.id;
+    const tributeJustResolved =
+      store.roundId === round.id &&
+      (store.roundStatus === "awaiting_giver_choice" || store.roundStatus === "awaiting_tribute_choice") &&
+      round.status === "card_exchange";
+    if (isNewRound || tributeJustResolved) {
+      gameStateQueryRef.current.refetch();
+    }
+  }, []);
+
   const onStatusChange = useCallback((status: REALTIME_SUBSCRIBE_STATES) => {
     if (status === "SUBSCRIBED") {
       setConnectionStatus("connected");
@@ -253,7 +290,7 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     setConnectionStatus(status === "CLOSED" ? "disconnected" : "reconnecting");
   }, []);
 
-  useGameRealtimeSync(gameId, onGameAction, onStatusChange);
+  useGameRealtimeSync(gameId, onGameAction, onRoundUpdate, onStatusChange);
 
   // ARCHITECTURE.md "Disconnect & Reconnect": pings heartbeat/route.ts every
   // HEARTBEAT_INTERVAL_MS (well under its own HEARTBEAT_STALE_MS, so a

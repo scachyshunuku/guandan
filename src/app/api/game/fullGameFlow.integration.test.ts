@@ -25,12 +25,17 @@ jest.mock("@/lib/realtimeBroadcast");
 
 import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { bestCardCandidates } from "@/lib/gameRules/cardExchange";
 import type {
+  Card,
   CardExchangeActionData,
   CardWithWild,
+  ChooseGiverCardResponse,
+  ChooseTributeResponse,
   CreateGameResponse,
   EndHandResponse,
   ExchangeCardsResponse,
+  GameState,
   GameStateResponse,
   JoinGameResponse,
   PassResponse,
@@ -42,6 +47,8 @@ import { POST as playCardsRoute } from "./[id]/play-cards/route";
 import { POST as passRoute } from "./[id]/pass/route";
 import { POST as endHandRoute } from "./[id]/end-hand/route";
 import { POST as exchangeCardsRoute } from "./[id]/exchange-cards/route";
+import { POST as chooseGiverCardRoute } from "./[id]/choose-giver-card/route";
+import { POST as chooseTributeRoute } from "./[id]/choose-tribute/route";
 import { GET as getGameRoute } from "./[id]/route";
 import { create as createGame, join, start } from "@/testUtils/gameRouteHelpers";
 
@@ -89,6 +96,22 @@ function exchangeCards(
   return exchangeCardsRoute(request, { params: Promise.resolve({ id: gameId }) });
 }
 
+function chooseGiverCard(gameId: string, playerId: string, card: Card) {
+  const request = new Request(`http://localhost/api/game/${gameId}/choose-giver-card`, {
+    method: "POST",
+    body: JSON.stringify({ playerId, card }),
+  });
+  return chooseGiverCardRoute(request, { params: Promise.resolve({ id: gameId }) });
+}
+
+function chooseTribute(gameId: string, playerId: string, take: PlayerPosition) {
+  const request = new Request(`http://localhost/api/game/${gameId}/choose-tribute`, {
+    method: "POST",
+    body: JSON.stringify({ playerId, take }),
+  });
+  return chooseTributeRoute(request, { params: Promise.resolve({ id: gameId }) });
+}
+
 function getGameState(gameId: string, playerId: string) {
   const url = new URL(`http://localhost/api/game/${gameId}`);
   url.searchParams.set("playerId", playerId);
@@ -99,7 +122,7 @@ interface RoundRow {
   id: string;
   game_id: string;
   round_number: number;
-  game_state: { currentTrick: unknown[]; trickCount: number; finishOrder: PlayerPosition[] };
+  game_state: GameState;
   current_player_turn: PlayerPosition | null;
   leader_position: PlayerPosition | null;
   status: string;
@@ -198,31 +221,55 @@ describe("end-to-end game flow", () => {
     const [firstFinisher, secondFinisher] = concludedRound.game_state.finishOrder;
     expect(secondFinisher).toBe(((firstFinisher + 2) % 4) as PlayerPosition); // partners
 
-    // 5. End the hand: finishing positions are recorded and the round moves
-    // into card exchange (or straight to completed, if the tribute was
-    // cancelled by the loser holding both red jokers).
+    // 5. End the hand: finishing positions are recorded on round 1 (now
+    // 'completed'), and — RULES.md "Card Exchange": the next round's cards
+    // are dealt immediately, before any tribute card is given or returned —
+    // round 2 is created in the same request, already dealt and already
+    // planned against that new hand (cancelled straight to 'in_progress',
+    // paused on a tie, or waiting on 'card_exchange' returns).
     const endHandResponse = await endHand(gameId, playerIdByPosition[firstFinisher]);
     expect(endHandResponse.status).toBe(200);
     expect(((await endHandResponse.json()) as EndHandResponse).success).toBe(true);
 
-    // Read back by id, not latestRound(gameId): a cancelled-tribute hand
-    // (both red jokers held by the loser) has end-hand deal the next round
-    // immediately, so latestRound(gameId) could already have moved past
-    // round 1 by the time this runs.
     const handEndedRound = roundById(concludedRound.id);
+    expect(handEndedRound.status).toBe("completed");
     expect(handEndedRound.finishing_positions?.[firstFinisher]).toBe(1);
     expect(handEndedRound.finishing_positions?.[secondFinisher]).toBe(2);
 
-    // 6. Card exchange: submit every owed "return" (the automatic "initial"
-    // half was already applied by end-hand).
-    if (handEndedRound.status === "card_exchange") {
+    let round2 = latestRound(gameId);
+    expect(round2.round_number).toBe(2);
+
+    // 6. Resolve any tie the freshly-dealt hand's tribute plan hit (RULES.md
+    // "Best card, when tied" / "Two-Team Lead") — deterministic (always the
+    // first tied candidate / the third-place card) since this is exercising
+    // the wiring, not the choice logic itself (covered elsewhere).
+    while (round2.status === "awaiting_giver_choice") {
+      const pending = round2.game_state.pendingGiverChoice!;
+      const position = pending.pendingPositions[0];
+      const candidates = bestCardCandidates(handOf(gameId, position), pending.levelRank);
+      const response = await chooseGiverCard(gameId, playerIdByPosition[position], candidates[0]);
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as ChooseGiverCardResponse).success).toBe(true);
+      round2 = latestRound(gameId);
+    }
+    if (round2.status === "awaiting_tribute_choice") {
+      const pending = round2.game_state.pendingTributeChoice!;
+      const response = await chooseTribute(gameId, playerIdByPosition[firstFinisher], pending.thirdPosition);
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as ChooseTributeResponse).success).toBe(true);
+      round2 = latestRound(gameId);
+    }
+
+    // 7. Card exchange: submit every owed "return" (the automatic "initial"
+    // half was already applied above).
+    if (round2.status === "card_exchange") {
       const initialActions = (
         fake._tables.game_actions as unknown as {
           round_id: string;
           action_type: string;
           action_data: CardExchangeActionData;
         }[]
-      ).filter((a) => a.round_id === handEndedRound.id && a.action_type === "card_exchange");
+      ).filter((a) => a.round_id === round2.id && a.action_type === "card_exchange");
       expect(initialActions.length).toBeGreaterThan(0);
 
       for (const action of initialActions) {
@@ -233,11 +280,12 @@ describe("end-to-end game flow", () => {
         expect(((await returnResponse.json()) as ExchangeCardsResponse).success).toBe(true);
       }
     } else {
-      expect(handEndedRound.status).toBe("completed"); // tribute cancelled (both red jokers held by the loser)
+      expect(round2.status).toBe("in_progress"); // tribute cancelled (both red jokers held by the loser)
     }
 
-    // 7. The next round is dealt automatically once the exchange (or
-    // cancelled tribute) resolves.
+    // 8. Round 2 activates in place once the exchange (or cancelled
+    // tribute) resolves — there's no round 3 for this; the cards dealt back
+    // in step 5 are what's actually played next.
     const nextRound = latestRound(gameId);
     expect(nextRound.round_number).toBe(2);
     expect(nextRound.status).toBe("in_progress");

@@ -2,7 +2,7 @@
 // card, when tied": if the player giving their best card (4th place, or
 // 3rd/4th place in a two-team lead) holds more than one card tied for that
 // best rank, they choose which one to give — the same choice 1st place gets
-// when 3rd's and 4th's cards tie against each other. end-hand/route.ts
+// when 3rd's and 4th's cards tie against each other. startNextRound
 // pauses a round on 'awaiting_giver_choice' (rather than picking one for
 // them) when this comes up, storing the still-pending giver positions and
 // each one's tied candidates' levelRank in game_state.pendingGiverChoice;
@@ -10,7 +10,7 @@
 // giver has resolved, it re-plans the exchange with all choices known —
 // either handing off to choose-tribute/route.ts (if the resolved cards now
 // tie with each other) or applying the transfers directly and moving on to
-// 'card_exchange', exactly like end-hand/route.ts's own resolved-transfer
+// 'card_exchange', exactly like startNextRound's own resolved-transfer
 // path.
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -19,6 +19,7 @@ import { encodeCard } from "@/lib/cardUtils";
 import {
   bestCardCandidates,
   computeExchangeHandWrites,
+  leaderPositionForTransfers,
   planInitialExchanges,
   toHandWrites,
 } from "@/lib/gameRules/cardExchange";
@@ -79,7 +80,7 @@ export async function POST(
 
   const pending = round.game_state.pendingGiverChoice;
   if (!pending) {
-    // Shouldn't happen — end-hand/route.ts always sets this alongside the
+    // Shouldn't happen — startNextRound always sets this alongside the
     // 'awaiting_giver_choice' status — but stay defensive rather than
     // crashing on a malformed round.
     console.error(`Round ${round.id} is 'awaiting_giver_choice' with no pendingGiverChoice`);
@@ -220,8 +221,14 @@ async function finalizeAfterGiverChoicesResolved(
   }
 
   // Fully resolved — apply the transfers and move on to 'card_exchange',
-  // exactly like end-hand/route.ts's own resolved-transfer path.
+  // exactly like startNextRound's own resolved-transfer path. Also sets
+  // leader_position now (RULES.md "Leader Selection": whoever gave up the
+  // tribute card that went to 1st place) — the round isn't playable yet
+  // (current_player_turn stays null), but exchange-cards/route.ts needs this
+  // already in place once every return is in.
   const { transfers } = plan;
+  const firstPos = finishingPositions.indexOf(1) as PlayerPosition;
+  const leaderPosition = leaderPositionForTransfers(transfers, firstPos);
   const clearedGameState: GameState = {
     currentTrick: currentGameState.currentTrick,
     trickCount: currentGameState.trickCount,
@@ -229,7 +236,7 @@ async function finalizeAfterGiverChoicesResolved(
   };
   const roundClaimResult = await supabaseAdmin
     .from("game_rounds")
-    .update({ status: "card_exchange", game_state: clearedGameState })
+    .update({ status: "card_exchange", game_state: clearedGameState, leader_position: leaderPosition })
     .eq("id", roundId)
     .eq("status", "awaiting_giver_choice")
     .select("*");
@@ -302,7 +309,7 @@ async function finalizeAfterGiverChoicesResolved(
     await Promise.all([
       supabaseAdmin
         .from("game_rounds")
-        .update({ status: "awaiting_giver_choice", game_state: revertGameState })
+        .update({ status: "awaiting_giver_choice", game_state: revertGameState, leader_position: null })
         .eq("id", roundId)
         .eq("status", "card_exchange"),
       ...handWrites.map((w) =>

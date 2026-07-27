@@ -1,6 +1,7 @@
 "use client";
 
-import type { Card, PlayerPosition } from "@/lib/types";
+import type { Card, GameParticipant, PlayerPosition } from "@/lib/types";
+import { nameForPosition } from "@/lib/format";
 import CardComponent from "./Card";
 
 export interface TributeChoiceModalProps {
@@ -8,6 +9,9 @@ export interface TributeChoiceModalProps {
   thirdCard: Card;
   fourthPosition: PlayerPosition;
   fourthCard: Card;
+  // For name lookups only (RULES.md "Card Exchange": exchanges are visible
+  // to everyone, by name, not by raw seat number).
+  participants: GameParticipant[];
   // Only 1st place actually chooses (RULES.md "Two-Team Lead"); everyone
   // else just watches and waits, same as CardExchangeModal's "no return
   // needed" branch.
@@ -27,10 +31,14 @@ export default function TributeChoiceModal({
   thirdCard,
   fourthPosition,
   fourthCard,
+  participants,
   isFirstPlace,
   onChoose,
   isSubmitting = false,
 }: TributeChoiceModalProps) {
+  const thirdName = nameForPosition(thirdPosition, participants);
+  const fourthName = nameForPosition(fourthPosition, participants);
+
   return (
     <div
       data-testid="tribute-choice-modal"
@@ -41,8 +49,8 @@ export default function TributeChoiceModal({
       {isFirstPlace ? (
         <>
           <p data-testid="tribute-choice-prompt" className="text-sm text-gray-700">
-            Position {thirdPosition} and position {fourthPosition} gave tied tribute cards —
-            choose which one to take (the other goes to 2nd place).
+            {thirdName} and {fourthName} gave tied tribute cards — choose which one to take (the
+            other goes to 2nd place).
           </p>
           <div className="flex gap-4">
             <div
@@ -54,7 +62,7 @@ export default function TributeChoiceModal({
                 card={thirdCard}
                 onClick={isSubmitting ? undefined : () => onChoose(thirdPosition)}
               />
-              <span className="text-xs text-gray-600">From position {thirdPosition}</span>
+              <span className="text-xs text-gray-600">From {thirdName}</span>
             </div>
             <div
               data-testid="tribute-choice-option"
@@ -65,14 +73,14 @@ export default function TributeChoiceModal({
                 card={fourthCard}
                 onClick={isSubmitting ? undefined : () => onChoose(fourthPosition)}
               />
-              <span className="text-xs text-gray-600">From position {fourthPosition}</span>
+              <span className="text-xs text-gray-600">From {fourthName}</span>
             </div>
           </div>
         </>
       ) : (
         <p data-testid="tribute-choice-waiting" className="text-sm text-gray-500">
-          Position {thirdPosition} and position {fourthPosition} gave tied tribute cards —
-          waiting for 1st place to choose…
+          {thirdName} and {fourthName} gave tied tribute cards — waiting for 1st place to
+          choose…
         </p>
       )}
     </div>

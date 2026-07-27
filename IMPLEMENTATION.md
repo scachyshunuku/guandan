@@ -145,18 +145,21 @@ All of these can be done in parallel. Heavy unit test coverage.
 - [x] `POST /api/game/[id]/end-hand`
   - Determine finishing positions
   - Determine exchange type (1-4, 1-3, 1-2)
-  - Set game_rounds.status = 'card_exchange'
-  - Broadcast (initial exchanges calculated)
+  - Check if game won (1-2 or 1-3 at level A)
+  - Set previous round's game_rounds.status = 'completed'
+  - Create new game_rounds (round N+1); shuffle & deal cards immediately
+  - Determine the initial exchange (best card, cancellation) against that
+    freshly-dealt hand; set the new round's status to 'card_exchange'
+    (or 'awaiting_giver_choice'/'awaiting_tribute_choice' for a tie, or
+    straight to 'in_progress' if cancelled)
+  - Broadcast next round start (initial exchange calculated, if any)
 - [x] `POST /api/game/[id]/exchange-cards`
   - Validate player received card
   - Accept card selection for return
   - Insert card_exchange actions
-  - When all returns done, move to deal next round
-  - Update game_rounds.status = 'completed'
-  - Create new game_rounds (round N+1)
-  - Shuffle & deal cards
-  - Check if game won (1-2 or 1-3 at level A)
-  - Broadcast next round start
+  - When all returns done, activate the already-dealt round:
+    game_rounds.status = 'in_progress', current_player_turn = leader
+  - Broadcast round activated
 - [x] Integration tests: Single-team lead, two-team lead, card selection, level promotion
 - **Blockers**: Tasks 1.2, 1.3, 2.4, 3.2
 - **Enables**: Task 4.x

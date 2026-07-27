@@ -133,10 +133,11 @@ export interface GameState {
   // 'awaiting_tribute_choice' if the two givers' resolved cards now tie
   // with each other, or straight to 'card_exchange' otherwise).
   pendingGiverChoice?: {
-    // The just-finished hand's level (RULES.md "Level Cards & Wild Cards"),
-    // captured once here rather than re-derived from the game's team
-    // levels later — those may already have been promoted by the time a
-    // later giver's choice or the final cross-giver comparison needs it.
+    // This new round's level (RULES.md "Level Cards & Wild Cards") — the
+    // level its freshly-dealt cards are evaluated at, captured once here
+    // rather than re-derived from the game's team levels later, which could
+    // in principle change (promotion) before a later giver's choice or the
+    // final cross-giver comparison needs it.
     levelRank: StandardRank;
     pendingPositions: PlayerPosition[];
     resolvedCards: Partial<Record<PlayerPosition, Card>>;

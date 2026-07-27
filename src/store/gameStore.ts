@@ -34,13 +34,16 @@ export interface GameStoreState {
   currentPlayerTurn: PlayerPosition | null;
 
   // The round the fields below describe — used to detect a fresh round
-  // (dealNextRound's insert) so roundActions can be reset rather than
+  // (startNextRound's insert) so roundActions can be reset rather than
   // carrying over the previous round's card-exchange history.
   roundId: string | null;
   roundStatus: RoundStatus;
-  // Mirrors GameRound.finishingPositions — null until the round concludes.
-  // CardExchangeModal/TributeChoiceModal need this to know who's 1st/2nd/
-  // 3rd/4th without re-deriving it client-side.
+  // Mirrors GameRound.finishingPositions — null only until startNextRound
+  // deals this round (RULES.md "Card Exchange": every round carries the
+  // *previous* hand's finishing order from the moment it's created, not
+  // just once *this* round itself concludes). CardExchangeModal/
+  // TributeChoiceModal need this to know who's 1st/2nd/3rd/4th without
+  // re-deriving it client-side.
   finishingPositions: number[] | null;
   // Mirrors GameRound.gameState.pendingTributeChoice — set only while
   // roundStatus is 'awaiting_tribute_choice' (RULES.md "Two-Team Lead").
@@ -120,7 +123,7 @@ export const useGameStore = create<GameStoreState>((set) => ({
       finishingPositions: round.finishingPositions,
       pendingTributeChoice: round.gameState.pendingTributeChoice ?? null,
       pendingGiverChoice: round.gameState.pendingGiverChoice ?? null,
-      // A fresh round (dealNextRound's insert) starts its action history
+      // A fresh round (startNextRound's insert) starts its action history
       // over; the same round updating again (e.g. a status transition)
       // keeps whatever's already been recorded.
       roundActions: state.roundId !== null && state.roundId !== round.id ? [] : state.roundActions,

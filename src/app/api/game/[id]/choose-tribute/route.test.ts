@@ -127,6 +127,11 @@ describe("POST /api/game/[id]/choose-tribute", () => {
     const round = fake._tables.game_rounds.find((r) => r.id === roundId);
     expect(round?.status).toBe("card_exchange");
     expect((round?.game_state as GameState).pendingTributeChoice).toBeUndefined();
+    // Position 1 (3rd place) gave up the tribute card 1st place took —
+    // they lead next (RULES.md "Leader Selection"), set immediately even
+    // though the round isn't playable yet.
+    expect(round?.leader_position).toBe(1);
+    expect(round?.current_player_turn).toBeNull();
 
     expect(fake._tables.game_actions).toHaveLength(2);
     expect(fake._tables.game_actions).toEqual(
@@ -152,6 +157,11 @@ describe("POST /api/game/[id]/choose-tribute", () => {
 
     expect(handOf(gameId, 0)).toEqual([{ rank: "9", suit: "SPADES" }]);
     expect(handOf(gameId, 2)).toEqual([{ rank: "9", suit: "CLUBS" }]);
+
+    const round = fake._tables.game_rounds.find((r) => r.game_id === gameId);
+    // Position 3 (4th place) gave up the tribute card 1st place took this
+    // time — they lead next instead.
+    expect(round?.leader_position).toBe(3);
   });
 
   it("rejects a choice from anyone other than 1st place", async () => {

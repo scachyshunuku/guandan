@@ -1,11 +1,11 @@
 // POST /api/game/[id]/choose-tribute — RULES.md "Two-Team Lead": "If the two
 // cards are the same rank, 1st place chooses which card to take (then 2nd
-// place gets the other)." end-hand/route.ts pauses a round on
+// place gets the other)." startNextRound pauses a round on
 // 'awaiting_tribute_choice' (rather than resolving the tie arbitrarily) when
 // this comes up, storing the tied cards in game_state.pendingTributeChoice;
 // this route collects 1st place's choice, applies both transfers, logs them
 // as 'initial' card_exchange actions (matching the non-tied path in
-// end-hand/route.ts), and moves the round on to 'card_exchange' so
+// startNextRound), and moves the round on to 'card_exchange' so
 // exchange-cards can collect the "return" half exactly as it already does.
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -70,9 +70,10 @@ export async function POST(
 
   const pending = round.game_state.pendingTributeChoice;
   if (!pending) {
-    // Shouldn't happen — end-hand/route.ts always sets this alongside the
-    // 'awaiting_tribute_choice' status — but stay defensive rather than
-    // crashing on a malformed round.
+    // Shouldn't happen — startNextRound (or choose-giver-card/route.ts, for
+    // a cross-giver tie found only after both givers resolve) always sets
+    // this alongside the 'awaiting_tribute_choice' status — but stay
+    // defensive rather than crashing on a malformed round.
     console.error(`Round ${round.id} is 'awaiting_tribute_choice' with no pendingTributeChoice`);
     return NextResponse.json({ error: "Round has no pending tribute choice" }, { status: 500 });
   }
@@ -112,9 +113,15 @@ export async function POST(
     trickCount: round.game_state.trickCount,
     finishOrder: round.game_state.finishOrder,
   };
+  // RULES.md "Leader Selection": whoever gave up the tribute card that went
+  // to 1st place leads next — `take` is exactly that position (1st place is
+  // the caller, `position`). Set now, same as startNextRound/
+  // choose-giver-card's own resolved-transfer paths — the round isn't
+  // playable yet (current_player_turn stays null), but exchange-cards/
+  // route.ts needs this already in place once every return is in.
   const roundClaimResult = await supabaseAdmin
     .from("game_rounds")
-    .update({ status: "card_exchange", game_state: newGameState })
+    .update({ status: "card_exchange", game_state: newGameState, leader_position: take })
     .eq("id", round.id)
     .eq("status", "awaiting_tribute_choice")
     .select("*");
@@ -188,7 +195,7 @@ async function rollbackChooseTribute(
   const results = await Promise.all([
     supabaseAdmin
       .from("game_rounds")
-      .update({ status: "awaiting_tribute_choice", game_state: originalGameState })
+      .update({ status: "awaiting_tribute_choice", game_state: originalGameState, leader_position: null })
       .eq("id", roundId)
       .eq("status", "card_exchange"),
     ...handWrites.map((w) =>
