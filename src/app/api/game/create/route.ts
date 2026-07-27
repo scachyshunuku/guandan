@@ -1,12 +1,11 @@
 // POST /api/game/create — see ARCHITECTURE.md section 8 and
-// IMPLEMENTATION.md Task 3.1. Only creates the `games` row and an empty
-// round 1; no participant is added and no cards are dealt here (that's
-// /join and /start, respectively).
+// IMPLEMENTATION.md Task 3.1. Only creates the `games` row; no participant is
+// added and no round exists yet (that's /join and /start, respectively —
+// start/route.ts inserts round 1 itself once the game actually begins,
+// mirroring startNextRound.ts's pattern for every round after it).
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import type { CreateGameResponse, GameState } from "@/lib/types";
-
-const INITIAL_GAME_STATE: GameState = { currentTrick: [], trickCount: 0, finishOrder: [] };
+import type { CreateGameResponse } from "@/lib/types";
 
 export async function POST() {
   const { data: game, error: gameError } = await supabaseAdmin
@@ -19,30 +18,6 @@ export async function POST() {
     console.error("Failed to create game", gameError);
     return NextResponse.json(
       { error: "Failed to create game" },
-      { status: 500 },
-    );
-  }
-
-  const { error: roundError } = await supabaseAdmin
-    .from("game_rounds")
-    .insert({
-      game_id: game.id,
-      round_number: 1,
-      game_state: INITIAL_GAME_STATE,
-    });
-
-  if (roundError) {
-    console.error("Failed to initialize game round", roundError);
-    // Don't leave a game behind with no round to play in.
-    const { error: deleteError } = await supabaseAdmin
-      .from("games")
-      .delete()
-      .eq("id", game.id);
-    if (deleteError) {
-      console.error("Failed to clean up orphaned game", deleteError);
-    }
-    return NextResponse.json(
-      { error: "Failed to initialize game round" },
       { status: 500 },
     );
   }

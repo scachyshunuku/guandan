@@ -92,29 +92,37 @@ export async function POST(
     return NextResponse.json({ error: "Failed to join game" }, { status: 500 });
   }
 
+  // A game still 'waiting' (before start/route.ts deals) has no round yet
+  // (create/route.ts no longer creates one eagerly) - round_id is nullable
+  // specifically so this join is still logged rather than silently dropped
+  // for every pre-start joiner.
   const round = await getLatestRound(gameId);
-  if (round) {
-    const actionData: JoinActionData = { playerName, position };
-    const { error: actionError } = await supabaseAdmin
-      .from("game_actions")
-      .insert({
-        game_id: gameId,
-        round_id: round.id,
-        player_id: playerId,
-        action_type: "join",
-        action_data: actionData,
-      });
-    if (actionError) {
-      console.error("Failed to log join game_action", actionError);
-    }
+  const actionData: JoinActionData = { playerName, position };
+  const { error: actionError } = await supabaseAdmin
+    .from("game_actions")
+    .insert({
+      game_id: gameId,
+      round_id: round?.id ?? null,
+      player_id: playerId,
+      action_type: "join",
+      action_data: actionData,
+    });
+  if (actionError) {
+    console.error("Failed to log join game_action", actionError);
   }
 
   // Broadcast so other connected clients' useGameRealtimeSync picks up the
   // new participant (see ARCHITECTURE.md section 10). hand is explicitly
   // zeroed rather than trusting the inserted row's value, since a hand must
   // never leave the server on this channel — even though a freshly inserted
-  // participant always has an empty one today.
-  await broadcastToGame(gameId, "participant_joined", { ...inserted, hand: [] });
+  // participant always has an empty one today. hand_count carries the real
+  // (always-zero, for a fresh join) count separately, since mapGameParticipantRow
+  // can't recover it from the zeroed hand.
+  await broadcastToGame(gameId, "participant_joined", {
+    ...inserted,
+    hand: [],
+    hand_count: inserted.hand.length,
+  });
 
   const response: JoinGameResponse =
     inserted.position === null

@@ -35,15 +35,25 @@ beforeEach(() => {
   jest.restoreAllMocks();
 });
 
+// No round is seeded by default - create/route.ts no longer creates one
+// eagerly, so a game only has one once start/route.ts deals it. Tests that
+// need an active round (simulating a game past 'waiting') call seedRound.
 async function seedGame(overrides: Record<string, unknown> = {}): Promise<string> {
   const { data: game } = await fake.from("games").insert(overrides).select("id").single();
-  const gameId = (game as { id: string }).id;
-  await fake.from("game_rounds").insert({
-    game_id: gameId,
-    round_number: 1,
-    game_state: { currentTrick: [], trickCount: 0 },
-  });
-  return gameId;
+  return (game as { id: string }).id;
+}
+
+async function seedRound(gameId: string): Promise<string> {
+  const { data: round } = await fake
+    .from("game_rounds")
+    .insert({
+      game_id: gameId,
+      round_number: 1,
+      game_state: { currentTrick: [], trickCount: 0 },
+    })
+    .select("id")
+    .single();
+  return (round as { id: string }).id;
 }
 
 function callJoin(gameId: string, body: unknown) {
@@ -81,16 +91,31 @@ describe("POST /api/game/[id]/join", () => {
     expect(await response.json()).toEqual({ spectator: true });
   });
 
-  it("logs a join game_action with the assigned position", async () => {
+  it("logs a join game_action with round_id null before the game has a round yet", async () => {
     const gameId = await seedGame();
     await callJoin(gameId, { playerName: "Alice", playerId: "alice" });
 
     expect(fake._tables.game_actions).toHaveLength(1);
     expect(fake._tables.game_actions[0]).toMatchObject({
       game_id: gameId,
+      round_id: null,
       player_id: "alice",
       action_type: "join",
       action_data: { playerName: "Alice", position: 0 },
+    });
+  });
+
+  it("logs a join game_action against the current round once the game has one", async () => {
+    const gameId = await seedGame({ status: "in_progress" });
+    const roundId = await seedRound(gameId);
+    await callJoin(gameId, { playerName: "Alice", playerId: "alice" });
+
+    expect(fake._tables.game_actions).toHaveLength(1);
+    expect(fake._tables.game_actions[0]).toMatchObject({
+      game_id: gameId,
+      round_id: roundId,
+      player_id: "alice",
+      action_type: "join",
     });
   });
 
@@ -134,6 +159,7 @@ describe("POST /api/game/[id]/join", () => {
 
   it("assigns everyone as a spectator once the game has started", async () => {
     const gameId = await seedGame({ status: "in_progress" });
+    await seedRound(gameId);
     const response = await callJoin(gameId, {
       playerName: "Late",
       playerId: "late",

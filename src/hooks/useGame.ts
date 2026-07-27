@@ -24,7 +24,9 @@ import { PASS } from "@/lib/types";
 import type {
   Card,
   CardExchangeActionData,
+  CardPlayedActionData,
   CardWithWild,
+  Game,
   GameAction,
   GameRound,
   GameStateResponse,
@@ -207,12 +209,34 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
   }, [gameId]);
 
   const handleGameAction = useCallback((action: GameAction) => {
+    // card_played/card_exchange actions are public the moment they happen
+    // (history/route.ts: "no action data is redacted... once they occur
+    // under the game rules") and already carry exactly which card(s)
+    // moved, so every participant's handCount (GameTable's per-seat "N
+    // cards" display) is derived from that instead of a dedicated
+    // broadcast - covering play-cards/exchange-cards' return exchange
+    // directly. The "whole hand replaced" cases (a fresh deal, or an
+    // initial tribute exchange bundled into it) aren't derived here at all;
+    // onRoundUpdate's refetch below already re-pulls every participant's
+    // authoritative handCount for those, and that refetch's full
+    // updateParticipants overwrite also corrects for any transient
+    // double-application if a card_exchange broadcast for one of those
+    // bundled transfers happens to arrive on either side of it.
+    if (action.actionType === "card_played") {
+      const data = action.actionData as CardPlayedActionData;
+      useGameStore.getState().adjustHandCounts([{ position: data.position, delta: -data.cards.length }]);
+      return;
+    }
+    if (action.actionType !== "card_exchange") return;
+    const data = action.actionData as CardExchangeActionData;
+    useGameStore.getState().adjustHandCounts([
+      { position: data.from, delta: -1 },
+      { position: data.to, delta: 1 },
+    ]);
     // The only game_action type that can change *my* hand without me having
     // initiated it - hands never travel on game_updated/round_updated/
     // participant_joined (ARCHITECTURE.md section 10), so this is the sole
     // way a received exchange card reaches the store.
-    if (action.actionType !== "card_exchange") return;
-    const data = action.actionData as CardExchangeActionData;
     if (data.to !== useGameStore.getState().myPosition) return;
     const store = useGameStore.getState();
     store.setHand([...store.hand, data.card]);
@@ -274,6 +298,20 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     }
   }, []);
 
+  // The one deal with no round-transition signal of its own: start/route.ts
+  // flips the game straight from 'waiting' to 'in_progress' while dealing
+  // into the *same* round id it just inserted (see start/route.ts and
+  // useGameRealtimeSync.ts's onGameUpdate doc comment), so onRoundUpdate's
+  // isNewRound/tributeJustResolved checks never fire for it - every
+  // participant's handCount (and, for the initiator's own view of their own
+  // seat, everyone else's too) would otherwise stay stuck at its pre-deal
+  // value until some *other* refetch trigger happens to fire.
+  const onGameUpdate = useCallback((game: Game) => {
+    if (useGameStore.getState().gameStatus === "waiting" && game.status === "in_progress") {
+      gameStateQueryRef.current.refetch();
+    }
+  }, []);
+
   const onStatusChange = useCallback((status: REALTIME_SUBSCRIBE_STATES) => {
     if (status === "SUBSCRIBED") {
       setConnectionStatus("connected");
@@ -290,7 +328,7 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     setConnectionStatus(status === "CLOSED" ? "disconnected" : "reconnecting");
   }, []);
 
-  useGameRealtimeSync(gameId, onGameAction, onRoundUpdate, onStatusChange);
+  useGameRealtimeSync(gameId, onGameAction, onRoundUpdate, onGameUpdate, onStatusChange);
 
   // ARCHITECTURE.md "Disconnect & Reconnect": pings heartbeat/route.ts every
   // HEARTBEAT_INTERVAL_MS (well under its own HEARTBEAT_STALE_MS, so a

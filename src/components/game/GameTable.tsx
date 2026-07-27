@@ -96,7 +96,7 @@ function renderSeat(
       position={position}
       seatLabel={seatLabel}
       isConnected={participant.isConnected}
-      cardCount={participant.hand.length}
+      cardCount={participant.handCount}
       isCurrentTurn={round?.currentPlayerTurn === position}
       isSelf={myPosition === position}
     />

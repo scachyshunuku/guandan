@@ -42,6 +42,17 @@ describe("GET /api/game/[id]", () => {
     expect(body.game.id).toBe(gameId);
   });
 
+  it("returns round: null for a game still waiting (no round dealt yet)", async () => {
+    const { data: game } = await fake.from("games").insert({}).select("id").single();
+    const gameId = (game as { id: string }).id;
+
+    const response = await callGet(gameId);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as GameStateResponse;
+    expect(body.round).toBeNull();
+    expect(body.roundActions).toEqual([]);
+  });
+
   it("404s for a well-formed but nonexistent game", async () => {
     const response = await callGet("00000000-0000-0000-0000-000000000000");
     expect(response.status).toBe(404);

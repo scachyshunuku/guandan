@@ -9,6 +9,7 @@ function participant(overrides: Partial<GameParticipant>): GameParticipant {
     playerId: "session-1",
     position: 0,
     hand: [{ rank: "ACE", suit: "SPADES" }],
+    handCount: overrides.hand?.length ?? 1,
     isConnected: true,
     connectedAt: "2026-01-01T00:00:00Z",
     lastHeartbeat: "2026-01-01T00:00:00Z",
