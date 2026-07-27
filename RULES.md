@@ -145,7 +145,7 @@ If a team reaches level A but fails to achieve 1-2 or 1-3, they remain at level 
 
 ## Card Exchange (After Each Round)
 
-After each round, players exchange cards based on finishing positions. **All card exchanges are visible to all players.**
+The next round's 27 cards are **shuffled and dealt to each player immediately once a hand ends** — before any tribute card is given or returned. Tribute is exchanged based on finishing positions, but **against this freshly-dealt hand**, not whatever was left over from the hand that just ended: both the automatic "best card" giving and the both-Red-Jokers cancellation check (below) are evaluated on the new hand. **All card exchanges are visible to all players.** Actual play of the new hand doesn't begin until the full exchange (giving and returning) is resolved.
 
 **Best card, when tied**: if the player giving their "best card" (4th place, or 3rd/4th place in a two-team lead) holds more than one card tied for that best rank, **they choose which one to give** — the same choice 1st place gets when 3rd's and 4th's cards tie against each other (see "Two-Team Lead" below). They might prefer to keep one of the tied cards for a combination (a pair, a straight, etc.) still in their hand.
 

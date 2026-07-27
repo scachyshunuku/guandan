@@ -1,15 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import type { Card, CardExchangeActionData, CardWithWild, PlayerPosition } from "@/lib/types";
+import type {
+  Card,
+  CardExchangeActionData,
+  CardWithWild,
+  GameParticipant,
+  PlayerPosition,
+} from "@/lib/types";
+import { nameForPosition } from "@/lib/format";
 import CardComponent from "./Card";
 
 export interface CardExchangeModalProps {
   myPosition: PlayerPosition;
   // Current hand, already including whatever this player received in the
   // initial exchange (that part is automatic — ARCHITECTURE.md "Card
-  // Exchange Phase" — by the time this modal is shown).
+  // Exchange Phase" — by the time this modal is shown). RULES.md "Card
+  // Exchange": this is the hand freshly dealt for the round about to be
+  // played, not whatever was left over from the hand that just ended.
   hand: CardWithWild[];
+  // For name lookups only (RULES.md "Card Exchange": exchanges are visible
+  // to everyone, by name, not by raw seat number).
+  participants: GameParticipant[];
   // This round's `type: 'initial'` exchange actions, all of them — RULES.md
   // "Card Exchange": "All card exchanges are visible to all players," so
   // every entry is shown regardless of who it involves, not just the
@@ -31,6 +43,7 @@ export interface CardExchangeModalProps {
 export default function CardExchangeModal({
   myPosition,
   hand,
+  participants,
   initialExchanges,
   onSubmitReturn,
   isSubmitting = false,
@@ -51,7 +64,7 @@ export default function CardExchangeModal({
             className="flex items-center gap-2 text-xs text-gray-600"
           >
             <span>
-              Position {exchange.from} → Position {exchange.to}
+              {nameForPosition(exchange.from, participants)} → {nameForPosition(exchange.to, participants)}
             </span>
             <CardComponent card={exchange.card} />
           </li>
@@ -61,7 +74,7 @@ export default function CardExchangeModal({
       {owedTo ? (
         <>
           <p data-testid="return-prompt" className="text-sm text-gray-700">
-            Choose a card to give back to position {owedTo.from}
+            Choose a card to give back to {nameForPosition(owedTo.from, participants)}
           </p>
           <div data-testid="return-card-options" className="flex flex-wrap gap-1">
             {hand.map((card, index) => (
@@ -86,9 +99,19 @@ export default function CardExchangeModal({
           </button>
         </>
       ) : (
-        <p data-testid="no-return-needed" className="text-sm text-gray-500">
-          Waiting for other players to exchange cards…
-        </p>
+        <>
+          <p data-testid="no-return-needed" className="text-sm text-gray-500">
+            Waiting for other players to exchange cards…
+          </p>
+          {/* No return owed (3rd/4th place, who only gave) — shown
+              read-only so a giver can still see their whole new hand,
+              same as a recipient choosing a return card above. */}
+          <div data-testid="own-hand-preview" className="flex flex-wrap gap-1">
+            {hand.map((card, index) => (
+              <CardComponent key={index} card={card} />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

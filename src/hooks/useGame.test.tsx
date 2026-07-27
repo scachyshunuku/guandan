@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useGame } from "./useGame";
 import { useGameStore } from "@/store/gameStore";
-import type { CurrentTrick, GameAction, GameStateResponse } from "@/lib/types";
+import type { CurrentTrick, GameAction, GameRound, GameStateResponse } from "@/lib/types";
 
 function wrapper({ children }: { children: ReactNode }) {
   const queryClient = new QueryClient({
@@ -21,6 +21,7 @@ function wrapper({ children }: { children: ReactNode }) {
 const realtimeSyncCalls: {
   gameId: string | null;
   onGameAction?: (action: GameAction) => void;
+  onRoundUpdate?: (round: GameRound) => void;
   onStatusChange?: (status: string) => void;
 }[] = [];
 
@@ -28,9 +29,10 @@ jest.mock("./useGameRealtimeSync", () => ({
   useGameRealtimeSync: (
     gameId: string | null,
     onGameAction?: (action: GameAction) => void,
+    onRoundUpdate?: (round: GameRound) => void,
     onStatusChange?: (status: string) => void,
   ) => {
-    realtimeSyncCalls.push({ gameId, onGameAction, onStatusChange });
+    realtimeSyncCalls.push({ gameId, onGameAction, onRoundUpdate, onStatusChange });
   },
 }));
 
@@ -526,6 +528,125 @@ describe("useGame", () => {
       realtimeSyncCalls[realtimeSyncCalls.length - 1].onStatusChange!;
     act(() => {
       onStatusChange("SUBSCRIBED");
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  // RULES.md "Card Exchange": the next round's hand is dealt (and, for a
+  // resolved tribute, applied) server-side before any round_updated
+  // broadcast fires, but hands are deliberately never broadcast — a plain
+  // refetch is the only way this client learns its own new hand.
+  it("refetches game state when a new round arrives", async () => {
+    mockFetchOnce(200, gameStateResponse());
+    const { result } = renderHook(
+      () => useGame({ gameId: "game-1", playerId: "player-1" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    const onRoundUpdate =
+      realtimeSyncCalls[realtimeSyncCalls.length - 1].onRoundUpdate!;
+
+    mockFetchOnce(
+      200,
+      gameStateResponse({ myHand: [{ rank: "9", suit: "CLUBS" }] }),
+    );
+    await act(async () => {
+      onRoundUpdate({
+        id: "round-2",
+        gameId: "game-1",
+        roundNumber: 2,
+        gameState: { currentTrick: [], trickCount: 0, finishOrder: [] },
+        currentPlayerTurn: 0,
+        leaderPosition: 0,
+        status: "in_progress",
+        finishingPositions: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      });
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.hand).toEqual([{ rank: "9", suit: "CLUBS" }]));
+  });
+
+  it("refetches game state when this round's tribute resolves into card_exchange", async () => {
+    mockFetchOnce(
+      200,
+      gameStateResponse({
+        round: {
+          id: "round-1",
+          gameId: "game-1",
+          roundNumber: 1,
+          gameState: { currentTrick: [], trickCount: 0, finishOrder: [] },
+          currentPlayerTurn: null,
+          leaderPosition: null,
+          status: "awaiting_giver_choice",
+          finishingPositions: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+    );
+    const { result } = renderHook(
+      () => useGame({ gameId: "game-1", playerId: "player-1" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    const onRoundUpdate =
+      realtimeSyncCalls[realtimeSyncCalls.length - 1].onRoundUpdate!;
+
+    mockFetchOnce(
+      200,
+      gameStateResponse({ myHand: [{ rank: "9", suit: "CLUBS" }] }),
+    );
+    await act(async () => {
+      onRoundUpdate({
+        id: "round-1",
+        gameId: "game-1",
+        roundNumber: 1,
+        gameState: { currentTrick: [], trickCount: 0, finishOrder: [] },
+        currentPlayerTurn: null,
+        leaderPosition: null,
+        status: "card_exchange",
+        finishingPositions: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      });
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.hand).toEqual([{ rank: "9", suit: "CLUBS" }]));
+  });
+
+  it("does not refetch for an ordinary in-round update (e.g. a card played)", async () => {
+    mockFetchOnce(200, gameStateResponse());
+    const { result } = renderHook(
+      () => useGame({ gameId: "game-1", playerId: "player-1" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    const onRoundUpdate =
+      realtimeSyncCalls[realtimeSyncCalls.length - 1].onRoundUpdate!;
+    act(() => {
+      onRoundUpdate({
+        id: "round-1",
+        gameId: "game-1",
+        roundNumber: 1,
+        gameState: { currentTrick: [{ position: 1, play: "PASS" }], trickCount: 0, finishOrder: [] },
+        currentPlayerTurn: 2,
+        leaderPosition: 0,
+        status: "in_progress",
+        finishingPositions: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      });
     });
 
     expect(global.fetch).toHaveBeenCalledTimes(1);

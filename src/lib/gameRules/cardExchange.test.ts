@@ -1,5 +1,10 @@
 import type { CardWithWild, PlayerPosition, StandardRank } from "../types";
-import { computeExchangeHandWrites, planInitialExchanges, type ParticipantHands } from "./cardExchange";
+import {
+  computeExchangeHandWrites,
+  leaderPositionForTransfers,
+  planInitialExchanges,
+  type ParticipantHands,
+} from "./cardExchange";
 
 function participant(position: 0 | 1 | 2 | 3, hand: CardWithWild[]): ParticipantHands {
   return { position, hand };
@@ -261,5 +266,22 @@ describe("computeExchangeHandWrites", () => {
         { position: 2, newHand: [{ rank: "9", suit: "CLUBS" }] },
       ]),
     );
+  });
+});
+
+describe("leaderPositionForTransfers", () => {
+  it("returns whoever gave the card routed to 1st place, not 1st place itself (RULES.md 'Leader Selection')", () => {
+    const transfers = [
+      { from: 3 as PlayerPosition, to: 0 as PlayerPosition, card: { rank: "QUEEN", suit: "SPADES" } as CardWithWild },
+      { from: 1 as PlayerPosition, to: 2 as PlayerPosition, card: { rank: "9", suit: "CLUBS" } as CardWithWild },
+    ];
+    expect(leaderPositionForTransfers(transfers, 0)).toBe(3);
+  });
+
+  it("works for a single-team lead's lone transfer too", () => {
+    const transfers = [
+      { from: 2 as PlayerPosition, to: 0 as PlayerPosition, card: { rank: "KING", suit: "CLUBS" } as CardWithWild },
+    ];
+    expect(leaderPositionForTransfers(transfers, 0)).toBe(2);
   });
 });

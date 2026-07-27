@@ -31,11 +31,16 @@ import {
   type GameRoundRow,
   type GameRow,
 } from "@/lib/db/mappers";
-import type { GameAction } from "@/lib/types";
+import type { GameAction, GameRound } from "@/lib/types";
 
 export function useGameRealtimeSync(
   gameId: string | null,
   onGameAction?: (action: GameAction) => void,
+  // Fires with every round_updated payload, before it's applied to the
+  // store - lets callers (Task 4.4's useGame) compare against the store's
+  // *previous* round id/status to detect a freshly-dealt hand (hands are
+  // deliberately never broadcast; see useGame.ts's onRoundUpdate).
+  onRoundUpdate?: (round: GameRound) => void,
   // Surfaces the channel's subscribe status (SUBSCRIBED/CHANNEL_ERROR/
   // TIMED_OUT/CLOSED) so callers (Task 4.4's useGame) can tell a dropped
   // connection from a healthy one - broadcasts are missed while down, since
@@ -46,6 +51,11 @@ export function useGameRealtimeSync(
   useEffect(() => {
     onGameActionRef.current = onGameAction;
   }, [onGameAction]);
+
+  const onRoundUpdateRef = useRef(onRoundUpdate);
+  useEffect(() => {
+    onRoundUpdateRef.current = onRoundUpdate;
+  }, [onRoundUpdate]);
 
   const onStatusChangeRef = useRef(onStatusChange);
   useEffect(() => {
@@ -63,7 +73,9 @@ export function useGameRealtimeSync(
         useGameStore.getState().setTeamLevels(game.teamALevel, game.teamBLevel);
       })
       .on("broadcast", { event: "round_updated" }, ({ payload }: { payload: GameRoundRow }) => {
-        useGameStore.getState().applyRoundUpdate(mapGameRoundRow(payload));
+        const round = mapGameRoundRow(payload);
+        onRoundUpdateRef.current?.(round);
+        useGameStore.getState().applyRoundUpdate(round);
       })
       .on(
         "broadcast",
@@ -81,6 +93,19 @@ export function useGameRealtimeSync(
       )
       .on("broadcast", { event: "game_action" }, ({ payload }: { payload: GameActionRow }) => {
         const action = mapGameActionRow(payload);
+        // A round_updated broadcast for the same transition (a fresh deal,
+        // or a tribute resolving into 'card_exchange') can trigger
+        // useGame.ts's onRoundUpdate to refetch full state - including this
+        // same action, via roundActions - before this broadcast is
+        // delivered. Without this guard, a card_exchange action arriving
+        // after that refetch would double-apply: appendRoundAction would
+        // duplicate the entry in roundActions (CardExchangeModal would show
+        // the same exchange twice), and onGameActionRef's handleGameAction
+        // would append the transferred card to `hand` a second time even
+        // though the refetch's `myHand` already included it. Both writes
+        // share this one gate rather than each guarding itself, since
+        // there's nothing to apply from an action the store already has.
+        if (useGameStore.getState().roundActions.some((a) => a.id === action.id)) return;
         useGameStore.getState().appendRoundAction(action);
         onGameActionRef.current?.(action);
       })

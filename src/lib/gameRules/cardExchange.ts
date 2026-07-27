@@ -103,12 +103,14 @@ function resolveGiverCard(
 
 // The automatic "initial" half of RULES.md "Card Exchange (After Each
 // Round)": who gives which card to whom, before either recipient has made
-// any choice of their own. `levelRank` is this *just-finished* hand's level
-// (the higher of the two pre-promotion team levels) — the card values in
-// effect while that hand's cards were actually in play. `resolvedGiverCards`
-// carries any giver's already-made choice among their own tied candidates
-// (RULES.md "Best card, when tied") — empty until choose-giver-card/route.ts
-// records one.
+// any choice of their own. RULES.md: the hand `participants` holds here is
+// the *new* round's freshly-dealt hand (startNextRound deals it before ever
+// calling this), not whatever was left over from the hand that just ended —
+// and `levelRank` is that new hand's level (the higher of the two
+// post-promotion team levels) to match: the card values in effect for the
+// hand about to be played. `resolvedGiverCards` carries any giver's
+// already-made choice among their own tied candidates (RULES.md "Best card,
+// when tied") — empty until choose-giver-card/route.ts records one.
 export function planInitialExchanges(
   combo: FinishCombo,
   finishingPositions: readonly number[],
@@ -230,6 +232,19 @@ export function computeExchangeHandWrites(
   }
 
   return [...newHandByPosition.entries()].map(([position, newHand]) => ({ position, newHand }));
+}
+
+// RULES.md "Leader Selection": whoever gave up the tribute card that went to
+// 1st place leads the next round — not 1st place itself. Shared by
+// startNextRound.ts (the fully-resolved, no-tie case) and
+// choose-giver-card/route.ts and choose-tribute/route.ts (once their own
+// tie-break resolves `transfers`), so all three derive it the same way
+// instead of each re-deriving `transfers.find(...).from` inline.
+export function leaderPositionForTransfers(
+  transfers: readonly ExchangeTransfer[],
+  firstPosition: PlayerPosition,
+): PlayerPosition {
+  return transfers.find((t) => t.to === firstPosition)!.from;
 }
 
 // Resolves computeExchangeHandWrites' position-keyed output against each

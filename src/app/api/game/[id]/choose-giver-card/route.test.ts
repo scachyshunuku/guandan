@@ -110,6 +110,11 @@ describe("POST /api/game/[id]/choose-giver-card", () => {
       const round = fake._tables.game_rounds.find((r) => r.id === roundId);
       expect(round?.status).toBe("card_exchange");
       expect((round?.game_state as GameState).pendingGiverChoice).toBeUndefined();
+      // Leader is set immediately (RULES.md "Leader Selection") even though
+      // the round isn't playable yet — exchange-cards/route.ts activates it
+      // later using this same value.
+      expect(round?.leader_position).toBe(2);
+      expect(round?.current_player_turn).toBeNull();
 
       expect(fake._tables.game_actions).toHaveLength(1);
       expect(fake._tables.game_actions[0]).toMatchObject({
@@ -262,6 +267,9 @@ describe("POST /api/game/[id]/choose-giver-card", () => {
       const round = fake._tables.game_rounds.find((r) => r.id === roundId);
       expect(round?.status).toBe("card_exchange");
       expect((round?.game_state as GameState).pendingGiverChoice).toBeUndefined();
+      // Position 1 gave the QUEEN that went to 1st (position 0) — they lead
+      // next (RULES.md "Leader Selection").
+      expect(round?.leader_position).toBe(1);
 
       // Queen (position 1) outranks 9 (position 3): higher to 1st, lower to 2nd.
       expect(handOf(gameId, 0)).toEqual([{ rank: "QUEEN", suit: "HEARTS" }]);

@@ -276,6 +276,7 @@ export default function GamePage() {
         <CardExchangeModal
           myPosition={myPosition}
           hand={hand}
+          participants={participants}
           initialExchanges={roundActions
             .filter((a) => a.actionType === "card_exchange")
             .map((a) => a.actionData as CardExchangeActionData)
@@ -302,6 +303,7 @@ export default function GamePage() {
           thirdCard={pendingTributeChoice.thirdCard}
           fourthPosition={pendingTributeChoice.fourthPosition}
           fourthCard={pendingTributeChoice.fourthCard}
+          participants={participants}
           isFirstPlace={finishingPositions?.indexOf(1) === myPosition}
           onChoose={handleChooseTribute}
           isSubmitting={isChoosingTribute}

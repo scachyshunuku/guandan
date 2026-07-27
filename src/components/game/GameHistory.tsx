@@ -10,6 +10,7 @@ import type {
   PlayerFinishedActionData,
   TrickEndActionData,
 } from "@/lib/types";
+import { nameForPosition } from "@/lib/format";
 import Card from "./Card";
 
 export interface GameHistoryProps {
@@ -82,10 +83,6 @@ export default function GameHistory({
 
 function playerNameFor(playerId: string, participants: GameParticipant[]): string {
   return participants.find((p) => p.playerId === playerId)?.playerName ?? "A player";
-}
-
-function nameForPosition(position: number, participants: GameParticipant[]): string {
-  return participants.find((p) => p.position === position)?.playerName ?? `Position ${position}`;
 }
 
 function renderEntry(action: GameAction, participants: GameParticipant[]) {
