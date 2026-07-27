@@ -1,5 +1,5 @@
-// Seat orientation relative to a viewer. Shared by GameTable and
-// TrickDisplay so both agree on where each position sits on screen.
+// Seat orientation relative to a viewer, used by GameTable to decide where
+// each position sits on screen.
 
 import type { PlayerPosition } from "./types";
 

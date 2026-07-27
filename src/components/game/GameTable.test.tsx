@@ -129,14 +129,14 @@ describe("GameTable", () => {
     expect(screen.getByTestId("team-b-level")).toHaveTextContent("3");
   });
 
-  it("shows a placeholder when no trick has started", () => {
+  it("shows a waiting placeholder in every seat when no trick has started", () => {
     render(
       <GameTable game={GAME} round={round({})} participants={PARTICIPANTS} myPosition={0} />,
     );
-    expect(screen.getByTestId("trick-empty")).toBeInTheDocument();
+    expect(screen.getAllByTestId("trick-display-waiting")).toHaveLength(4);
   });
 
-  it("renders plays in the current trick, in turn order, relative to the viewer", () => {
+  it("shows each seat's play next to their player card, in the same row", () => {
     render(
       <GameTable
         game={GAME}
@@ -155,15 +155,53 @@ describe("GameTable", () => {
         myPosition={0}
       />,
     );
-    const plays = screen.getAllByTestId("trick-play");
-    expect(plays).toHaveLength(2);
-    expect(plays[0]).toHaveTextContent("south: 1 card");
-    expect(plays[1]).toHaveTextContent("east: Pass");
+
+    const south = screen.getByTestId("seat-south");
+    expect(south).toHaveTextContent("Alice");
+    expect(south.querySelector('[data-testid="trick-display-cards"] [data-testid="card"]')).toBeInTheDocument();
+
+    const east = screen.getByTestId("seat-east");
+    expect(east).toHaveTextContent("Bob");
+    expect(east.querySelector('[data-testid="trick-display-pass"]')).toBeInTheDocument();
+
+    // North/west haven't acted yet this trick.
+    expect(
+      screen.getByTestId("seat-north").querySelector('[data-testid="trick-display-waiting"]'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("seat-west").querySelector('[data-testid="trick-display-waiting"]'),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the actual cards played, not just a count", () => {
+    render(
+      <GameTable
+        game={GAME}
+        round={round({
+          gameState: {
+            currentTrick: [
+              {
+                position: 0,
+                play: [
+                  { suit: "CLUBS", rank: "3" },
+                  { suit: "DIAMONDS", rank: "3" },
+                ],
+              },
+            ],
+            trickCount: 0,
+            finishOrder: [],
+          },
+        })}
+        participants={PARTICIPANTS}
+        myPosition={0}
+      />,
+    );
+    expect(screen.getAllByTestId("card")).toHaveLength(2);
   });
 
   it("handles no round yet (game still waiting)", () => {
     render(<GameTable game={GAME} round={null} participants={PARTICIPANTS} myPosition={0} />);
-    expect(screen.getByTestId("trick-empty")).toBeInTheDocument();
+    expect(screen.getAllByTestId("trick-display-waiting")).toHaveLength(4);
     expect(screen.getAllByTestId("player-card")).toHaveLength(4);
   });
 });
