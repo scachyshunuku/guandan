@@ -17,6 +17,7 @@ import type {
   GameState,
   PlayCardsRequest,
   PlayCardsResponse,
+  PlayerFinishedActionData,
   PlayerPosition,
   TrickEndActionData,
   TrickEntry,
@@ -168,6 +169,34 @@ export async function POST(
     }
   }
 
+  // If this play emptied the caller's hand, log a player_finished entry too
+  // (going out is worth announcing on its own, independent of whether it also
+  // happened to resolve the trick or end the round). Best-effort, same as
+  // trick_end above.
+  let playerFinishedActionRow: Record<string, unknown> | null = null;
+  if (handEnded) {
+    const playerFinishedActionData: PlayerFinishedActionData = {
+      position,
+      place: (newFinishOrder.indexOf(position) + 1) as PlayerFinishedActionData["place"],
+    };
+    const { data, error } = await supabaseAdmin
+      .from("game_actions")
+      .insert({
+        game_id: gameId,
+        round_id: round.id,
+        player_id: playerId,
+        action_type: "player_finished",
+        action_data: playerFinishedActionData,
+      })
+      .select("*")
+      .single();
+    if (error) {
+      console.error("Failed to log player_finished game_action", error);
+    } else {
+      playerFinishedActionRow = data;
+    }
+  }
+
   // Broadcast the new round state and the play itself so other players' and
   // spectators' useGameRealtimeSync picks it up in real time (see
   // ARCHITECTURE.md section 10, and start/route.ts's identical pattern).
@@ -178,6 +207,7 @@ export async function POST(
     broadcastToGame(gameId, "round_updated", claimed[0]),
     broadcastToGame(gameId, "game_action", actionInsertResult.data),
     ...(trickEndActionRow ? [broadcastToGame(gameId, "game_action", trickEndActionRow)] : []),
+    ...(playerFinishedActionRow ? [broadcastToGame(gameId, "game_action", playerFinishedActionRow)] : []),
   ]);
 
   const response: PlayCardsResponse = { success: true };

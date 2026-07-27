@@ -201,6 +201,23 @@ describe("GameHistory", () => {
     );
   });
 
+  it("describes a player_finished action, resolving the position to a name and place", () => {
+    render(
+      <GameHistory
+        actions={[
+          makeAction({
+            actionType: "player_finished",
+            actionData: { position: 2, place: 1 },
+          }),
+        ]}
+        participants={[makeParticipant({ playerName: "Carol", position: 2 })]}
+      />,
+    );
+    expect(screen.getByTestId("game-history-entry")).toHaveTextContent(
+      "Carol finished in position 1",
+    );
+  });
+
   it("renders the most recent action first", () => {
     render(
       <GameHistory

@@ -339,6 +339,45 @@ describe("POST /api/game/[id]/play-cards", () => {
 
     const participant = fake._tables.game_participants.find((p) => p.game_id === gameId);
     expect(participant?.hand).toEqual([]);
+
+    const playerFinishedAction = fake._tables.game_actions.find(
+      (a) => a.action_type === "player_finished",
+    );
+    expect(playerFinishedAction).toMatchObject({
+      game_id: gameId,
+      round_id: roundId,
+      player_id: "p0",
+      action_type: "player_finished",
+      action_data: { position: 0, place: 1 },
+    });
+    expect(mockBroadcastToGame).toHaveBeenCalledWith(
+      gameId,
+      "game_action",
+      expect.objectContaining({ action_type: "player_finished" }),
+    );
+  });
+
+  it("logs the correct place when the 2nd player goes out", async () => {
+    const gameId = await seedGame();
+    await seedRound(gameId, {
+      leader_position: 0,
+      current_player_turn: 1,
+      game_state: { currentTrick: [], trickCount: 3, finishOrder: [3] },
+    });
+    await seedParticipant(gameId, 1, "p1", [{ rank: "7", suit: "CLUBS" }]);
+
+    const response = await callPlayCards(gameId, {
+      cards: [{ rank: "7", suit: "CLUBS" }],
+      playerId: "p1",
+    });
+    expect(response.status).toBe(200);
+
+    const playerFinishedAction = fake._tables.game_actions.find(
+      (a) => a.action_type === "player_finished",
+    );
+    expect(playerFinishedAction).toMatchObject({
+      action_data: { position: 1, place: 2 },
+    });
   });
 
   it("skips a position that finished in an earlier trick when computing the next turn", async () => {

@@ -167,6 +167,7 @@ export type GameActionType =
   | "card_played"
   | "pass"
   | "trick_end"
+  | "player_finished"
   | "card_exchange"
   | "join"
   | "leave";
@@ -222,6 +223,15 @@ export interface TrickEndActionData {
   winnerPosition: PlayerPosition;
 }
 
+// Logged by play-cards when a play empties the caller's hand (RULES.md
+// "Winner out of cards" et al. - going out doesn't end the round by itself,
+// but is worth announcing on its own). `place` is this player's 1-based rank
+// in game_state.finishOrder at the moment they went out (1st out = 1, etc.).
+export interface PlayerFinishedActionData {
+  position: PlayerPosition;
+  place: 1 | 2 | 3 | 4;
+}
+
 export interface CardExchangeActionData {
   from: PlayerPosition;
   to: PlayerPosition;
@@ -250,6 +260,7 @@ export type GameActionData =
   | CardPlayedActionData
   | PassActionData
   | TrickEndActionData
+  | PlayerFinishedActionData
   | CardExchangeActionData
   | JoinActionData
   | LeaveActionData;
