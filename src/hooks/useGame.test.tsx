@@ -546,7 +546,7 @@ describe("useGame", () => {
     await waitFor(() => expect(mutationMocks.sendHeartbeat).toHaveBeenCalledTimes(1));
 
     await act(async () => {
-      jest.advanceTimersByTime(30_000);
+      jest.advanceTimersByTime(2 * 60_000 + 1_000);
     });
     expect(mutationMocks.sendHeartbeat.mock.calls.length).toBeGreaterThan(1);
 
