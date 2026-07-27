@@ -7,6 +7,7 @@ import type {
   GameParticipant,
   JoinActionData,
   LeaveActionData,
+  PlayerFinishedActionData,
   TrickEndActionData,
 } from "@/lib/types";
 import Card from "./Card";
@@ -107,6 +108,15 @@ function renderEntry(action: GameAction, participants: GameParticipant[]) {
     case "trick_end": {
       const data = action.actionData as TrickEndActionData;
       return <span>Trick ended — won by {nameForPosition(data.winnerPosition, participants)}</span>;
+    }
+
+    case "player_finished": {
+      const data = action.actionData as PlayerFinishedActionData;
+      return (
+        <span>
+          {nameForPosition(data.position, participants)} finished in position {data.place}
+        </span>
+      );
     }
 
     case "card_exchange": {
