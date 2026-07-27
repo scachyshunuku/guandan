@@ -70,7 +70,7 @@ describe("redactParticipantHands", () => {
     const stale = participant({
       playerId: "alice",
       isConnected: true, // stale/stored value the heartbeat sweep hasn't corrected yet
-      lastHeartbeat: new Date(Date.now() - 60_000).toISOString(),
+      lastHeartbeat: new Date(Date.now() - 6 * 60_000).toISOString(),
     });
     const fresh = participant({
       playerId: "bob",

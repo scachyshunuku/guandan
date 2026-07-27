@@ -35,10 +35,10 @@ export interface UseGameOptions {
   playerId: string;
 }
 
-// A third of HEARTBEAT_STALE_MS - comfortably below it so an occasional
-// slow/dropped tick doesn't flip this client to "disconnected" from
-// everyone else's perspective before the next one lands.
-const HEARTBEAT_INTERVAL_MS = HEARTBEAT_STALE_MS / 3;
+// Comfortably below HEARTBEAT_STALE_MS so an occasional slow/dropped tick
+// doesn't flip this client to "disconnected" from everyone else's
+// perspective before the next one lands.
+const HEARTBEAT_INTERVAL_MS = 2 * 60_000;
 
 // How often to retry auto-triggering end-hand while a round sits concluded
 // (see the effect below) - short enough that a stuck round recovers quickly

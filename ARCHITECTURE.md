@@ -195,7 +195,7 @@ Player 1                 Supabase                    Player 2
 ### Disconnect & Reconnect
 
 1. **Detection**:
-   - Client stops sending heartbeats → server marks `is_connected = false` after 30s
+   - Client stops sending heartbeats → server marks `is_connected = false` after 5 minutes
    - UI shows "Player X disconnected" for other players
 
 2. **Reconnection**:
