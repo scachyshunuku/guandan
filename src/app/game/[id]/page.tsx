@@ -250,164 +250,169 @@ export default function GamePage() {
   return (
     <div
       data-testid="game-page-layout"
-      className="flex flex-1 flex-col gap-4 bg-slate-100 px-2 py-4 sm:gap-6 sm:px-4 sm:py-8 lg:flex-row lg:items-start lg:justify-center"
+      className="flex flex-1 flex-col items-center gap-4 bg-slate-100 px-2 py-4 sm:gap-6 sm:px-4 sm:py-8"
     >
-      <main
-        data-testid="game-page"
-        className="flex flex-1 flex-col items-center gap-4 sm:gap-6 lg:max-w-xl"
-      >
-        <ConnectionStatus status={connectionStatus} />
-        <ScoreBoard game={game} />
-        <GameTable
-          game={game}
-          round={round}
-          participants={participants}
-          myPosition={myPosition}
-        />
-        <SpectatorList spectators={spectators} />
+      <ConnectionStatus status={connectionStatus} />
+      <ScoreBoard game={game} />
 
-        {gameStatus === "completed" ? (
-          <p
-            data-testid="game-over-message"
-            className="text-sm font-semibold text-slate-700"
-          >
-            {winningTeam === null
-              ? "Game over"
-              : myPosition === null
-                ? `Game over — Team ${winningTeam === 0 ? "A" : "B"} wins`
-                : myPosition % 2 === winningTeam
-                  ? "Game over — your team wins!"
-                  : "Game over — your team lost"}
-          </p>
-        ) : myPosition === null ? (
-          <p data-testid="spectator-note" className="text-sm text-slate-500">
-            You&apos;re spectating
-          </p>
-        ) : roundStatus === "card_exchange" ? (
-          <CardExchangeModal
-            myPosition={myPosition}
-            hand={hand}
+      <div className="flex w-full flex-col gap-4 sm:gap-6 lg:flex-row lg:items-start lg:justify-center">
+        <main
+          data-testid="game-page"
+          className="flex flex-1 flex-col items-center gap-4 sm:gap-6 lg:max-w-xl"
+        >
+          <GameTable
+            round={round}
             participants={participants}
-            initialExchanges={roundActions
-              .filter((a) => a.actionType === "card_exchange")
-              .map((a) => a.actionData as CardExchangeActionData)
-              .filter((d) => d.type === "initial")}
-            onSubmitReturn={handleSubmitReturn}
-            isSubmitting={isExchangingCards}
+            myPosition={myPosition}
           />
-        ) : roundStatus === "awaiting_giver_choice" && pendingGiverChoice ? (
-          pendingGiverChoice.pendingPositions.includes(myPosition) ? (
-            <GiverCardChoiceModal
-              candidates={bestCardCandidates(
-                hand,
-                pendingGiverChoice.levelRank,
-              )}
-              onChoose={handleChooseGiverCard}
-              isSubmitting={isChoosingGiverCard}
-            />
-          ) : (
+          <SpectatorList spectators={spectators} />
+
+          {gameStatus === "completed" ? (
             <p
-              data-testid="giver-choice-waiting"
+              data-testid="game-over-message"
+              className="text-sm font-semibold text-slate-700"
+            >
+              {winningTeam === null
+                ? "Game over"
+                : myPosition === null
+                  ? `Game over — Team ${winningTeam === 0 ? "A" : "B"} wins`
+                  : myPosition % 2 === winningTeam
+                    ? "Game over — your team wins!"
+                    : "Game over — your team lost"}
+            </p>
+          ) : myPosition === null ? (
+            <p data-testid="spectator-note" className="text-sm text-slate-500">
+              You&apos;re spectating
+            </p>
+          ) : roundStatus === "card_exchange" ? (
+            <CardExchangeModal
+              myPosition={myPosition}
+              hand={hand}
+              participants={participants}
+              initialExchanges={roundActions
+                .filter((a) => a.actionType === "card_exchange")
+                .map((a) => a.actionData as CardExchangeActionData)
+                .filter((d) => d.type === "initial")}
+              onSubmitReturn={handleSubmitReturn}
+              isSubmitting={isExchangingCards}
+            />
+          ) : roundStatus === "awaiting_giver_choice" && pendingGiverChoice ? (
+            pendingGiverChoice.pendingPositions.includes(myPosition) ? (
+              <GiverCardChoiceModal
+                candidates={bestCardCandidates(
+                  hand,
+                  pendingGiverChoice.levelRank,
+                )}
+                onChoose={handleChooseGiverCard}
+                isSubmitting={isChoosingGiverCard}
+              />
+            ) : (
+              <p
+                data-testid="giver-choice-waiting"
+                className="text-sm text-slate-500"
+              >
+                Waiting for position{" "}
+                {pendingGiverChoice.pendingPositions.join(", ")} to choose which
+                card to give…
+              </p>
+            )
+          ) : roundStatus === "awaiting_tribute_choice" &&
+            pendingTributeChoice ? (
+            <TributeChoiceModal
+              thirdPosition={pendingTributeChoice.thirdPosition}
+              thirdCard={pendingTributeChoice.thirdCard}
+              fourthPosition={pendingTributeChoice.fourthPosition}
+              fourthCard={pendingTributeChoice.fourthCard}
+              participants={participants}
+              isFirstPlace={finishingPositions?.indexOf(1) === myPosition}
+              onChoose={handleChooseTribute}
+              isSubmitting={isChoosingTribute}
+            />
+          ) : currentPlayerTurn === null ? (
+            <p
+              data-testid="hand-ended-message"
               className="text-sm text-slate-500"
             >
-              Waiting for position{" "}
-              {pendingGiverChoice.pendingPositions.join(", ")} to choose which
-              card to give…
+              Hand ended — resolving…
             </p>
-          )
-        ) : roundStatus === "awaiting_tribute_choice" &&
-          pendingTributeChoice ? (
-          <TributeChoiceModal
-            thirdPosition={pendingTributeChoice.thirdPosition}
-            thirdCard={pendingTributeChoice.thirdCard}
-            fourthPosition={pendingTributeChoice.fourthPosition}
-            fourthCard={pendingTributeChoice.fourthCard}
-            participants={participants}
-            isFirstPlace={finishingPositions?.indexOf(1) === myPosition}
-            onChoose={handleChooseTribute}
-            isSubmitting={isChoosingTribute}
-          />
-        ) : currentPlayerTurn === null ? (
-          <p
-            data-testid="hand-ended-message"
-            className="text-sm text-slate-500"
-          >
-            Hand ended — resolving…
-          </p>
-        ) : (
-          <div className="flex flex-col items-center gap-3">
-            <PlayerHand
-              hand={hand}
-              selectedIndices={selectedIndices}
-              onSelectionChange={setSelectedIndices}
-            />
-            {needsWildChoice && pendingWildIndex !== undefined && (
-              // Keyed by which card this prompt is for, so a second wild in
-              // the same selection (a double deck can hold two level-rank
-              // hearts) gets a fresh selector rather than one still showing
-              // the first card's already-picked rank/suit.
-              <WildCardSelector
-                key={pendingWildIndex}
-                card={{ rank: levelRank, suit: "HEARTS" }}
-                onConfirm={(actsAs) =>
-                  setWildActsAsByIndex((prev) => ({
-                    ...prev,
-                    [pendingWildIndex]: actsAs,
-                  }))
-                }
-                onCancel={() => setSelectedIndices([])}
+          ) : (
+            <div className="flex w-full flex-col items-start gap-3">
+              <PlayerHand
+                hand={hand}
+                selectedIndices={selectedIndices}
+                onSelectionChange={setSelectedIndices}
               />
-            )}
-            <ActionButtons
-              hand={hand}
-              selectedCards={effectiveSelectedCards}
-              currentTrick={currentTrick}
-              levelRank={levelRank}
-              isMyTurn={isMyTurn}
-              onPlay={handlePlay}
-              onPass={handlePass}
-              hasPendingWildChoice={needsWildChoice}
-              isSubmitting={isPlayingCards || isPassing}
-            />
-            {(playCardsError ?? passError) && (
-              <p data-testid="action-error" className="text-xs text-red-500">
-                {(playCardsError ?? passError)?.message}
-              </p>
-            )}
-          </div>
-        )}
-        {exchangeCardsError && (
-          <p data-testid="exchange-error" className="text-xs text-red-500">
-            {exchangeCardsError.message}
-          </p>
-        )}
-        {chooseTributeError && (
-          <p
-            data-testid="tribute-choice-error"
-            className="text-xs text-red-500"
-          >
-            {chooseTributeError.message}
-          </p>
-        )}
-        {chooseGiverCardError && (
-          <p data-testid="giver-choice-error" className="text-xs text-red-500">
-            {chooseGiverCardError.message}
-          </p>
-        )}
-      </main>
+              {needsWildChoice && pendingWildIndex !== undefined && (
+                // Keyed by which card this prompt is for, so a second wild in
+                // the same selection (a double deck can hold two level-rank
+                // hearts) gets a fresh selector rather than one still showing
+                // the first card's already-picked rank/suit.
+                <WildCardSelector
+                  key={pendingWildIndex}
+                  card={{ rank: levelRank, suit: "HEARTS" }}
+                  onConfirm={(actsAs) =>
+                    setWildActsAsByIndex((prev) => ({
+                      ...prev,
+                      [pendingWildIndex]: actsAs,
+                    }))
+                  }
+                  onCancel={() => setSelectedIndices([])}
+                />
+              )}
+              <ActionButtons
+                hand={hand}
+                selectedCards={effectiveSelectedCards}
+                currentTrick={currentTrick}
+                levelRank={levelRank}
+                isMyTurn={isMyTurn}
+                onPlay={handlePlay}
+                onPass={handlePass}
+                hasPendingWildChoice={needsWildChoice}
+                isSubmitting={isPlayingCards || isPassing}
+              />
+              {(playCardsError ?? passError) && (
+                <p data-testid="action-error" className="text-xs text-red-500">
+                  {(playCardsError ?? passError)?.message}
+                </p>
+              )}
+            </div>
+          )}
+          {exchangeCardsError && (
+            <p data-testid="exchange-error" className="text-xs text-red-500">
+              {exchangeCardsError.message}
+            </p>
+          )}
+          {chooseTributeError && (
+            <p
+              data-testid="tribute-choice-error"
+              className="text-xs text-red-500"
+            >
+              {chooseTributeError.message}
+            </p>
+          )}
+          {chooseGiverCardError && (
+            <p
+              data-testid="giver-choice-error"
+              className="text-xs text-red-500"
+            >
+              {chooseGiverCardError.message}
+            </p>
+          )}
+        </main>
 
-      <aside
-        data-testid="game-history-panel"
-        className="w-full shrink-0 rounded-2xl bg-white p-4 shadow-sm lg:w-80"
-      >
-        <h2 className="mb-2 text-sm font-semibold text-slate-900">History</h2>
-        <GameHistory
-          actions={history.actions}
-          participants={participants}
-          isLoading={history.isLoading}
-          error={history.error}
-        />
-      </aside>
+        <aside
+          data-testid="game-history-panel"
+          className="w-full shrink-0 rounded-2xl bg-white p-4 shadow-sm lg:w-80"
+        >
+          <h2 className="mb-2 text-sm font-semibold text-slate-900">History</h2>
+          <GameHistory
+            actions={history.actions}
+            participants={participants}
+            isLoading={history.isLoading}
+            error={history.error}
+          />
+        </aside>
+      </div>
     </div>
   );
 }

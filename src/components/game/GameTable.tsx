@@ -1,9 +1,7 @@
 "use client";
 
-import { type SeatLabel, seatLabelFor } from "@/lib/seating";
 import { PASS } from "@/lib/types";
 import type {
-  Game,
   GameParticipant,
   GameState,
   PlayerPosition,
@@ -13,38 +11,34 @@ import Card from "./Card";
 import PlayerCard from "./PlayerCard";
 
 export interface GameTableProps {
-  game: Pick<Game, "teamALevel" | "teamBLevel">;
   round: {
     currentPlayerTurn: PlayerPosition | null;
     gameState: Pick<GameState, "currentTrick">;
   } | null;
   participants: GameParticipant[];
-  // The viewing client's own seat; null for spectators, who default to the
-  // same orientation as position 0.
+  // The viewing client's own seat; null for spectators.
   myPosition: PlayerPosition | null;
 }
 
+// Position order 0-3 always alternates Team A / Team B / Team A / Team B
+// (Team A = positions 0 & 2, Team B = positions 1 & 3 — lib/types.ts's
+// `Team` type), so listing seats in raw position order keeps that
+// alternation on screen the same way for every viewer, rather than
+// reseating players relative to whoever's looking.
 const ALL_POSITIONS: readonly PlayerPosition[] = [0, 1, 2, 3];
 
-// Top-to-bottom the way these seats sat around the old compass grid:
-// partner (north) first, opponents (west/east) in the middle, the viewer
-// (south) last.
-const SEAT_ORDER: readonly SeatLabel[] = ["north", "west", "east", "south"];
-
 // Main game board: one row per seat, each showing that player's info (name,
-// connection, card count — PlayerCard) alongside whatever they've played so
-// far this trick, so a player's icon and their play are always visible
-// together rather than split between a seat grid and a separate trick
-// summary. Doesn't render the viewer's own hand (PlayerHand, shown
-// separately) or the score/history views (ScoreBoard/GameHistory) — just
-// enough of the current trick and levels to show table state at a glance.
+// team, connection, card count — PlayerCard) alongside whatever they've
+// played so far this trick, so a player's icon and their play are always
+// visible together rather than split between a seat grid and a separate
+// trick summary. Doesn't render the viewer's own hand (PlayerHand, shown
+// separately) or the score/history views (ScoreBoard/GameHistory, rendered
+// as siblings by the page) — just the seats and the current trick.
 export default function GameTable({
-  game,
   round,
   participants,
   myPosition,
 }: GameTableProps) {
-  const anchor = myPosition ?? 0;
   const byPosition = new Map(
     participants
       .filter(
@@ -52,9 +46,6 @@ export default function GameTable({
           p.position !== null,
       )
       .map((p) => [p.position, p]),
-  );
-  const positionForSeat = new Map(
-    ALL_POSITIONS.map((position) => [seatLabelFor(position, anchor), position]),
   );
   const playByPosition = new Map(
     (round?.gameState.currentTrick ?? []).map((entry) => [
@@ -66,35 +57,19 @@ export default function GameTable({
   return (
     <div
       data-testid="game-table"
-      className="flex w-full flex-col items-center gap-2 p-2 sm:gap-4 sm:p-4"
+      className="flex w-full flex-col items-start gap-2 py-2 sm:gap-4 sm:py-4"
     >
-      <div
-        data-testid="score-display"
-        className="flex gap-3 text-sm font-medium sm:gap-6"
-      >
-        <span data-testid="team-a-level">Team A · Level {game.teamALevel}</span>
-        <span data-testid="team-b-level">Team B · Level {game.teamBLevel}</span>
-      </div>
-
       <div className="flex w-full max-w-md flex-col gap-2 sm:gap-3">
-        {SEAT_ORDER.map((seatLabel) => {
-          const position = positionForSeat.get(seatLabel) as PlayerPosition;
-          return (
-            <div
-              key={seatLabel}
-              data-testid={`seat-${seatLabel}`}
-              className="flex items-center gap-3"
-            >
-              {renderSeat(
-                position,
-                byPosition.get(position),
-                round,
-                myPosition,
-              )}
-              {renderPlay(playByPosition.get(position))}
-            </div>
-          );
-        })}
+        {ALL_POSITIONS.map((position) => (
+          <div
+            key={position}
+            data-testid={`seat-position-${position}`}
+            className="flex items-center gap-3"
+          >
+            {renderSeat(position, byPosition.get(position), round, myPosition)}
+            {renderPlay(playByPosition.get(position))}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -110,7 +85,7 @@ function renderSeat(
     return (
       <div
         data-testid="empty-seat"
-        className="rounded-lg border border-dashed border-gray-300 px-3 py-2 text-xs text-gray-400"
+        className="flex w-32 shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-300 px-3 py-2 text-center text-xs text-gray-400 sm:w-36"
       >
         Waiting for player
       </div>

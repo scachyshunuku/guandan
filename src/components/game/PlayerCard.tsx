@@ -32,13 +32,19 @@ export default function PlayerCard({
     <div
       data-testid="player-card"
       data-position={position}
-      className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-2 text-sm ${
+      // Fixed width (rather than sizing to content) so a long name or the
+      // "Current turn" text appearing/disappearing doesn't change this
+      // card's size relative to the other three rows.
+      className={`flex w-32 shrink-0 flex-col items-center gap-1 rounded-lg border px-3 py-2 text-sm sm:w-36 ${
         isCurrentTurn
           ? "animate-pulse-turn border-amber-400 bg-amber-50 ring-2 ring-amber-200"
           : "border-gray-200 bg-white"
       }`}
     >
-      <span data-testid="player-name" className="font-semibold text-gray-900">
+      <span
+        data-testid="player-name"
+        className="w-full truncate text-center font-semibold text-gray-900"
+      >
         {playerName}
         {isSelf && " (You)"}
       </span>
