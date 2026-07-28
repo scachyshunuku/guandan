@@ -318,6 +318,7 @@ export default function GamePage() {
             hand={hand}
             selectedIndices={selectedIndices}
             onSelectionChange={setSelectedIndices}
+            persistenceKey={`${gameId}:${myPosition}`}
           />
           {needsWildChoice && pendingWildIndex !== undefined && (
             // Keyed by which card this prompt is for, so a second wild in

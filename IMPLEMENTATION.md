@@ -251,6 +251,30 @@ All can be built with mocks, integrated later.
 - **Testability**: Component tests with React Testing Library
 - **Estimated**: 6 hours
 
+### Task 5.1a: Drag-and-Drop Hand Rearrangement
+- [x] Extend `components/game/PlayerHand.tsx` to support manual reordering:
+  - Drag a card to a new position within the own-hand grid
+  - Reorder is purely a client-side display preference — does not
+    affect play validation, which operates on card identity, not position
+  - Persist the reordered layout across re-renders triggered by
+    `useGameRealtimeSync` hand updates (e.g. after playing/drawing cards,
+    keep unmoved cards in their user-arranged positions rather than
+    resetting to server/sorted order)
+  - Persist the arrangement across page refresh and disconnect/reconnect:
+    store as a client-side ordering preference (e.g. localStorage keyed by
+    game id + player id, ordering by stable card identity, not array index)
+    since this is a display-only preference, not server game state — no
+    schema change needed
+  - Keep existing click-to-select behavior working alongside drag
+  - Touch support for mobile drag (not just mouse)
+- [x] Unit tests: drag reorders hand array, selection state survives
+  reorder, touch drag events, ordering preference survives simulated
+  reload (rehydrate from storage) and reconnect
+- **Blockers**: Task 5.1
+- **Enables**: None
+- **Testability**: Component tests with React Testing Library
+- **Estimated**: 5 hours
+
 ### Task 5.2: Game Table Layout
 - [x] `components/game/GameTable.tsx` - Main board
   - 4 player positions (north, south, east, west)
