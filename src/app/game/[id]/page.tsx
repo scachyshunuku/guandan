@@ -335,48 +335,7 @@ export default function GamePage() {
             >
               Hand ended — resolving…
             </p>
-          ) : (
-            <div className="flex w-full flex-col items-start gap-3">
-              <PlayerHand
-                hand={hand}
-                selectedIndices={selectedIndices}
-                onSelectionChange={setSelectedIndices}
-              />
-              {needsWildChoice && pendingWildIndex !== undefined && (
-                // Keyed by which card this prompt is for, so a second wild in
-                // the same selection (a double deck can hold two level-rank
-                // hearts) gets a fresh selector rather than one still showing
-                // the first card's already-picked rank/suit.
-                <WildCardSelector
-                  key={pendingWildIndex}
-                  card={{ rank: levelRank, suit: "HEARTS" }}
-                  onConfirm={(actsAs) =>
-                    setWildActsAsByIndex((prev) => ({
-                      ...prev,
-                      [pendingWildIndex]: actsAs,
-                    }))
-                  }
-                  onCancel={() => setSelectedIndices([])}
-                />
-              )}
-              <ActionButtons
-                hand={hand}
-                selectedCards={effectiveSelectedCards}
-                currentTrick={currentTrick}
-                levelRank={levelRank}
-                isMyTurn={isMyTurn}
-                onPlay={handlePlay}
-                onPass={handlePass}
-                hasPendingWildChoice={needsWildChoice}
-                isSubmitting={isPlayingCards || isPassing}
-              />
-              {(playCardsError ?? passError) && (
-                <p data-testid="action-error" className="text-xs text-red-500">
-                  {(playCardsError ?? passError)?.message}
-                </p>
-              )}
-            </div>
-          )}
+          ) : null}
           {exchangeCardsError && (
             <p data-testid="exchange-error" className="text-xs text-red-500">
               {exchangeCardsError.message}
@@ -413,6 +372,59 @@ export default function GamePage() {
           />
         </aside>
       </div>
+
+      {/* Full width (unlike everything above, which stays capped to main's
+          lg:max-w-xl) so the hand's card grid can use the space all the way
+          under the history panel instead of wrapping into a narrow column -
+          mirrors the last branch of the status ternary above, which renders
+          null in this exact case. */}
+      {gameStatus !== "completed" &&
+        myPosition !== null &&
+        roundStatus !== "card_exchange" &&
+        !(roundStatus === "awaiting_giver_choice" && pendingGiverChoice) &&
+        !(roundStatus === "awaiting_tribute_choice" && pendingTributeChoice) &&
+        currentPlayerTurn !== null && (
+          <div className="flex w-full flex-col items-start gap-3">
+            <PlayerHand
+              hand={hand}
+              selectedIndices={selectedIndices}
+              onSelectionChange={setSelectedIndices}
+            />
+            {needsWildChoice && pendingWildIndex !== undefined && (
+              // Keyed by which card this prompt is for, so a second wild in
+              // the same selection (a double deck can hold two level-rank
+              // hearts) gets a fresh selector rather than one still showing
+              // the first card's already-picked rank/suit.
+              <WildCardSelector
+                key={pendingWildIndex}
+                card={{ rank: levelRank, suit: "HEARTS" }}
+                onConfirm={(actsAs) =>
+                  setWildActsAsByIndex((prev) => ({
+                    ...prev,
+                    [pendingWildIndex]: actsAs,
+                  }))
+                }
+                onCancel={() => setSelectedIndices([])}
+              />
+            )}
+            <ActionButtons
+              hand={hand}
+              selectedCards={effectiveSelectedCards}
+              currentTrick={currentTrick}
+              levelRank={levelRank}
+              isMyTurn={isMyTurn}
+              onPlay={handlePlay}
+              onPass={handlePass}
+              hasPendingWildChoice={needsWildChoice}
+              isSubmitting={isPlayingCards || isPassing}
+            />
+            {(playCardsError ?? passError) && (
+              <p data-testid="action-error" className="text-xs text-red-500">
+                {(playCardsError ?? passError)?.message}
+              </p>
+            )}
+          </div>
+        )}
     </div>
   );
 }
