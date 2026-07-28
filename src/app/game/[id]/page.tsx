@@ -258,7 +258,7 @@ export default function GamePage() {
       <div className="flex w-full flex-col gap-4 sm:gap-6 lg:flex-row lg:items-start lg:justify-center">
         <main
           data-testid="game-page"
-          className="flex flex-1 flex-col items-center gap-4 sm:gap-6"
+          className="flex flex-1 flex-col items-center gap-4 sm:gap-6 lg:max-w-xl"
         >
           <GameTable
             round={round}
