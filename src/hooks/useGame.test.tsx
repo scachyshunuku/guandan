@@ -46,6 +46,7 @@ const mutationMocks = {
   endHand: jest.fn().mockResolvedValue({ success: true }),
   chooseTribute: jest.fn().mockResolvedValue({ success: true }),
   sendHeartbeat: jest.fn().mockResolvedValue({ success: true }),
+  updateHandOrder: jest.fn().mockResolvedValue({ success: true }),
   startGame: jest.fn().mockResolvedValue({ success: true, hand: [] }),
 };
 
@@ -70,6 +71,9 @@ jest.mock("./useGameActions", () => ({
     isChoosingTribute: false,
     chooseTributeError: null,
     sendHeartbeat: mutationMocks.sendHeartbeat,
+    updateHandOrder: mutationMocks.updateHandOrder,
+    isUpdatingHandOrder: false,
+    updateHandOrderError: null,
     startGame: mutationMocks.startGame,
     isStartingGame: false,
     startGameError: null,
@@ -110,6 +114,7 @@ function gameStateResponse(
         position: 0,
         hand: [{ rank: "5", suit: "HEARTS" }],
         handCount: 1,
+        handOrder: null,
         isConnected: true,
         connectedAt: "2026-01-01T00:00:00.000Z",
         lastHeartbeat: "2026-01-01T00:00:00.000Z",
@@ -117,6 +122,7 @@ function gameStateResponse(
       },
     ],
     myHand: [{ rank: "5", suit: "HEARTS" }],
+    myHandOrder: null,
     roundActions: [],
     ...overrides,
   };
@@ -500,6 +506,7 @@ describe("useGame", () => {
             position: 0,
             hand: [{ rank: "5", suit: "HEARTS" }],
             handCount: 1,
+            handOrder: null,
             isConnected: true,
             connectedAt: "2026-01-01T00:00:00.000Z",
             lastHeartbeat: "2026-01-01T00:00:00.000Z",
@@ -513,6 +520,7 @@ describe("useGame", () => {
             position: 2,
             hand: [],
             handCount: 27,
+            handOrder: null,
             isConnected: true,
             connectedAt: "2026-01-01T00:00:00.000Z",
             lastHeartbeat: "2026-01-01T00:00:00.000Z",
@@ -563,6 +571,7 @@ describe("useGame", () => {
             position: 0,
             hand: [{ rank: "5", suit: "HEARTS" }],
             handCount: 1,
+            handOrder: null,
             isConnected: true,
             connectedAt: "2026-01-01T00:00:00.000Z",
             lastHeartbeat: "2026-01-01T00:00:00.000Z",
@@ -576,6 +585,7 @@ describe("useGame", () => {
             position: 3,
             hand: [],
             handCount: 5,
+            handOrder: null,
             isConnected: true,
             connectedAt: "2026-01-01T00:00:00.000Z",
             lastHeartbeat: "2026-01-01T00:00:00.000Z",
@@ -874,6 +884,42 @@ describe("useGame", () => {
     jest.useRealTimers();
   });
 
+  it("exposes myHandOrder from the hydrated game state", async () => {
+    mockFetchOnce(200, gameStateResponse({ myHandOrder: ["7H#0", "3C#0"] }));
+    const { result } = renderHook(
+      () => useGame({ gameId: "game-1", playerId: "player-1" }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.myHandOrder).toEqual(["7H#0", "3C#0"]));
+  });
+
+  it("defaults myHandOrder to null before hydration and when the server has none saved", async () => {
+    mockFetchOnce(200, gameStateResponse({ myHandOrder: null }));
+    const { result } = renderHook(
+      () => useGame({ gameId: "game-1", playerId: "player-1" }),
+      { wrapper },
+    );
+
+    expect(result.current.myHandOrder).toBeNull();
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    expect(result.current.myHandOrder).toBeNull();
+  });
+
+  it("updateHandOrder calls through to the underlying mutation", async () => {
+    mockFetchOnce(200, gameStateResponse());
+    const { result } = renderHook(
+      () => useGame({ gameId: "game-1", playerId: "player-1" }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.updateHandOrder(["7H#0", "3C#0"]);
+    });
+
+    expect(mutationMocks.updateHandOrder).toHaveBeenCalledWith(["7H#0", "3C#0"]);
+  });
+
   it("auto-triggers end-hand once a round concludes but the round is still 'in_progress'", async () => {
     mockFetchOnce(
       200,
@@ -929,6 +975,7 @@ describe("useGame", () => {
             position: 0,
             hand: [],
             handCount: 0,
+            handOrder: null,
             isConnected: true,
             connectedAt: "2026-01-01T00:00:00.000Z",
             lastHeartbeat: "2026-01-01T00:00:00.000Z",

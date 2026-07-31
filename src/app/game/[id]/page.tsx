@@ -42,6 +42,8 @@ export default function GamePage() {
     participants,
     myPosition,
     hand,
+    myHandOrder,
+    updateHandOrder,
     currentTrick,
     currentPlayerTurn,
     roundStatus,
@@ -390,6 +392,8 @@ export default function GamePage() {
               selectedIndices={selectedIndices}
               onSelectionChange={setSelectedIndices}
               persistenceKey={`${gameId}:${myPosition}`}
+              initialServerOrder={myHandOrder}
+              onOrderChange={updateHandOrder}
             />
             {needsWildChoice && pendingWildIndex !== undefined && (
               // Keyed by which card this prompt is for, so a second wild in

@@ -96,6 +96,10 @@ export async function POST(
   // out unscoped to everyone in the game. hand_count is carried separately
   // (from this same row, before zeroing) so the recipient's card-count
   // display doesn't get stomped back to 0 by this connectivity-only update.
+  // hand_order is zeroed for the same reason as hand, unlike hand_count -
+  // its slot keys encode actual card identity (see GameParticipant.
+  // handOrder's doc comment), so there's no safe "count only" value to carry
+  // through the way hand_count does for hand.
   await Promise.all(
     [callerUpdate, ...staleUpdates]
       .filter((r) => !r.error && r.data != null)
@@ -105,6 +109,7 @@ export async function POST(
           ...row,
           hand: [],
           hand_count: row.hand.length,
+          hand_order: null,
         });
       }),
   );

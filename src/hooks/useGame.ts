@@ -404,6 +404,17 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     [],
   );
 
+  // No optimistic store update, unlike playCards/pass/exchangeCards below -
+  // PlayerHand already applies the reorder to its own local display state
+  // (and localStorage) the instant the drag settles, independent of this
+  // request's round trip. This just persists it server-side for cross-device
+  // sync (Task 5.1a) - a slow or failed request has no visible effect on the
+  // current page beyond a retry, so nothing here needs to revert.
+  const updateHandOrder = useCallback(
+    (order: string[]) => actionsRef.current.updateHandOrder(order),
+    [],
+  );
+
   const playCards = useCallback(
     (cards: CardWithWild[]) =>
       withOptimisticUpdate(() => {
@@ -491,6 +502,12 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     participants,
     myPosition,
     hand,
+    // Not stored in Zustand, unlike `hand` - PlayerHand only ever consults
+    // this once, as a mount-time fallback seed when its own localStorage has
+    // nothing yet (a new device/browser), so it doesn't need to be
+    // reactively synced through the store the way selection-relevant hand
+    // data does. Read straight off the query result.
+    myHandOrder: gameStateQuery.data?.myHandOrder ?? null,
     currentTrick,
     currentPlayerTurn,
     roundStatus,
@@ -532,6 +549,10 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     chooseGiverCard,
     isChoosingGiverCard: actions.isChoosingGiverCard,
     chooseGiverCardError: actions.chooseGiverCardError,
+
+    updateHandOrder,
+    isUpdatingHandOrder: actions.isUpdatingHandOrder,
+    updateHandOrderError: actions.updateHandOrderError,
 
     startGame,
     isStartingGame: actions.isStartingGame,

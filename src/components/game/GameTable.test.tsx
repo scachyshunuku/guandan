@@ -12,6 +12,7 @@ function participant(overrides: Partial<GameParticipant>): GameParticipant {
     position: 0,
     hand: [],
     handCount: overrides.hand?.length ?? 0,
+    handOrder: overrides.handOrder ?? null,
     isConnected: true,
     connectedAt: "2026-01-01T00:00:00.000Z",
     lastHeartbeat: "2026-01-01T00:00:00.000Z",

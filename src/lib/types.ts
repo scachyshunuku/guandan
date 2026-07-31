@@ -211,6 +211,14 @@ export interface GameParticipant {
   // UI needs opponents' remaining card counts without ever seeing their
   // contents.
   handCount: number;
+  // Player's dragged display order for their own hand (array of card-identity
+  // strings like "7H#0" - see components/game/PlayerHand.tsx), null meaning
+  // "use dealt order". Purely a display preference, never authoritative game
+  // state - redacted to null for every participant except the requesting
+  // client, same as `hand` (see gameStateResponse.ts), since the slot keys
+  // encode actual card identity and would otherwise leak another player's
+  // hand contents.
+  handOrder: string[] | null;
   isConnected: boolean;
   connectedAt: string;
   lastHeartbeat: string;
@@ -362,6 +370,20 @@ export interface EndHandResponse {
   success: true;
 }
 
+// See PlayCardsRequest's comment on why there's no `position` field. `order`
+// is the caller's full desired hand_order array (see GameParticipant.
+// handOrder's doc comment) - the server trusts it only as a *display*
+// ordering, never as a claim about which cards the player holds (the
+// authoritative `hand` column is untouched by this route).
+export interface HandOrderRequest {
+  playerId: string;
+  order: string[];
+}
+
+export interface HandOrderResponse {
+  success: true;
+}
+
 // RULES.md "Card Exchange" → "Best card, when tied": a giver (3rd and/or
 // 4th place) whose own hand has multiple cards tied for their best card
 // chooses which one to give — `card` must be one of those tied candidates.
@@ -414,6 +436,10 @@ export interface GameStateResponse {
   round: GameRound | null;
   participants: GameParticipant[];
   myHand: CardWithWild[];
+  // Requesting player's own hand_order (see GameParticipant.handOrder's doc
+  // comment) - null means no saved arrangement (or none for this game/seat
+  // yet), same "use dealt order" meaning as the column itself.
+  myHandOrder: string[] | null;
   // This round's actions only (for replaying the current trick/round), not
   // the full game history — see GET /api/game/[code]/history for that.
   roundActions: GameAction[];

@@ -516,6 +516,21 @@ Body: { playerId }
 Response: { success }
 ```
 
+### `POST /api/game/[code]/hand-order`
+Task 5.1a: persists a player's dragged hand arrangement (`game_participants.
+hand_order`) so it survives refresh/reconnect from any device — the
+same-device case is already covered client-side via localStorage
+(`components/game/PlayerHand.tsx`). `order` is stored as-is and never
+validated against the caller's actual hand: it's a display ordering only,
+reconciled against the real hand on every read, never trusted as a claim
+about which cards the player holds. Not broadcast to other clients (see
+`GameParticipant.handOrder`'s doc comment in `lib/types.ts` — its slot keys
+encode actual card identity, same privacy concern as `hand` itself).
+```
+Body: { playerId, order: string[] }
+Response: { success }
+```
+
 ### `POST /api/game/[code]/exchange-cards`
 Submit the player-selected "return" half of a card exchange (the "initial"
 half is automatic — best card, sender/recipient determined by finishing

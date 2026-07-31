@@ -10,6 +10,7 @@ function participant(overrides: Partial<GameParticipant>): GameParticipant {
     position: 0,
     hand: [{ rank: "ACE", suit: "SPADES" }],
     handCount: overrides.hand?.length ?? 1,
+    handOrder: null,
     isConnected: true,
     connectedAt: "2026-01-01T00:00:00Z",
     lastHeartbeat: "2026-01-01T00:00:00Z",
@@ -57,6 +58,26 @@ describe("redactParticipantHands", () => {
 
     expect(myHand).toEqual([]);
     expect(participants[0].hand).toEqual([]);
+  });
+
+  it("reveals only the requesting player's own hand_order, redacting others to null", () => {
+    const alice = participant({ playerId: "alice", position: 0, handOrder: ["AS#0"] });
+    const bob = participant({ playerId: "bob", position: 1, handOrder: ["KH#0"] });
+
+    const { participants, myHandOrder } = redactParticipantHands([alice, bob], "alice");
+
+    expect(myHandOrder).toEqual(["AS#0"]);
+    expect(participants.find((p) => p.playerId === "alice")?.handOrder).toEqual(["AS#0"]);
+    expect(participants.find((p) => p.playerId === "bob")?.handOrder).toBeNull();
+  });
+
+  it("redacts every hand_order and returns a null myHandOrder for a spectator", () => {
+    const alice = participant({ playerId: "alice", handOrder: ["AS#0"] });
+
+    const { participants, myHandOrder } = redactParticipantHands([alice], "spectator-session");
+
+    expect(myHandOrder).toBeNull();
+    expect(participants.every((p) => p.handOrder === null)).toBe(true);
   });
 
   it("does not mutate the input participants", () => {
@@ -122,16 +143,22 @@ describe("buildGameStateResponse", () => {
     },
   ];
 
-  it("assembles game, round, redacted participants, myHand, and round actions", () => {
+  it("assembles game, round, redacted participants, myHand, myHandOrder, and round actions", () => {
     const alice = participant({ playerId: "alice", hand: [{ rank: "ACE", suit: "SPADES" }] });
-    const bob = participant({ playerId: "bob", hand: [{ rank: "KING", suit: "HEARTS" }] });
+    const bob = participant({
+      playerId: "bob",
+      hand: [{ rank: "KING", suit: "HEARTS" }],
+      handOrder: ["KH#0"],
+    });
 
     const response = buildGameStateResponse(game, round, [alice, bob], "bob", roundActions);
 
     expect(response.game).toBe(game);
     expect(response.round).toBe(round);
     expect(response.myHand).toEqual([{ rank: "KING", suit: "HEARTS" }]);
+    expect(response.myHandOrder).toEqual(["KH#0"]);
     expect(response.participants.find((p) => p.playerId === "alice")?.hand).toEqual([]);
+    expect(response.participants.find((p) => p.playerId === "alice")?.handOrder).toBeNull();
     expect(response.roundActions).toBe(roundActions);
   });
 

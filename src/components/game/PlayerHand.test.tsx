@@ -304,4 +304,93 @@ describe("PlayerHand", () => {
       expect(JSON.parse(orderWrites[0][1])).toEqual(["7H#0", "RJ#0", "3C#0"]);
     });
   });
+
+  describe("server sync (initialServerOrder / onOrderChange)", () => {
+    afterEach(() => {
+      window.localStorage.clear();
+    });
+
+    it("seeds from initialServerOrder when localStorage has nothing (a new device)", () => {
+      render(
+        <PlayerHand
+          hand={HAND}
+          persistenceKey="game-1:0"
+          initialServerOrder={["7H#0", "RJ#0", "3C#0"]}
+        />,
+      );
+
+      const labels = screen.getAllByTestId("card").map((card) => card.getAttribute("aria-label"));
+      expect(labels).toEqual(["7 of hearts", "red joker", "3 of clubs"]);
+    });
+
+    it("prefers localStorage over initialServerOrder when both exist", () => {
+      window.localStorage.setItem(
+        "guandan:hand-order:game-1:0",
+        JSON.stringify(["3C#0", "7H#0", "RJ#0"]),
+      );
+
+      render(
+        <PlayerHand
+          hand={HAND}
+          persistenceKey="game-1:0"
+          initialServerOrder={["7H#0", "RJ#0", "3C#0"]}
+        />,
+      );
+
+      const labels = screen.getAllByTestId("card").map((card) => card.getAttribute("aria-label"));
+      expect(labels).toEqual(["3 of clubs", "7 of hearts", "red joker"]);
+    });
+
+    it("ignores an empty initialServerOrder (no saved arrangement yet)", () => {
+      render(<PlayerHand hand={HAND} persistenceKey="game-1:0" initialServerOrder={[]} />);
+
+      const labels = screen.getAllByTestId("card").map((card) => card.getAttribute("aria-label"));
+      expect(labels).toEqual(["3 of clubs", "7 of hearts", "red joker"]);
+    });
+
+    it("calls onOrderChange with the settled order after the debounce interval, once", () => {
+      jest.useFakeTimers();
+      const onOrderChange = jest.fn();
+      render(<PlayerHand hand={HAND} persistenceKey="game-1:0" onOrderChange={onOrderChange} />);
+
+      const slots = screen.getAllByTestId("hand-card-slot");
+      document.elementFromPoint = jest.fn().mockReturnValue(slots[2]);
+      fireEvent.pointerDown(slots[0], { pointerId: 1, pointerType: "mouse", button: 0 });
+      fireEvent.pointerMove(slots[0], { pointerId: 1, clientX: 200, clientY: 0 });
+      fireEvent.pointerUp(slots[0], { pointerId: 1 });
+
+      act(() => {
+        jest.advanceTimersByTime(800);
+      });
+
+      expect(onOrderChange).toHaveBeenCalledTimes(1);
+      expect(onOrderChange).toHaveBeenCalledWith(["7H#0", "RJ#0", "3C#0"]);
+
+      // @ts-expect-error - test-only stub
+      delete document.elementFromPoint;
+      jest.useRealTimers();
+    });
+
+    it("does not call onOrderChange before the debounce interval elapses", () => {
+      jest.useFakeTimers();
+      const onOrderChange = jest.fn();
+      render(<PlayerHand hand={HAND} persistenceKey="game-1:0" onOrderChange={onOrderChange} />);
+
+      const slots = screen.getAllByTestId("hand-card-slot");
+      document.elementFromPoint = jest.fn().mockReturnValue(slots[2]);
+      fireEvent.pointerDown(slots[0], { pointerId: 1, pointerType: "mouse", button: 0 });
+      fireEvent.pointerMove(slots[0], { pointerId: 1, clientX: 200, clientY: 0 });
+      fireEvent.pointerUp(slots[0], { pointerId: 1 });
+
+      act(() => {
+        jest.advanceTimersByTime(200);
+      });
+
+      expect(onOrderChange).not.toHaveBeenCalled();
+
+      // @ts-expect-error - test-only stub
+      delete document.elementFromPoint;
+      jest.useRealTimers();
+    });
+  });
 });

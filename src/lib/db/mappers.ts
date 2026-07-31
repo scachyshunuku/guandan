@@ -55,6 +55,7 @@ export interface GameParticipantRow {
   // `hand.length`) on rows read straight from the DB, where `hand` is
   // always the true, un-redacted value.
   hand_count?: number;
+  hand_order: string[] | null;
   is_connected: boolean;
   connected_at: string;
   last_heartbeat: string;
@@ -109,6 +110,7 @@ export function mapGameParticipantRow(row: GameParticipantRow): GameParticipant 
     position: row.position as PlayerPosition | null,
     hand: row.hand,
     handCount: row.hand_count ?? row.hand.length,
+    handOrder: row.hand_order,
     isConnected: row.is_connected,
     connectedAt: row.connected_at,
     lastHeartbeat: row.last_heartbeat,

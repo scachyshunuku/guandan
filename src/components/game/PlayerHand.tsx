@@ -14,12 +14,29 @@ export interface PlayerHandProps {
   onSelectionChange?: (selectedIndices: number[]) => void;
   // Enables drag-to-reorder and persists the resulting card order to
   // localStorage under this key (e.g. `${gameId}:${myPosition}`), so a
-  // manually arranged hand survives page refresh/reconnect (Task 5.1a).
-  // Reordering is display-only — it never touches selectedIndices/hand
-  // identity, just which order cards render in. Omitted by callers (tests,
-  // dev-preview) that don't need persistence across mounts.
+  // manually arranged hand survives page refresh/reconnect on this device
+  // (Task 5.1a). Reordering is display-only — it never touches
+  // selectedIndices/hand identity, just which order cards render in.
+  // Omitted by callers (tests, dev-preview) that don't need persistence
+  // across mounts.
   persistenceKey?: string;
+  // Server-saved order (GameStateResponse.myHandOrder) to fall back to at
+  // mount when localStorage has nothing yet - the cross-device case
+  // localStorage alone can't cover (a fresh browser/device has no saved
+  // order for this persistenceKey). Only consulted once, at mount;
+  // localStorage always wins if it already has a value, since it reflects
+  // whatever this device was most recently showing.
+  initialServerOrder?: string[] | null;
+  // Called (debounced) with the settled order whenever it changes, once
+  // hydrated - lets the caller persist it server-side (Task 5.1a) for
+  // cross-device sync. Optional: reordering and its localStorage
+  // persistence work fully without this, same as without persistenceKey.
+  onOrderChange?: (order: string[]) => void;
 }
+
+// Coalesces a multi-card drag session (or several drags in quick succession)
+// into a single write instead of one per card moved.
+const SERVER_SYNC_DEBOUNCE_MS = 800;
 
 const STORAGE_PREFIX = "guandan:hand-order:";
 
@@ -142,6 +159,8 @@ export default function PlayerHand({
   selectedIndices,
   onSelectionChange,
   persistenceKey,
+  initialServerOrder,
+  onOrderChange,
 }: PlayerHandProps) {
   const [internalSelected, setInternalSelected] = useState<number[]>([]);
   const selected = selectedIndices ?? internalSelected;
@@ -177,9 +196,14 @@ export default function PlayerHand({
       setHydrated(true);
       return;
     }
-    const stored = loadStoredOrder(persistenceKey);
-    if (stored) {
-      setOrderKeys(reconcileOrder(stored, hand));
+    // localStorage always wins over the server's copy when both exist - it
+    // reflects whatever this exact device was most recently showing, while
+    // the server value only catches up after the debounced sync effect
+    // below next fires. The server value's only job is covering a device
+    // that has never saved anything locally for this persistenceKey yet.
+    const seed = loadStoredOrder(persistenceKey) ?? initialServerOrder;
+    if (seed && seed.length > 0) {
+      setOrderKeys(reconcileOrder(seed, hand));
     }
     setHydrated(true);
     // Deliberately only on mount / when switching to a different persisted
@@ -197,6 +221,20 @@ export default function PlayerHand({
       // session, it just won't survive a refresh.
     }
   }, [persistenceKey, hydrated, orderKeys]);
+
+  // Debounced server sync for cross-device persistence (Task 5.1a) - the
+  // localStorage effect above is the one that has to be synchronous/instant
+  // (same-device continuity can't wait on a network round trip), so this is
+  // purely a best-effort background mirror of it. Gated on `hydrated` for
+  // the same reason as the write above: an unhydrated `orderKeys` is still
+  // the pre-load natural order, not yet reconciled against whatever was
+  // loaded, so syncing it would risk overwriting a real saved order with a
+  // stale default before the load effect even runs.
+  useEffect(() => {
+    if (!hydrated || !onOrderChange) return;
+    const timeout = setTimeout(() => onOrderChange(orderKeys), SERVER_SYNC_DEBOUNCE_MS);
+    return () => clearTimeout(timeout);
+  }, [hydrated, orderKeys, onOrderChange]);
 
   const [draggingVisualIndex, setDraggingVisualIndex] = useState<number | null>(null);
   // Sits outside React state because it must be readable synchronously by a

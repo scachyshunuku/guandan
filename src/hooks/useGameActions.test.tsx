@@ -79,6 +79,40 @@ describe("useGameActions", () => {
     );
   });
 
+  it("updateHandOrder posts order and playerId to hand-order", async () => {
+    mockFetchOnce(200, { success: true });
+    const { result } = renderHook(
+      () =>
+        useGameActions({ gameId: "game-1", playerId: "player-1", position: 1 }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.updateHandOrder(["7H#0", "3C#0"]);
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/game/game-1/hand-order",
+      expect.objectContaining({
+        body: JSON.stringify({ playerId: "player-1", order: ["7H#0", "3C#0"] }),
+      }),
+    );
+  });
+
+  it("updateHandOrder rejects locally without hitting the network when spectating", async () => {
+    global.fetch = jest.fn();
+    const { result } = renderHook(
+      () =>
+        useGameActions({ gameId: "game-1", playerId: "player-1", position: null }),
+      { wrapper },
+    );
+
+    await expect(result.current.updateHandOrder([])).rejects.toThrow(
+      "Must be seated to reorder a hand",
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it("joinGame posts playerName and playerId to join, even while spectating", async () => {
     mockFetchOnce(201, { spectator: true });
     const { result } = renderHook(

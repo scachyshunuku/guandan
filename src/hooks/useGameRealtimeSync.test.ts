@@ -167,6 +167,7 @@ describe("useGameRealtimeSync", () => {
       position: 0,
       hand: [],
       handCount: 0,
+      handOrder: null,
       isConnected: true,
       connectedAt: "2026-01-01T00:00:00.000Z",
       lastHeartbeat: "2026-01-01T00:00:00.000Z",
