@@ -65,6 +65,9 @@ game_participants
 ├── player_id (VARCHAR) -- session-based ID (generated per connection)
 ├── position (INT: 0-3, or null if spectator) -- position in game
 ├── hand (JSONB[]) -- array of {suit: string, rank: string} objects
+├── hand_order (JSONB, nullable) -- player's dragged display order (array of
+│   card-identity strings, e.g. "7H#0"); a display preference only, never
+│   authoritative - reconciled against `hand` on read, null means dealt order
 ├── is_connected (BOOLEAN)
 ├── connected_at
 ├── last_heartbeat
