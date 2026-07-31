@@ -36,7 +36,7 @@ export interface PlayerHandProps {
 
 // Coalesces a multi-card drag session (or several drags in quick succession)
 // into a single write instead of one per card moved.
-const SERVER_SYNC_DEBOUNCE_MS = 800;
+const SERVER_SYNC_DEBOUNCE_MS = 3_000;
 
 const STORAGE_PREFIX = "guandan:hand-order:";
 

@@ -360,7 +360,7 @@ describe("PlayerHand", () => {
       fireEvent.pointerUp(slots[0], { pointerId: 1 });
 
       act(() => {
-        jest.advanceTimersByTime(800);
+        jest.advanceTimersByTime(3000);
       });
 
       expect(onOrderChange).toHaveBeenCalledTimes(1);
@@ -424,7 +424,7 @@ describe("PlayerHand", () => {
       );
 
       act(() => {
-        jest.advanceTimersByTime(800);
+        jest.advanceTimersByTime(3000);
       });
 
       expect(onOrderChange).toHaveBeenCalledTimes(1);
