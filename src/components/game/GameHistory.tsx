@@ -18,7 +18,7 @@ export interface GameHistoryProps {
   // Resolves a position (card_played/card_exchange) or playerId (pass,
   // which unlike every other action type carries neither a name nor a
   // position - see the pass route's `action_data: {}`) back to a display
-  // name, matching TrickDisplay's participant lookup rather than showing
+  // name, matching GameTable's participant lookup rather than showing
   // raw seat numbers. Falls back to a generic label if unresolvable (there's
   // no leave route yet - Task 6.2 - so today every position/playerId in the
   // log always resolves to a current participant).
