@@ -16,7 +16,7 @@ jest.mock("./GameProvider", () => ({
 // satisfy useGameHistory's internal useQuery call.
 const useGameHistoryMock = jest.fn();
 jest.mock("@/hooks/useGameHistory", () => ({
-  useGameHistory: () => useGameHistoryMock(),
+  useGameHistory: (...args: unknown[]) => useGameHistoryMock(...args),
 }));
 
 function makeParticipant(overrides: Partial<GameParticipant>): GameParticipant {
@@ -212,7 +212,6 @@ describe("GamePage", () => {
     render(<GamePage />);
     expect(screen.getByTestId("game-table")).toBeInTheDocument();
     expect(screen.getByTestId("score-board")).toBeInTheDocument();
-    expect(screen.getByTestId("trick-display")).toBeInTheDocument();
     expect(screen.getByTestId("player-hand")).toBeInTheDocument();
     expect(screen.getByTestId("action-buttons")).toBeInTheDocument();
   });
@@ -545,7 +544,7 @@ describe("GamePage", () => {
     expect(screen.getByTestId("spectator-list")).toHaveTextContent("Erin");
   });
 
-  it("toggles the history panel and shows its fetched entries", async () => {
+  it("always shows the history panel with its fetched entries, no toggle required", () => {
     useGameHistoryMock.mockReturnValue({
       actions: [
         {
@@ -563,22 +562,17 @@ describe("GamePage", () => {
       refetch: jest.fn(),
     });
     useGameContextMock.mockReturnValue(baseContext());
-    const user = userEvent.setup();
     render(<GamePage />);
 
-    expect(screen.queryByTestId("game-history")).not.toBeInTheDocument();
-    await user.click(screen.getByTestId("history-toggle"));
+    expect(screen.getByTestId("game-history-panel")).toBeInTheDocument();
     expect(screen.getByTestId("game-history")).toHaveTextContent("Alice passed");
   });
 
-  it("refetches the open history panel when a new trick action arrives", async () => {
+  it("refetches the history panel when a new trick action arrives", () => {
     const refetchMock = jest.fn();
     useGameHistoryMock.mockReturnValue({ actions: [], isLoading: false, error: null, refetch: refetchMock });
     useGameContextMock.mockReturnValue(baseContext());
-    const user = userEvent.setup();
     const { rerender } = render(<GamePage />);
-
-    await user.click(screen.getByTestId("history-toggle"));
     refetchMock.mockClear();
 
     // A new play landing broadcasts a fresh currentTrick array (see
@@ -590,5 +584,15 @@ describe("GamePage", () => {
     rerender(<GamePage />);
 
     expect(refetchMock).toHaveBeenCalled();
+  });
+
+  it("doesn't fetch history while still in the waiting room", () => {
+    useGameHistoryMock.mockReturnValue({ actions: [], isLoading: false, error: null, refetch: jest.fn() });
+    useGameContextMock.mockReturnValue(baseContext({ gameStatus: "waiting" }));
+    render(<GamePage />);
+
+    expect(useGameHistoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
   });
 });
