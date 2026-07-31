@@ -330,6 +330,11 @@ describe("GamePage", () => {
     render(<GamePage />);
 
     expect(screen.getByTestId("card-exchange-modal")).toBeInTheDocument();
+    // The draggable/reorderable PlayerHand isn't rendered during card
+    // exchange (kept simple: no reordering while the exchange UI - a
+    // different, read-only-except-for-the-return-selection hand display -
+    // is up). CardExchangeModal shows the hand itself instead.
+    expect(screen.queryByTestId("player-hand")).not.toBeInTheDocument();
     const handCards = screen.getByTestId("return-card-options").querySelectorAll('[data-testid="card"]');
     await user.click(handCards[0]);
     await user.click(screen.getByTestId("submit-return-button"));

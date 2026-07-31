@@ -392,5 +392,47 @@ describe("PlayerHand", () => {
       delete document.elementFromPoint;
       jest.useRealTimers();
     });
+
+    it("sends the reconciled post-play order, not the stale pre-play one, when a card is played mid-debounce", () => {
+      // Reproduces: player drags to reorder, then plays a card (hand
+      // shrinks) before the debounced server sync fires. The sync must
+      // reflect the hand as it is once it actually sends, not a snapshot
+      // from before the play - otherwise it'd reference a card the player
+      // no longer holds.
+      jest.useFakeTimers();
+      const onOrderChange = jest.fn();
+      const { rerender } = render(
+        <PlayerHand hand={HAND} persistenceKey="game-1:0" onOrderChange={onOrderChange} />,
+      );
+
+      const slots = screen.getAllByTestId("hand-card-slot");
+      document.elementFromPoint = jest.fn().mockReturnValue(slots[2]);
+      fireEvent.pointerDown(slots[0], { pointerId: 1, pointerType: "mouse", button: 0 });
+      fireEvent.pointerMove(slots[0], { pointerId: 1, clientX: 200, clientY: 0 });
+      fireEvent.pointerUp(slots[0], { pointerId: 1 });
+
+      // Partway through the debounce window - the sync hasn't fired yet.
+      act(() => {
+        jest.advanceTimersByTime(300);
+      });
+      expect(onOrderChange).not.toHaveBeenCalled();
+
+      // "3 of clubs" is played - hand shrinks to the other two cards.
+      const handAfterPlay = HAND.filter((card) => card.rank !== "3");
+      rerender(
+        <PlayerHand hand={handAfterPlay} persistenceKey="game-1:0" onOrderChange={onOrderChange} />,
+      );
+
+      act(() => {
+        jest.advanceTimersByTime(800);
+      });
+
+      expect(onOrderChange).toHaveBeenCalledTimes(1);
+      expect(onOrderChange).toHaveBeenCalledWith(["7H#0", "RJ#0"]);
+
+      // @ts-expect-error - test-only stub
+      delete document.elementFromPoint;
+      jest.useRealTimers();
+    });
   });
 });
