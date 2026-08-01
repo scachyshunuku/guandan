@@ -1,15 +1,10 @@
 // Drives bot turns by dispatching on the current round's status and
 // calling the exact same lib/gameActions functions a human's HTTP request
-// would call (IMPLEMENTATION.md Phase 7/8). `driveOneBotAction` performs at
-// most one action and reports what happened; two callers build on it
-// differently:
-//   - driveBotGame (Phase 7's all-bot dev tool): loops it to completion in
-//     one request. Every seat is a bot, so anything other than "acted" or
-//     "completed" is unexpected and reported as "stalled".
-//   - the drive-bots route (Phase 8's mixed human+bot play): calls it once
-//     per client poll. "idle" (nothing a bot can do right now, e.g. it's a
-//     human's turn) is the normal, expected result most of the time, not an
-//     error.
+// would call (IMPLEMENTATION.md Phase 8). `driveOneBotAction` performs at
+// most one action and reports what happened; the drive-bots route calls it
+// once per client poll. "idle" (nothing a bot can do right now, e.g. it's a
+// human's turn) is the normal, expected result most of the time, not an
+// error.
 import { getGame, getLatestRound, getParticipants, levelRankForGame } from "@/lib/gameDb";
 import { playCards } from "@/lib/gameActions/playCards";
 import { pass } from "@/lib/gameActions/pass";
@@ -29,8 +24,9 @@ export interface BotSeat {
 }
 
 // "idle"/"error" both carry a `reason` for diagnostics, but only "error"
-// means something's actually wrong — see driveBotGame/the drive-bots route
-// for how each caller treats the distinction.
+// means something's actually wrong — see the drive-bots route for how it
+// treats the distinction (idle is a normal no-op, error is surfaced as a
+// failure).
 export type BotStepOutcome =
   | { kind: "acted" }
   | { kind: "idle"; reason: string }
@@ -146,40 +142,4 @@ export async function driveOneBotAction(
   // have already caught that) — a fresh round always replaces a completed
   // one via startNextRound. Bug guard, not a reachable state.
   return { kind: "error", reason: `unexpected round status: ${round.status}` };
-}
-
-export type DriveBotGameOutcome =
-  | { outcome: "completed"; iterations: number }
-  | { outcome: "stalled"; iterations: number; reason: string };
-
-// Primary safety net against an infinite loop from a logic bug ("stalled"
-// returns from a single step are faster, more diagnostic secondary guards).
-// Generous relative to a single hand (at most a few hundred actions,
-// bounded by ~27 cards/player × 4 players × up to a few responses each
-// before a trick resolves) so a full game — which can take several dozen
-// hands to reach level Ace with trivial, non-strategic bots — has real
-// headroom rather than hitting the cap on a normal run.
-const DEFAULT_MAX_ITERATIONS = 50_000;
-
-// Drives an all-bot game to completion in one call — every position in
-// `bots` must cover all 4 seats, so any "idle" step (nothing a bot could
-// do) is exactly as unexpected here as an "error" step.
-export async function driveBotGame(
-  gameId: string,
-  bots: readonly BotSeat[],
-  maxIterations = DEFAULT_MAX_ITERATIONS,
-): Promise<DriveBotGameOutcome> {
-  for (let i = 0; i < maxIterations; i++) {
-    const step = await driveOneBotAction(gameId, bots);
-    switch (step.kind) {
-      case "acted":
-        continue;
-      case "completed":
-        return { outcome: "completed", iterations: i };
-      case "idle":
-      case "error":
-        return { outcome: "stalled", iterations: i, reason: step.reason };
-    }
-  }
-  return { outcome: "stalled", iterations: maxIterations, reason: "iteration cap reached" };
 }

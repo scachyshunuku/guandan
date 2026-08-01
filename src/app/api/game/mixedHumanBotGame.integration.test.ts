@@ -3,10 +3,13 @@
  */
 // Mixed human + bot game (IMPLEMENTATION.md Phase 8): a human plays
 // alongside 3 bot-filled seats added via add-bot, with bot turns driven
-// purely by repeated drive-bots calls (not driveBotGame/seedBotMatch) -
-// proving the actual human-facing wiring (add-bot, drive-bots, and the
-// human's own play-cards/pass/choose-*/exchange-cards calls) works
-// end to end to a full game's completion, not just the all-bot dev tool.
+// purely by repeated drive-bots calls - proving the actual human-facing
+// wiring (add-bot, drive-bots, and the human's own
+// play-cards/pass/choose-*/exchange-cards calls) works end to end to a full
+// game's completion. The all-bot-only dev tool this superseded
+// (seedBotMatch/driveBotGame/POST /api/game/dev/bot-match) has been
+// removed - add-bot + drive-bots now cover that ground too (seat every
+// position with a bot, same as any other mix).
 //
 // The human's own decisions reuse the same trivial heuristics the bots use
 // (lib/bot/chooseTrickAction.ts, lib/bot/chooseExchange.ts) - this test

@@ -3,9 +3,7 @@
 // human can play alongside bot-filled seats instead of needing 3 other
 // humans. Mirrors start/route.ts's gating (only a seated player may act,
 // only while the game is still 'waiting'). Reuses join/route.ts's exported
-// POST in-process — the same pattern lib/bot/seedBotMatch.ts already
-// established for the all-bot dev tool — rather than re-deriving seat
-// assignment here.
+// POST in-process rather than re-deriving seat assignment here.
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -53,9 +51,9 @@ export async function POST(
     return NextResponse.json({ error: "No open seat for a bot" }, { status: 400 });
   }
 
-  // Named by seat number for display (`Bot 1`, `Bot 2`, ...), same
-  // convention seedBotMatch.ts uses. Relies on occupied seats always being
-  // the contiguous prefix {0, ..., occupied.size - 1}: true today since
+  // Named by seat number for display (`Bot 1`, `Bot 2`, ...). Relies on
+  // occupied seats always being the contiguous prefix {0, ..., occupied.size
+  // - 1}: true today since
   // there's no `leave` route yet to open a gap behind an already-filled
   // seat (see join/route.ts's own firstOpenPosition) — if that ever
   // changes, this naming (cosmetic only, not used for seat assignment

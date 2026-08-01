@@ -8,7 +8,7 @@ jest.mock("@/lib/realtimeBroadcast");
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { GameState } from "@/lib/types";
-import { driveBotGame, driveOneBotAction } from "./botRunner";
+import { driveOneBotAction } from "./botRunner";
 
 const fake = supabaseAdmin as unknown as FakeSupabaseClient;
 
@@ -53,29 +53,26 @@ async function seedParticipant(
   });
 }
 
-describe("driveBotGame", () => {
-  it("fails fast with a diagnostic reason when a dispatched action errors, instead of looping to the iteration cap", async () => {
+describe("driveOneBotAction", () => {
+  it("reports an error with a diagnostic reason when a dispatched action fails, rather than throwing or silently no-opping", async () => {
     const gameId = await seedGame();
     await seedRound(gameId);
     await seedParticipant(gameId, 0, "b0");
 
     // The acting bot leads (currentTrick is empty), which dispatches
     // playCards -> a game_rounds CAS update. Failing that update makes
-    // playCards return a 500 ActionResult, which driveBotGame must surface
-    // immediately rather than silently re-looping.
+    // playCards return a 500 ActionResult, which driveOneBotAction must
+    // surface as a distinct "error" outcome.
     fake._failNext("game_rounds", "update");
 
-    const result = await driveBotGame(gameId, [{ position: 0, playerId: "b0" }], 100);
+    const step = await driveOneBotAction(gameId, [{ position: 0, playerId: "b0" }]);
 
-    expect(result).toEqual({
-      outcome: "stalled",
-      iterations: 0,
+    expect(step).toEqual({
+      kind: "error",
       reason: expect.stringContaining("bot action failed with status 500"),
     });
   });
-});
 
-describe("driveOneBotAction", () => {
   it("is idle when it's a human's turn (mixed human+bot game)", async () => {
     const gameId = await seedGame();
     await seedRound(gameId, { current_player_turn: 0 });

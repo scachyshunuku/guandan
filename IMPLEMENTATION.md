@@ -449,17 +449,25 @@ server-side validation/persistence/broadcast code a human's request does.
 - **Testability**: Unit tests
 - **Estimated**: 4 hours
 
-### Task 7.4: Bot Runner, Seeding & Dev Route
-- [x] `src/lib/bot/seedBotMatch.ts` — create game, seat 4 bots, start, mark
-      `is_bot`, reusing existing create/join/start routes in-process
-- [x] `src/lib/bot/botRunner.ts` — drive a game to completion by dispatching
-      on `game_rounds.status`, calling the Task 7.2 actions + Task 7.3
+### Task 7.4: Bot Runner, Seeding & Dev Route — superseded, removed
+- [x] `src/lib/bot/botRunner.ts` — drive bot turns by dispatching on
+      `game_rounds.status`, calling the Task 7.2 actions + Task 7.3
       decisions
-- [x] `POST /api/game/dev/bot-match` — seeds + drives a full game,
-      non-production only
-- [x] Integration test: full bot-vs-bot game reaches `status: 'completed'`
+- ~~`src/lib/bot/seedBotMatch.ts` — create game, seat 4 bots, start, mark
+      `is_bot`, reusing existing create/join/start routes in-process~~
+- ~~`POST /api/game/dev/bot-match` — seeds + drives a full game,
+      non-production only~~
+- ~~Integration test: full bot-vs-bot game reaches `status: 'completed'`~~
+- Removed once Phase 8 shipped `add-bot`/`drive-bots`: seating every
+  position with a bot (via repeated `add-bot` calls) plus letting
+  `drive-bots` polling run the game covers the same ground as the
+  dedicated dev tool did, so the tool itself, its all-bot-only seeding
+  helper, and its single-request drive-to-completion loop
+  (`driveBotGame`) were deleted rather than kept as unused parallel
+  paths. `driveOneBotAction` (the single-step primitive both used) is the
+  only thing that remains, now Phase 8's only caller.
 - **Blockers**: Tasks 7.1, 7.2, 7.3
-- **Testability**: Integration test + manual curl
+- **Testability**: Integration test (see Phase 8 Task 8.7) + manual curl
 - **Estimated**: 5 hours
 
 ---
@@ -486,8 +494,7 @@ at once in one request.
 
 ### Task 8.2: `POST /api/game/[id]/add-bot`
 - [x] Seats one server-generated bot into the first open position, reusing
-      `join`'s route in-process (same pattern as `lib/bot/seedBotMatch.ts`),
-      then marks it `is_bot`
+      `join`'s route in-process, then marks it `is_bot`
 - [x] Only a seated player may call it, only while `game.status === 'waiting'`
 - **Blockers**: Task 7.1
 - **Enables**: Task 8.6
@@ -498,16 +505,19 @@ at once in one request.
 - [x] `src/lib/bot/botRunner.ts`: extracted `driveOneBotAction` (performs at
       most one bot action, reporting `acted`/`idle`/`completed`/`error` —
       "idle" i.e. "not this bot's turn" is a normal outcome, not a bug, for
-      a mixed game) out of the existing all-bot `driveBotGame` loop
+      a mixed game) out of the original all-bot `driveBotGame` loop
   - Also fixed: when multiple positions are pending a giver-choice or
     card-exchange return and only some are bots, finds *a* bot among them
     rather than only ever checking the first pending position
-- [x] `driveBotGame` (Phase 7's dev tool) preserved exactly via a thin loop
-      over `driveOneBotAction`
+- [x] `driveBotGame` initially preserved as a thin loop over
+      `driveOneBotAction` for the Phase 7 dev tool; removed along with that
+      tool once Task 8.2/8.4 made it redundant (see Task 7.4's note) —
+      `driveOneBotAction` is now the module's only exported entry point
 - **Blockers**: Task 7.2, Task 7.3
 - **Enables**: Task 8.4
-- **Testability**: Unit tests (existing Phase 7 tests pass unmodified; new
-  tests for the mixed-mode "idle"/"finds a bot among pending" behavior)
+- **Testability**: Unit tests (mixed-mode "idle"/"finds a bot among
+  pending" behavior; the dispatch-error-path test was ported from the
+  removed `driveBotGame` test onto `driveOneBotAction` directly)
 - **Estimated**: 4 hours
 
 ### Task 8.4: `POST /api/game/[id]/drive-bots`
@@ -538,8 +548,9 @@ at once in one request.
 
 ### Task 8.7: Integration Test
 - [x] A human's own `play-cards`/`pass`/`choose-*`/`exchange-cards` calls
-      interleaved with repeated `drive-bots` calls (not `driveBotGame`) drive
-      a full 1-human + 3-bot game to `status: 'completed'`
+      interleaved with repeated `drive-bots` calls drive a full 1-human +
+      3-bot game to `status: 'completed'` — now the sole full-game bot
+      integration test, since Task 7.4's dev-tool equivalent was removed
 - **Blockers**: Tasks 8.2-8.6
 - **Testability**: Integration test + manual curl against real Supabase
 - **Estimated**: 3 hours
