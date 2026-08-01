@@ -71,7 +71,8 @@ game_participants
 ├── is_connected (BOOLEAN)
 ├── connected_at
 ├── last_heartbeat
-└── created_at
+├── created_at
+└── is_bot (BOOLEAN, default false) -- server-seeded bot participant (IMPLEMENTATION.md Phase 7); not read by any runtime logic yet
 
 game_actions (event log)
 ├── id (UUID, PK)

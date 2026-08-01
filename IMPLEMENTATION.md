@@ -408,6 +408,62 @@ All can be built with mocks, integrated later.
 
 ---
 
+## Phase 7: Bot Player (Dev/Test Tooling)
+
+All-bot dev/testing mode only for v1 — no lobby UI, no mixed human+bot
+seating, no disconnect-takeover. Every bot decision is trivial (lowest
+legal option / pass), and every bot move runs through the same
+server-side validation/persistence/broadcast code a human's request does.
+
+### Task 7.1: Schema — Bot Seat Marker
+- [x] Migration: `game_participants.is_bot boolean not null default false`
+- **Blockers**: None
+- **Enables**: Task 7.4
+- **Testability**: Migration review (db-migration skill)
+- **Estimated**: 1 hour
+
+### Task 7.2: Extract Decision Routes into Callable Actions
+- [x] `src/lib/gameActions/playCards.ts`, `pass.ts`, `chooseGiverCard.ts`,
+      `chooseTribute.ts`, `exchangeCards.ts`, `endHand.ts` — same logic as
+      each route today, callable directly (no HTTP) so a bot and a human
+      run identical code
+  - Export previously-private `lastPlayedCombo` (`gameRules/validation.ts`)
+  - Export previously-private `getRoundCardExchangeActions` and add
+    `pendingReturnPositions` (`gameActions/exchangeCards.ts`)
+- [x] Thin each route (`play-cards`, `pass`, `choose-giver-card`,
+      `choose-tribute`, `exchange-cards`, `end-hand`) down to parse → call →
+      respond
+- [x] Existing `route.test.ts` files pass unmodified
+- **Blockers**: None
+- **Enables**: Task 7.4
+- **Testability**: Unit tests per extracted function
+- **Estimated**: 6 hours
+
+### Task 7.3: Bot Decision Logic
+- [x] `src/lib/bot/chooseTrickAction.ts` — lead lowest single; follow with
+      lowest legal single beat or pass; validated through `canPlayCards`
+- [x] `src/lib/bot/chooseExchange.ts` — trivial giver/tribute/return-card
+      heuristics
+- **Blockers**: Task 7.2
+- **Enables**: Task 7.4
+- **Testability**: Unit tests
+- **Estimated**: 4 hours
+
+### Task 7.4: Bot Runner, Seeding & Dev Route
+- [x] `src/lib/bot/seedBotMatch.ts` — create game, seat 4 bots, start, mark
+      `is_bot`, reusing existing create/join/start routes in-process
+- [x] `src/lib/bot/botRunner.ts` — drive a game to completion by dispatching
+      on `game_rounds.status`, calling the Task 7.2 actions + Task 7.3
+      decisions
+- [x] `POST /api/game/dev/bot-match` — seeds + drives a full game,
+      non-production only
+- [x] Integration test: full bot-vs-bot game reaches `status: 'completed'`
+- **Blockers**: Tasks 7.1, 7.2, 7.3
+- **Testability**: Integration test + manual curl
+- **Estimated**: 5 hours
+
+---
+
 ## Parallelism Summary
 
 **Week 1**:

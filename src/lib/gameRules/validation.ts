@@ -138,7 +138,8 @@ function validateCardsToPlay(
 // necessarily the trick's opening lead (RULES.md's worked example has each
 // responder beat the previous player, not just the leader). `null` means the
 // trick hasn't had a play yet, i.e. this play would be the opening lead.
-function lastPlayedCombo(currentTrick: CurrentTrick): CardWithWild[] | null {
+// Exported for the bot's trick-following decision (lib/bot/chooseTrickAction.ts).
+export function lastPlayedCombo(currentTrick: CurrentTrick): CardWithWild[] | null {
   for (let i = currentTrick.length - 1; i >= 0; i--) {
     const { play } = currentTrick[i];
     if (play !== PASS) return play;
