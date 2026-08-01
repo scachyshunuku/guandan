@@ -1,5 +1,5 @@
 // Small shared display-formatting helpers used across game/ components.
-import type { GameParticipant } from "./types";
+import type { GameParticipant, Team } from "./types";
 
 export function pluralize(count: number, singular: string, plural = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : plural}`;
@@ -13,6 +13,32 @@ export function pluralize(count: number, singular: string, plural = `${singular}
 // always resolves to a current participant).
 export function nameForPosition(position: number, participants: readonly GameParticipant[]): string {
   return participants.find((p) => p.position === position)?.playerName ?? `Position ${position}`;
+}
+
+// RULES.md refers to finishing ranks as "1st/2nd/3rd/4th place" throughout;
+// mirrors that wording instead of a bare rank number.
+const ORDINAL_PLACES = { 1: "1st", 2: "2nd", 3: "3rd", 4: "4th" } as const;
+
+export function ordinalPlace(place: 1 | 2 | 3 | 4): string {
+  return `${ORDINAL_PLACES[place]} place`;
+}
+
+// Team A = positions 0 & 2, Team B = positions 1 & 3 (RULES.md "Players &
+// Teams"; also lib/gameRules/scoring.ts's positionTeam, kept separate since
+// that one's server-side game logic and this is a purely cosmetic UI
+// mapping). Team A is colored blue, Team B orange, wherever a player's name
+// is shown alongside their team (ScoreBoard, GameHistory).
+const TEAM_TEXT_CLASS: Record<Team, string> = {
+  0: "text-blue-600",
+  1: "text-orange-600",
+};
+
+export function teamForPosition(position: number): Team {
+  return (position % 2) as Team;
+}
+
+export function teamTextClass(team: Team): string {
+  return TEAM_TEXT_CLASS[team];
 }
 
 // The shareable join link for a game (Game.id doubles as the code - see
