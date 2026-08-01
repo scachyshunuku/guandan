@@ -1,6 +1,7 @@
 "use client";
 
 import { RANK_LABELS, STANDARD_RANK_ORDER } from "@/lib/cardUtils";
+import { teamTextClass } from "@/lib/format";
 import type { Game, Team } from "@/lib/types";
 
 // Level -> short label, e.g. 5 -> "5", 11 -> "J", 14 -> "A" (levels run 2-14,
@@ -31,7 +32,7 @@ export default function ScoreBoard({ game }: ScoreBoardProps) {
         return (
           <div key={team} data-testid={`score-board-team-${team}`} className="flex flex-col gap-1">
             <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
-              <span>{label}</span>
+              <span className={teamTextClass(team)}>{label}</span>
               <span data-testid="score-board-level">
                 Level {LEVEL_TO_LABEL.get(level) ?? level}
               </span>
@@ -50,7 +51,7 @@ export default function ScoreBoard({ game }: ScoreBoardProps) {
                     data-testid="score-board-progress-segment"
                     data-filled={rankLevel <= level}
                     className={`h-2 flex-1 rounded-sm ${
-                      rankLevel <= level ? "bg-blue-500" : "bg-gray-200"
+                      rankLevel <= level ? "bg-green-500" : "bg-gray-200"
                     }`}
                   />
                 );

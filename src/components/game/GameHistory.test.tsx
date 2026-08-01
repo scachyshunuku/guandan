@@ -62,7 +62,9 @@ describe("GameHistory", () => {
       />,
     );
     expect(screen.getByTestId("game-history-entry")).toHaveTextContent("Position 1 played");
-    expect(screen.getByTestId("card")).toBeInTheDocument();
+    const label = screen.getByTestId("card-label");
+    expect(label).toHaveTextContent("3S");
+    expect(label).toHaveClass("text-gray-900");
   });
 
   it("resolves a card_played action's position to a participant name", () => {
@@ -78,6 +80,46 @@ describe("GameHistory", () => {
       />,
     );
     expect(screen.getByTestId("game-history-entry")).toHaveTextContent("Bob played");
+  });
+
+  it("colors a Team A player's name blue and a Team B player's name orange", () => {
+    render(
+      <GameHistory
+        actions={[
+          makeAction({
+            actionType: "card_exchange",
+            actionData: {
+              from: 1,
+              to: 0,
+              card: { suit: "HEARTS", rank: "10" },
+              type: "initial",
+            },
+          }),
+        ]}
+        participants={[
+          makeParticipant({ playerName: "Alice", position: 0 }),
+          makeParticipant({ playerName: "Bob", position: 1 }),
+        ]}
+      />,
+    );
+    expect(screen.getByText("Bob")).toHaveClass("text-orange-600");
+    expect(screen.getByText("Alice")).toHaveClass("text-blue-600");
+  });
+
+  it("leaves a spectator's name uncolored", () => {
+    render(
+      <GameHistory
+        actions={[
+          makeAction({
+            actionType: "join",
+            actionData: { playerName: "Carol", position: null },
+          }),
+        ]}
+      />,
+    );
+    const entry = screen.getByTestId("game-history-entry");
+    expect(entry).toHaveTextContent("Carol joined as a spectator");
+    expect(entry.querySelector(".text-blue-600, .text-orange-600")).not.toBeInTheDocument();
   });
 
   it("resolves a pass action's playerId to a participant name", () => {
@@ -114,6 +156,9 @@ describe("GameHistory", () => {
     expect(screen.getByTestId("game-history-entry")).toHaveTextContent(
       "Position 0 gave Position 2 a card (initial)",
     );
+    const label = screen.getByTestId("card-label");
+    expect(label).toHaveTextContent("AH");
+    expect(label).toHaveClass("text-red-600");
   });
 
   it("resolves a card_exchange action's positions to participant names", () => {
@@ -224,7 +269,7 @@ describe("GameHistory", () => {
       />,
     );
     expect(screen.getByTestId("game-history-entry")).toHaveTextContent(
-      "Carol finished in position 1",
+      "Carol finished in 1st place",
     );
   });
 

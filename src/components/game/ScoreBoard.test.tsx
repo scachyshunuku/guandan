@@ -34,6 +34,28 @@ describe("ScoreBoard", () => {
     expect(filled).toHaveLength(3); // levels 2, 3, 4
   });
 
+  it("fills progress segments green for both teams", () => {
+    render(
+      <ScoreBoard game={{ teamALevel: 4, teamBLevel: 3, winningTeam: null }} />,
+    );
+    for (const testId of ["score-board-team-0", "score-board-team-1"]) {
+      const filled = screen
+        .getByTestId(testId)
+        .querySelectorAll('[data-testid="score-board-progress-segment"][data-filled="true"]');
+      for (const segment of Array.from(filled)) {
+        expect(segment).toHaveClass("bg-green-500");
+      }
+    }
+  });
+
+  it("colors Team A's label blue and Team B's orange", () => {
+    render(
+      <ScoreBoard game={{ teamALevel: 5, teamBLevel: 3, winningTeam: null }} />,
+    );
+    expect(screen.getByText("Team A")).toHaveClass("text-blue-600");
+    expect(screen.getByText("Team B")).toHaveClass("text-orange-600");
+  });
+
   it("marks the winning team", () => {
     render(
       <ScoreBoard game={{ teamALevel: 14, teamBLevel: 10, winningTeam: 0 }} />,

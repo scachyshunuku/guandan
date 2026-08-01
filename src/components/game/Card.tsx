@@ -1,20 +1,12 @@
 "use client";
 
-import { encodeCard, RANK_LABELS, SUIT_SYMBOLS } from "@/lib/cardUtils";
-import type { CardWithWild, StandardRank, Suit } from "@/lib/types";
-
-const RED_SUITS = new Set<Suit>(["HEARTS", "DIAMONDS"]);
+import { encodeCard, isRedCard, RANK_LABELS, SUIT_SYMBOLS } from "@/lib/cardUtils";
+import type { CardWithWild, StandardRank } from "@/lib/types";
 
 // Jokers aren't standard ranks, so they fall through to their raw rank
-// string here — isJoker/isRed handle their display separately anyway.
+// string here — isJoker/isRedCard handle their display separately anyway.
 function rankLabel(rank: CardWithWild["rank"] | StandardRank): string {
   return RANK_LABELS[rank as StandardRank] ?? rank;
-}
-
-function isRed(card: CardWithWild): boolean {
-  if (card.rank === "RED_JOKER") return true;
-  if (card.rank === "BLACK_JOKER") return false;
-  return card.suit !== undefined && RED_SUITS.has(card.suit);
 }
 
 export interface CardComponentProps {
@@ -27,7 +19,7 @@ export interface CardComponentProps {
 // (RULES.md "Level Cards & Wild Cards" — a level-rank heart played as another card).
 export default function Card({ card, selected = false, onClick }: CardComponentProps) {
   const isJoker = card.rank === "BLACK_JOKER" || card.rank === "RED_JOKER";
-  const red = isRed(card);
+  const red = isRedCard(card);
   const assetCode = encodeCard(card);
 
   return (

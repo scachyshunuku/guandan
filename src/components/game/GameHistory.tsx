@@ -3,6 +3,7 @@
 import type {
   CardExchangeActionData,
   CardPlayedActionData,
+  CardWithWild,
   GameAction,
   GameParticipant,
   JoinActionData,
@@ -10,8 +11,8 @@ import type {
   PlayerFinishedActionData,
   TrickEndActionData,
 } from "@/lib/types";
-import { nameForPosition } from "@/lib/format";
-import Card from "./Card";
+import { encodeCard, isRedCard } from "@/lib/cardUtils";
+import { nameForPosition, ordinalPlace, teamForPosition, teamTextClass } from "@/lib/format";
 
 export interface GameHistoryProps {
   actions: GameAction[];
@@ -85,33 +86,77 @@ function playerNameFor(playerId: string, participants: GameParticipant[]): strin
   return participants.find((p) => p.playerId === playerId)?.playerName ?? "A player";
 }
 
+function positionFor(playerId: string, participants: GameParticipant[]): number | null {
+  return participants.find((p) => p.playerId === playerId)?.position ?? null;
+}
+
+// A player's name colored by team (blue for Team A, orange for Team B) —
+// `position` is null for a spectator or an unresolvable player, in which
+// case the name renders uncolored since there's no team to show.
+function TeamName({ name, position }: { name: string; position: number | null }) {
+  if (position === null) return <>{name}</>;
+  return <span className={teamTextClass(teamForPosition(position))}>{name}</span>;
+}
+
+// Compact acronym form of a card for the history log (e.g. "AD" for ace of
+// diamonds, "RJ"/"BJ" for the jokers) — encodeCard already produces this
+// shorthand for URL/storage purposes, so it's reused here rather than the
+// full <Card> image, colored red/black by suit like a real card.
+function CardLabel({ card }: { card: CardWithWild }) {
+  return (
+    <span data-testid="card-label" className={isRedCard(card) ? "text-red-600" : "text-gray-900"}>
+      {encodeCard(card)}
+    </span>
+  );
+}
+
 function renderEntry(action: GameAction, participants: GameParticipant[]) {
   switch (action.actionType) {
     case "card_played": {
       const data = action.actionData as CardPlayedActionData;
       return (
         <>
-          <span>{nameForPosition(data.position, participants)} played</span>
+          <span>
+            <TeamName name={nameForPosition(data.position, participants)} position={data.position} />{" "}
+            played
+          </span>
           {data.cards.map((card, i) => (
-            <Card key={i} card={card} />
+            <CardLabel key={i} card={card} />
           ))}
         </>
       );
     }
 
     case "pass":
-      return <span>{playerNameFor(action.playerId, participants)} passed</span>;
+      return (
+        <span>
+          <TeamName
+            name={playerNameFor(action.playerId, participants)}
+            position={positionFor(action.playerId, participants)}
+          />{" "}
+          passed
+        </span>
+      );
 
     case "trick_end": {
       const data = action.actionData as TrickEndActionData;
-      return <span>Trick ended — won by {nameForPosition(data.winnerPosition, participants)}</span>;
+      return (
+        <span>
+          Trick ended — won by{" "}
+          <TeamName
+            name={nameForPosition(data.winnerPosition, participants)}
+            position={data.winnerPosition}
+          />
+        </span>
+      );
     }
 
     case "player_finished": {
       const data = action.actionData as PlayerFinishedActionData;
       return (
         <span>
-          {nameForPosition(data.position, participants)} finished in position {data.place}
+          <TeamName name={nameForPosition(data.position, participants)} position={data.position} />{" "}
+          finished in {ordinalPlace(data.place)}
         </span>
       );
     }
@@ -121,10 +166,11 @@ function renderEntry(action: GameAction, participants: GameParticipant[]) {
       return (
         <>
           <span>
-            {nameForPosition(data.from, participants)} gave {nameForPosition(data.to, participants)}{" "}
-            a card ({data.type})
+            <TeamName name={nameForPosition(data.from, participants)} position={data.from} /> gave{" "}
+            <TeamName name={nameForPosition(data.to, participants)} position={data.to} /> a card (
+            {data.type})
           </span>
-          <Card card={data.card} />
+          <CardLabel card={data.card} />
         </>
       );
     }
@@ -140,7 +186,7 @@ function renderEntry(action: GameAction, participants: GameParticipant[]) {
       const data = action.actionData as JoinActionData;
       return (
         <span>
-          {data.playerName} joined
+          <TeamName name={data.playerName} position={data.position} /> joined
           {data.position !== null ? ` at seat ${data.position + 1}` : " as a spectator"}
         </span>
       );
@@ -150,7 +196,7 @@ function renderEntry(action: GameAction, participants: GameParticipant[]) {
       const data = action.actionData as LeaveActionData;
       return (
         <span>
-          {data.playerName} left
+          <TeamName name={data.playerName} position={data.position} /> left
           {data.position !== null ? ` seat ${data.position + 1}` : " (was spectating)"}
         </span>
       );

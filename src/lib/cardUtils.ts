@@ -53,6 +53,17 @@ export const SUIT_SYMBOLS: Record<Suit, string> = {
   DIAMONDS: "♦",
 };
 
+const RED_SUITS = new Set<Suit>(["HEARTS", "DIAMONDS"]);
+
+// Whether a card should render in red (hearts/diamonds, red joker) vs.
+// black (clubs/spades, black joker) — shared by Card and GameHistory so
+// both agree on the same rule.
+export function isRedCard(card: Card): boolean {
+  if (card.rank === "RED_JOKER") return true;
+  if (card.rank === "BLACK_JOKER") return false;
+  return card.suit !== undefined && RED_SUITS.has(card.suit);
+}
+
 const STANDARD_RANK_VALUE: Record<StandardRank, number> = Object.fromEntries(
   STANDARD_RANK_ORDER.map((rank, i) => [rank, i + 2]),
 ) as Record<StandardRank, number>;
