@@ -28,6 +28,7 @@ function makeParticipant(overrides: Partial<GameParticipant>): GameParticipant {
     position: 0,
     hand: [],
     handCount: overrides.hand?.length ?? 0,
+    handOrder: overrides.handOrder ?? null,
     isConnected: true,
     connectedAt: "2026-01-01T00:00:00.000Z",
     lastHeartbeat: "2026-01-01T00:00:00.000Z",
@@ -53,6 +54,8 @@ function baseContext(overrides: Partial<GameContextValue> = {}): GameContextValu
     participants: PARTICIPANTS,
     myPosition: 0,
     hand: [{ suit: "SPADES", rank: "3" }],
+    myHandOrder: null,
+    updateHandOrder: jest.fn(),
     currentTrick: [{ position: 1, play: [{ suit: "HEARTS", rank: "4" }] }],
     currentPlayerTurn: 0,
     roundStatus: "in_progress",
@@ -100,7 +103,14 @@ describe("GamePage", () => {
       refetch: jest.fn(),
     });
   });
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => {
+    jest.clearAllMocks();
+    // PlayerHand's own mount effect writes to localStorage under
+    // persistenceKey (default `${gameId}:${myPosition}` = "game-1:0" across
+    // most tests here), so leftover state from one test could otherwise
+    // affect another's hand-order-dependent assertions.
+    window.localStorage.clear();
+  });
 
   it("shows a loading state while the game is hydrating", () => {
     useGameContextMock.mockReturnValue(baseContext({ isLoading: true }));
@@ -216,6 +226,27 @@ describe("GamePage", () => {
     expect(screen.getByTestId("action-buttons")).toBeInTheDocument();
   });
 
+  it("renders the hand in the server-saved order when there's nothing in localStorage yet", () => {
+    useGameContextMock.mockReturnValue(
+      baseContext({
+        hand: [
+          { suit: "CLUBS", rank: "3" },
+          { suit: "HEARTS", rank: "7" },
+        ],
+        myHandOrder: ["7H#0", "3C#0"],
+      }),
+    );
+    render(<GamePage />);
+
+    const labels = screen
+      .getByTestId("player-hand")
+      .querySelectorAll('[data-testid="card"]');
+    expect(Array.from(labels).map((c) => c.getAttribute("aria-label"))).toEqual([
+      "7 of hearts",
+      "3 of clubs",
+    ]);
+  });
+
   it("shows a spectator note instead of the hand/actions when spectating", () => {
     useGameContextMock.mockReturnValue(baseContext({ myPosition: null }));
     render(<GamePage />);
@@ -299,6 +330,11 @@ describe("GamePage", () => {
     render(<GamePage />);
 
     expect(screen.getByTestId("card-exchange-modal")).toBeInTheDocument();
+    // The draggable/reorderable PlayerHand isn't rendered during card
+    // exchange (kept simple: no reordering while the exchange UI - a
+    // different, read-only-except-for-the-return-selection hand display -
+    // is up). CardExchangeModal shows the hand itself instead.
+    expect(screen.queryByTestId("player-hand")).not.toBeInTheDocument();
     const handCards = screen.getByTestId("return-card-options").querySelectorAll('[data-testid="card"]');
     await user.click(handCards[0]);
     await user.click(screen.getByTestId("submit-return-button"));

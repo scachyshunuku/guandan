@@ -117,11 +117,15 @@ export async function POST(
   // never leave the server on this channel — even though a freshly inserted
   // participant always has an empty one today. hand_count carries the real
   // (always-zero, for a fresh join) count separately, since mapGameParticipantRow
-  // can't recover it from the zeroed hand.
+  // can't recover it from the zeroed hand. hand_order is zeroed for the same
+  // reason as hand — its slot keys encode actual card identity (see
+  // GameParticipant.handOrder's doc comment) — even though a fresh join's is
+  // always null today.
   await broadcastToGame(gameId, "participant_joined", {
     ...inserted,
     hand: [],
     hand_count: inserted.hand.length,
+    hand_order: null,
   });
 
   const response: JoinGameResponse =

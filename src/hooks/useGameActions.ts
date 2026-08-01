@@ -20,6 +20,7 @@ import type {
   EndHandResponse,
   ExchangeCardsRequest,
   ExchangeCardsResponse,
+  HandOrderResponse,
   HeartbeatResponse,
   JoinGameResponse,
   PassResponse,
@@ -144,6 +145,23 @@ export function useGameActions({
     },
   });
 
+  // Must be seated, same reasoning as playCards/exchangeCards above - a
+  // spectator has no hand to reorder (PlayerHand never renders draggable for
+  // one). Purely a display preference (see GameParticipant.handOrder's doc
+  // comment in types.ts) - no throwIfUnsuccessful needed, this route never
+  // reports a rule rejection, only transport-level failures.
+  const updateHandOrderMutation = useMutation({
+    mutationFn: (order: string[]) => {
+      if (position === null) {
+        return Promise.reject(new Error("Must be seated to reorder a hand"));
+      }
+      return postJson<HandOrderResponse>(`/api/game/${gameId}/hand-order`, {
+        playerId,
+        order,
+      });
+    },
+  });
+
   const chooseGiverCardMutation = useMutation({
     mutationFn: (card: Card) => {
       if (position === null) {
@@ -186,6 +204,10 @@ export function useGameActions({
     chooseGiverCardError: chooseGiverCardMutation.error,
 
     sendHeartbeat: heartbeatMutation.mutateAsync,
+
+    updateHandOrder: updateHandOrderMutation.mutateAsync,
+    isUpdatingHandOrder: updateHandOrderMutation.isPending,
+    updateHandOrderError: updateHandOrderMutation.error,
 
     startGame: startGameMutation.mutateAsync,
     isStartingGame: startGameMutation.isPending,

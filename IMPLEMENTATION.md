@@ -251,6 +251,42 @@ All can be built with mocks, integrated later.
 - **Testability**: Component tests with React Testing Library
 - **Estimated**: 6 hours
 
+### Task 5.1a: Drag-and-Drop Hand Rearrangement
+- [x] Extend `components/game/PlayerHand.tsx` to support manual reordering:
+  - Drag a card to a new position within the own-hand grid
+  - Reorder is purely a client-side display preference — does not
+    affect play validation, which operates on card identity, not position
+  - Persist the reordered layout across re-renders triggered by
+    `useGameRealtimeSync` hand updates (e.g. after playing/drawing cards,
+    keep unmoved cards in their user-arranged positions rather than
+    resetting to server/sorted order)
+  - Persist the arrangement across page refresh and disconnect/reconnect:
+    localStorage (keyed by game id + player id, ordering by stable card
+    identity, not array index) for same-device instant persistence, plus a
+    `game_participants.hand_order` column and `POST /api/game/[id]/hand-order`
+    (debounced background sync from the client) so the arrangement also
+    follows the player to a different browser/device — localStorage always
+    wins when both exist, since it reflects this device's most recent state;
+    the server value is only a mount-time fallback for a device with nothing
+    saved locally yet
+  - Keep existing click-to-select behavior working alongside drag
+  - Touch support for mobile drag (not just mouse)
+- [x] Unit tests: drag reorders hand array, selection state survives
+  reorder, touch drag events, ordering preference survives simulated
+  reload (rehydrate from storage) and reconnect, server-order fallback when
+  localStorage is empty, debounced sync calls the persist callback
+- [x] `POST /api/game/[id]/hand-order` route + unit tests: saves the
+  caller's own order only, ownership/validation checks, never broadcasts
+  (no other client needs another player's hand ordering)
+- [x] `hand_order` redacted to null for every participant except the
+  requesting client in `GET /api/game/[id]` (same treatment as `hand`,
+  since its slot keys encode actual card identity) and in every existing
+  broadcast that spreads a raw participant row (`heartbeat`, `join`)
+- **Blockers**: Task 5.1
+- **Enables**: None
+- **Testability**: Component tests with React Testing Library
+- **Estimated**: 5 hours
+
 ### Task 5.2: Game Table Layout
 - [x] `components/game/GameTable.tsx` - Main board
   - 4 player positions (north, south, east, west)

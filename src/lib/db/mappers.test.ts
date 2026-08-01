@@ -103,6 +103,7 @@ describe("mapGameParticipantRow", () => {
       player_id: "session-abc",
       position: 0,
       hand: [{ rank: "ACE", suit: "SPADES" }],
+      hand_order: null,
       is_connected: true,
       connected_at: "2026-01-01T00:00:00Z",
       last_heartbeat: "2026-01-01T00:05:00Z",
@@ -117,6 +118,7 @@ describe("mapGameParticipantRow", () => {
       position: 0,
       hand: [{ rank: "ACE", suit: "SPADES" }],
       handCount: 1,
+      handOrder: null,
       isConnected: true,
       connectedAt: "2026-01-01T00:00:00Z",
       lastHeartbeat: "2026-01-01T00:05:00Z",
@@ -133,6 +135,7 @@ describe("mapGameParticipantRow", () => {
       position: 0,
       hand: [],
       hand_count: 7,
+      hand_order: null,
       is_connected: true,
       connected_at: "2026-01-01T00:00:00Z",
       last_heartbeat: "2026-01-01T00:05:00Z",
@@ -140,6 +143,24 @@ describe("mapGameParticipantRow", () => {
     };
 
     expect(mapGameParticipantRow(row).handCount).toBe(7);
+  });
+
+  it("maps hand_order to handOrder", () => {
+    const row: GameParticipantRow = {
+      id: "participant-1",
+      game_id: "game-1",
+      player_name: "Alice",
+      player_id: "session-abc",
+      position: 0,
+      hand: [{ rank: "ACE", suit: "SPADES" }],
+      hand_order: ["AS#0"],
+      is_connected: true,
+      connected_at: "2026-01-01T00:00:00Z",
+      last_heartbeat: "2026-01-01T00:05:00Z",
+      created_at: "2026-01-01T00:00:00Z",
+    };
+
+    expect(mapGameParticipantRow(row).handOrder).toEqual(["AS#0"]);
   });
 
   it("maps a null position for spectators", () => {
@@ -150,6 +171,7 @@ describe("mapGameParticipantRow", () => {
       player_id: "session-def",
       position: null,
       hand: [],
+      hand_order: null,
       is_connected: true,
       connected_at: "2026-01-01T00:00:00Z",
       last_heartbeat: "2026-01-01T00:05:00Z",

@@ -153,6 +153,7 @@ describe("POST /api/game/[id]/join", () => {
         player_id: "alice",
         position: 0,
         hand: [],
+        hand_order: null,
       }),
     );
   });

@@ -134,6 +134,24 @@ describe("POST /api/game/[id]/heartbeat", () => {
     }
   });
 
+  it("never leaks a hand_order in the broadcast payload", async () => {
+    const gameId = await seedGame();
+    await seedParticipant(gameId, "alice", { hand_order: ["AS#0"] });
+    await seedParticipant(gameId, "bob", {
+      position: 1,
+      hand_order: ["KH#0"],
+      is_connected: true,
+      last_heartbeat: new Date(Date.now() - HEARTBEAT_STALE_MS * 10).toISOString(),
+    });
+
+    await callHeartbeat(gameId, { playerId: "alice" });
+
+    expect(mockBroadcastToGame.mock.calls.length).toBeGreaterThan(0);
+    for (const call of mockBroadcastToGame.mock.calls) {
+      expect((call[2] as { hand_order: unknown }).hand_order).toBeNull();
+    }
+  });
+
   it("rejects when playerId is missing", async () => {
     const gameId = await seedGame();
     const response = await callHeartbeat(gameId, {});
