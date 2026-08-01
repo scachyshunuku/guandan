@@ -20,7 +20,7 @@ function isRed(card: CardWithWild): boolean {
 export interface CardComponentProps {
   card: CardWithWild;
   selected?: boolean;
-  onClick?: () => void;
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 // Single card visual. Shows a wild-card badge when `actsAs` is present

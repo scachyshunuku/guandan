@@ -287,6 +287,30 @@ All can be built with mocks, integrated later.
 - **Testability**: Component tests with React Testing Library
 - **Estimated**: 5 hours
 
+### Task 5.1b: Advanced Hand Selection & Drag UX
+- [x] Extend `components/game/PlayerHand.tsx`'s selection/drag model:
+  - Multiselect drag: dragging a card that's part of a multi-card selection
+    moves the whole selected group together as one block, preserving their
+    relative order
+  - Hold/drag animation: dragged card(s) lift (scale + shadow) and follow
+    the pointer while held; displaced cards animate into their new position
+    instead of jumping (respects `prefers-reduced-motion`)
+  - Marquee (rubber-band) box select: dragging from empty space within the
+    hand panel draws a translucent light-blue selection box; any card it
+    touches is selected
+  - Shift-click range select: shift-clicking a card selects every card
+    between the last plain-clicked card (anchor) and the clicked one, in
+    displayed order — replacing the current selection, file-explorer style
+  - Existing click-to-select (additive toggle) and single-card drag-reorder
+    behavior unchanged
+- [x] Unit tests: multiselect group drag, shift-click range select
+  (including re-anchoring and a played/missing-anchor fallback), marquee
+  select, existing single-card-drag/reorder tests still pass
+- **Blockers**: Task 5.1a
+- **Enables**: None
+- **Testability**: Component tests with React Testing Library
+- **Estimated**: 4 hours
+
 ### Task 5.2: Game Table Layout
 - [x] `components/game/GameTable.tsx` - Main board
   - 4 player positions (north, south, east, west)
