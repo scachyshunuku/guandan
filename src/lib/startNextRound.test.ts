@@ -46,7 +46,7 @@ async function seedParticipant(
     .select("*")
     .single();
   const row = data as { id: string; player_id: string; player_name: string; position: number; hand: Card[] };
-  return { id: row.id, player_id: row.player_id, player_name: row.player_name, position, hand: row.hand };
+  return { id: row.id, player_id: row.player_id, player_name: row.player_name, position, hand: row.hand, is_bot: false };
 }
 
 // Returns the seeded rows in the shape startNextRound's `participants`

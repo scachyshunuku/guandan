@@ -60,6 +60,7 @@ export interface GameParticipantRow {
   connected_at: string;
   last_heartbeat: string;
   created_at: string;
+  is_bot: boolean;
 }
 
 export interface GameActionRow {
@@ -115,6 +116,7 @@ export function mapGameParticipantRow(row: GameParticipantRow): GameParticipant 
     connectedAt: row.connected_at,
     lastHeartbeat: row.last_heartbeat,
     createdAt: row.created_at,
+    isBot: row.is_bot,
   };
 }
 

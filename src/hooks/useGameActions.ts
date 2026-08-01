@@ -13,10 +13,12 @@
 import { useMutation } from "@tanstack/react-query";
 import { postJson } from "@/lib/httpClient";
 import type {
+  AddBotResponse,
   Card,
   CardWithWild,
   ChooseGiverCardResponse,
   ChooseTributeResponse,
+  DriveBotsResponse,
   EndHandResponse,
   ExchangeCardsRequest,
   ExchangeCardsResponse,
@@ -103,6 +105,26 @@ export function useGameActions({
       }
       return postJson<StartGameResponse>(`/api/game/${gameId}/start`, { playerId });
     },
+  });
+
+  // Only a seated player can add a bot (server-enforced, add-bot/route.ts's
+  // "Only a seated player can add a bot"), same reasoning as startGame.
+  const addBotMutation = useMutation({
+    mutationFn: () => {
+      if (position === null) {
+        return Promise.reject(new Error("Must be seated to add a bot"));
+      }
+      return postJson<AddBotResponse>(`/api/game/${gameId}/add-bot`, { playerId });
+    },
+  });
+
+  // Not seat-gated, unlike most mutations above - useGame's auto-trigger
+  // (a client-side poll for "does a bot need to act") calls this without
+  // knowing in advance whether it's relevant, the same reasoning as
+  // endHandMutation, and the route itself doesn't take a playerId at all -
+  // no caller identity to gate on (see drive-bots/route.ts).
+  const driveBotsMutation = useMutation({
+    mutationFn: () => postJson<DriveBotsResponse>(`/api/game/${gameId}/drive-bots`),
   });
 
   const exchangeCardsMutation = useMutation({
@@ -212,5 +234,11 @@ export function useGameActions({
     startGame: startGameMutation.mutateAsync,
     isStartingGame: startGameMutation.isPending,
     startGameError: startGameMutation.error,
+
+    addBot: addBotMutation.mutateAsync,
+    isAddingBot: addBotMutation.isPending,
+    addBotError: addBotMutation.error,
+
+    driveBots: driveBotsMutation.mutateAsync,
   };
 }

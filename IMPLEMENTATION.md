@@ -408,6 +408,155 @@ All can be built with mocks, integrated later.
 
 ---
 
+## Phase 7: Bot Player (Dev/Test Tooling)
+
+All-bot dev/testing mode only for v1 — no lobby UI, no mixed human+bot
+seating, no disconnect-takeover. Every bot decision is trivial (lowest
+legal option / pass), and every bot move runs through the same
+server-side validation/persistence/broadcast code a human's request does.
+
+### Task 7.1: Schema — Bot Seat Marker
+- [x] Migration: `game_participants.is_bot boolean not null default false`
+- **Blockers**: None
+- **Enables**: Task 7.4
+- **Testability**: Migration review (db-migration skill)
+- **Estimated**: 1 hour
+
+### Task 7.2: Extract Decision Routes into Callable Actions
+- [x] `src/lib/gameActions/playCards.ts`, `pass.ts`, `chooseGiverCard.ts`,
+      `chooseTribute.ts`, `exchangeCards.ts`, `endHand.ts` — same logic as
+      each route today, callable directly (no HTTP) so a bot and a human
+      run identical code
+  - Export previously-private `lastPlayedCombo` (`gameRules/validation.ts`)
+  - Export previously-private `getRoundCardExchangeActions` and add
+    `pendingReturnPositions` (`gameActions/exchangeCards.ts`)
+- [x] Thin each route (`play-cards`, `pass`, `choose-giver-card`,
+      `choose-tribute`, `exchange-cards`, `end-hand`) down to parse → call →
+      respond
+- [x] Existing `route.test.ts` files pass unmodified
+- **Blockers**: None
+- **Enables**: Task 7.4
+- **Testability**: Unit tests per extracted function
+- **Estimated**: 6 hours
+
+### Task 7.3: Bot Decision Logic
+- [x] `src/lib/bot/chooseTrickAction.ts` — lead lowest single; follow with
+      lowest legal single beat or pass; validated through `canPlayCards`
+- [x] `src/lib/bot/chooseExchange.ts` — trivial giver/tribute/return-card
+      heuristics
+- **Blockers**: Task 7.2
+- **Enables**: Task 7.4
+- **Testability**: Unit tests
+- **Estimated**: 4 hours
+
+### Task 7.4: Bot Runner, Seeding & Dev Route — superseded, removed
+- [x] `src/lib/bot/botRunner.ts` — drive bot turns by dispatching on
+      `game_rounds.status`, calling the Task 7.2 actions + Task 7.3
+      decisions
+- ~~`src/lib/bot/seedBotMatch.ts` — create game, seat 4 bots, start, mark
+      `is_bot`, reusing existing create/join/start routes in-process~~
+- ~~`POST /api/game/dev/bot-match` — seeds + drives a full game,
+      non-production only~~
+- ~~Integration test: full bot-vs-bot game reaches `status: 'completed'`~~
+- Removed once Phase 8 shipped `add-bot`/`drive-bots`: seating every
+  position with a bot (via repeated `add-bot` calls) plus letting
+  `drive-bots` polling run the game covers the same ground as the
+  dedicated dev tool did, so the tool itself, its all-bot-only seeding
+  helper, and its single-request drive-to-completion loop
+  (`driveBotGame`) were deleted rather than kept as unused parallel
+  paths. `driveOneBotAction` (the single-step primitive both used) is the
+  only thing that remains, now Phase 8's only caller.
+- **Blockers**: Tasks 7.1, 7.2, 7.3
+- **Testability**: Integration test (see Phase 8 Task 8.7) + manual curl
+- **Estimated**: 5 hours
+
+---
+
+## Phase 8: Mixed Human + Bot Play
+
+Lets a human play alongside bot-filled seats (e.g. 1 human + 3 bots) from
+the real UI, rather than the all-bot-only dev tool. Bot turns happen
+automatically as the game progresses in real time, driven by a client-side
+poll (same pattern as the existing end-hand auto-trigger), not resolved all
+at once in one request.
+
+### Task 8.1: Expose `is_bot` to the Client
+- [x] `GameParticipant.isBot` (`src/lib/types.ts`) and `mapGameParticipantRow`
+      (`src/lib/db/mappers.ts`) carry the existing `is_bot` column through to
+      the client — not redacted, since which seats are bot-controlled is
+      public information
+- [x] Verified broadcast payloads (`participant_joined`/`participant_updated`)
+      carry it through unchanged (they spread the raw DB row)
+- **Blockers**: None
+- **Enables**: Task 8.5
+- **Testability**: Unit tests (mapper, realtime sync)
+- **Estimated**: 1 hour
+
+### Task 8.2: `POST /api/game/[id]/add-bot`
+- [x] Seats one server-generated bot into the first open position, reusing
+      `join`'s route in-process, then marks it `is_bot`
+- [x] Only a seated player may call it, only while `game.status === 'waiting'`
+- **Blockers**: Task 7.1
+- **Enables**: Task 8.6
+- **Testability**: Unit tests
+- **Estimated**: 3 hours
+
+### Task 8.3: Bot-Turn Dispatch Refactor
+- [x] `src/lib/bot/botRunner.ts`: extracted `driveOneBotAction` (performs at
+      most one bot action, reporting `acted`/`idle`/`completed`/`error` —
+      "idle" i.e. "not this bot's turn" is a normal outcome, not a bug, for
+      a mixed game) out of the original all-bot `driveBotGame` loop
+  - Also fixed: when multiple positions are pending a giver-choice or
+    card-exchange return and only some are bots, finds *a* bot among them
+    rather than only ever checking the first pending position
+- [x] `driveBotGame` initially preserved as a thin loop over
+      `driveOneBotAction` for the Phase 7 dev tool; removed along with that
+      tool once Task 8.2/8.4 made it redundant (see Task 7.4's note) —
+      `driveOneBotAction` is now the module's only exported entry point
+- **Blockers**: Task 7.2, Task 7.3
+- **Enables**: Task 8.4
+- **Testability**: Unit tests (mixed-mode "idle"/"finds a bot among
+  pending" behavior; the dispatch-error-path test was ported from the
+  removed `driveBotGame` test onto `driveOneBotAction` directly)
+- **Estimated**: 4 hours
+
+### Task 8.4: `POST /api/game/[id]/drive-bots`
+- [x] Looks up the game's bot-seated positions and performs at most one bot
+      action via `driveOneBotAction`; always 200 — "not a bot's turn" is a
+      normal no-op, a genuine action failure is a 500
+- **Blockers**: Task 8.3
+- **Enables**: Task 8.5
+- **Testability**: Unit tests
+- **Estimated**: 2 hours
+
+### Task 8.5: Client Polling
+- [x] `useGame.ts`: new interval effect (mirroring the existing end-hand
+      auto-trigger) polling `drive-bots` while the game is `in_progress`,
+      the client is seated, and the game has any bot seat
+- [x] `useGameActions.ts`: `addBot`/`driveBots` mutations
+- **Blockers**: Tasks 8.1, 8.4
+- **Enables**: Task 8.6
+- **Testability**: Unit tests
+- **Estimated**: 2 hours
+
+### Task 8.6: UI — "Fill remaining seats with bots"
+- [x] `WaitingRoom` (`src/app/game/[id]/page.tsx`): button shown once seated
+      with an open seat remaining, seating one bot per open seat
+- **Blockers**: Tasks 8.2, 8.5
+- **Testability**: Unit tests + manual
+- **Estimated**: 2 hours
+
+### Task 8.7: Integration Test
+- [x] A human's own `play-cards`/`pass`/`choose-*`/`exchange-cards` calls
+      interleaved with repeated `drive-bots` calls drive a full 1-human +
+      3-bot game to `status: 'completed'` — now the sole full-game bot
+      integration test, since Task 7.4's dev-tool equivalent was removed
+- **Blockers**: Tasks 8.2-8.6
+- **Testability**: Integration test + manual curl against real Supabase
+- **Estimated**: 3 hours
+
+---
+
 ## Parallelism Summary
 
 **Week 1**:

@@ -108,6 +108,7 @@ describe("mapGameParticipantRow", () => {
       connected_at: "2026-01-01T00:00:00Z",
       last_heartbeat: "2026-01-01T00:05:00Z",
       created_at: "2026-01-01T00:00:00Z",
+      is_bot: false,
     };
 
     expect(mapGameParticipantRow(row)).toEqual({
@@ -123,6 +124,7 @@ describe("mapGameParticipantRow", () => {
       connectedAt: "2026-01-01T00:00:00Z",
       lastHeartbeat: "2026-01-01T00:05:00Z",
       createdAt: "2026-01-01T00:00:00Z",
+      isBot: false,
     });
   });
 
@@ -140,6 +142,7 @@ describe("mapGameParticipantRow", () => {
       connected_at: "2026-01-01T00:00:00Z",
       last_heartbeat: "2026-01-01T00:05:00Z",
       created_at: "2026-01-01T00:00:00Z",
+      is_bot: false,
     };
 
     expect(mapGameParticipantRow(row).handCount).toBe(7);
@@ -158,6 +161,7 @@ describe("mapGameParticipantRow", () => {
       connected_at: "2026-01-01T00:00:00Z",
       last_heartbeat: "2026-01-01T00:05:00Z",
       created_at: "2026-01-01T00:00:00Z",
+      is_bot: false,
     };
 
     expect(mapGameParticipantRow(row).handOrder).toEqual(["AS#0"]);
@@ -176,6 +180,7 @@ describe("mapGameParticipantRow", () => {
       connected_at: "2026-01-01T00:00:00Z",
       last_heartbeat: "2026-01-01T00:05:00Z",
       created_at: "2026-01-01T00:00:00Z",
+      is_bot: false,
     };
 
     expect(mapGameParticipantRow(row).position).toBeNull();

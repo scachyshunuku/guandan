@@ -36,6 +36,7 @@ function defaultsFor(table: string): Row {
         connected_at: now,
         last_heartbeat: now,
         created_at: now,
+        is_bot: false,
       };
     case "game_actions":
       return { action_data: {}, created_at: now };
