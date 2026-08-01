@@ -322,6 +322,53 @@ describe("POST /api/game/[id]/exchange-cards", () => {
     expect(newRoundCount(gameId)).toBe(1);
   });
 
+  it("does not finalize the round early when the same player's return races itself, while the other owed position still hasn't returned", async () => {
+    // Regression test: completeness used to be checked by raw row count
+    // (`returnActions.length >= initialActions.length`), which two
+    // concurrent requests from the *same* still-accepted duplicate-submit
+    // race (see "rejects a second return submission from the same player"
+    // above) could inflate past the number of genuinely distinct positions
+    // that had actually returned - finalizing the round while position 2's
+    // return was never collected. Fixed by counting distinct positions via
+    // pendingReturnPositions instead.
+    const gameId = await seedGame();
+    const roundId = await seedRound(gameId, 3);
+    await seedInitialExchange(gameId, roundId, 3, 0, { rank: "QUEEN", suit: "SPADES" });
+    await seedInitialExchange(gameId, roundId, 1, 2, { rank: "9", suit: "CLUBS" });
+    await seedParticipant(gameId, 0, "p0", [
+      { rank: "QUEEN", suit: "SPADES" },
+      { rank: "5", suit: "DIAMONDS" },
+    ]);
+    await seedParticipant(gameId, 1, "p1", [{ rank: "3", suit: "DIAMONDS" }]);
+    await seedParticipant(gameId, 2, "p2", [
+      { rank: "9", suit: "CLUBS" },
+      { rank: "6", suit: "DIAMONDS" },
+    ]);
+    await seedParticipant(gameId, 3, "p3", [{ rank: "4", suit: "DIAMONDS" }]);
+
+    // Both requests are for position 0 (p0), racing the same known-accepted
+    // duplicate-submit gap - both can land, but that must never be
+    // mistaken for position 2 (the other owed return) having also returned.
+    const [r1, r2] = await Promise.all([
+      callExchange(gameId, { playerId: "p0", cardToGive: { rank: "5", suit: "DIAMONDS" } }),
+      callExchange(gameId, { playerId: "p0", cardToGive: { rank: "5", suit: "DIAMONDS" } }),
+    ]);
+    expect([r1.status, r2.status]).toEqual([200, 200]);
+
+    const roundAfterDuplicate = fake._tables.game_rounds.find((r) => r.id === roundId);
+    expect(roundAfterDuplicate?.status).toBe("card_exchange"); // must still be waiting on position 2
+    expect(newRoundCount(gameId)).toBe(1);
+
+    // Position 2's genuine return now correctly finalizes it.
+    const finalReturn = await callExchange(gameId, {
+      playerId: "p2",
+      cardToGive: { rank: "6", suit: "DIAMONDS" },
+    });
+    expect(finalReturn.status).toBe(200);
+    const finalRound = fake._tables.game_rounds.find((r) => r.id === roundId);
+    expect(finalRound?.status).toBe("in_progress");
+  });
+
   it("rolls back the hand transfer if the action log write fails", async () => {
     const gameId = await seedGame();
     const roundId = await seedRound(gameId, 2);

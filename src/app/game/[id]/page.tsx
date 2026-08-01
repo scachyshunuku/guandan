@@ -78,6 +78,9 @@ export default function GamePage() {
     startGame,
     isStartingGame,
     startGameError,
+    addBot,
+    isAddingBot,
+    addBotError,
   } = useGameContext();
 
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
@@ -162,6 +165,25 @@ export default function GamePage() {
       });
     }
 
+    // Seats one bot per still-open seat, sequentially - add-bot/route.ts
+    // handles one seat per call, so "fill the rest with bots" is this
+    // loop's job, not the route's. No refetch needed afterward: each
+    // add-bot call's own join broadcasts participant_joined (and its own
+    // is_bot flip broadcasts participant_updated), which every connected
+    // client - including this one - already syncs into `participants` live,
+    // the same way another human joining updates this screen without this
+    // client doing anything.
+    function handleFillWithBots() {
+      const openSeats = 4 - participants.filter((p) => p.position !== null).length;
+      (async () => {
+        for (let i = 0; i < openSeats; i++) {
+          await addBot();
+        }
+      })().catch(() => {
+        // Failure surfaces via addBotError below.
+      });
+    }
+
     return (
       <WaitingRoom
         gameId={gameId}
@@ -174,6 +196,9 @@ export default function GamePage() {
         onStart={handleStart}
         isStarting={isStartingGame}
         startError={startGameError}
+        onFillWithBots={handleFillWithBots}
+        isAddingBot={isAddingBot}
+        addBotError={addBotError}
       />
     );
   }
@@ -447,6 +472,9 @@ function WaitingRoom({
   onStart,
   isStarting,
   startError,
+  onFillWithBots,
+  isAddingBot,
+  addBotError,
 }: {
   gameId: string;
   participants: GameParticipant[];
@@ -464,6 +492,9 @@ function WaitingRoom({
   onStart: () => void;
   isStarting: boolean;
   startError: Error | null;
+  onFillWithBots: () => void;
+  isAddingBot: boolean;
+  addBotError: Error | null;
 }) {
   const [playerName, setPlayerName] = useState("");
   const byPosition = new Map(
@@ -475,6 +506,10 @@ function WaitingRoom({
   // players to start") - pre-checked here so the button never fires a
   // doomed request, same as ActionButtons does for play/pass.
   const canStart = myPosition !== null && byPosition.size === 4;
+  // Same seated-player requirement as starting (add-bot/route.ts's "Only a
+  // seated player can add a bot"); unlike starting, this is offered *before*
+  // all 4 seats are full - its whole point is filling the rest.
+  const canAddBots = myPosition !== null && byPosition.size < 4;
 
   return (
     <main
@@ -518,6 +553,28 @@ function WaitingRoom({
         {spectators.length > 0 && (
           <div className="mt-4">
             <SpectatorList spectators={spectators} />
+          </div>
+        )}
+
+        {canAddBots && (
+          <div className="mt-4 flex flex-col gap-2 border-t border-slate-200 pt-4">
+            <button
+              type="button"
+              data-testid="waiting-room-fill-with-bots-button"
+              disabled={isAddingBot}
+              onClick={onFillWithBots}
+              className="self-start rounded-lg bg-slate-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {isAddingBot ? "Adding bots…" : "Fill remaining seats with bots"}
+            </button>
+            {addBotError && (
+              <p
+                data-testid="waiting-room-add-bot-error"
+                className="text-xs text-red-500"
+              >
+                {addBotError.message}
+              </p>
+            )}
           </div>
         )}
 

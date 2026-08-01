@@ -50,6 +50,7 @@ export interface ParticipantRow {
   player_name: string;
   position: PlayerPosition | null;
   hand: CardWithWild[];
+  is_bot: boolean;
 }
 
 export async function getParticipants(
@@ -57,7 +58,7 @@ export async function getParticipants(
 ): Promise<ParticipantRow[]> {
   const { data, error } = await supabaseAdmin
     .from("game_participants")
-    .select("id, player_id, player_name, position, hand")
+    .select("id, player_id, player_name, position, hand, is_bot")
     .eq("game_id", gameId);
   if (error) throw error;
   return data ?? [];

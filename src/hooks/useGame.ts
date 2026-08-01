@@ -49,6 +49,12 @@ const HEARTBEAT_INTERVAL_MS = 2 * 60_000;
 // route every render.
 const END_HAND_RETRY_INTERVAL_MS = 3_000;
 
+// How often to poll drive-bots while this game has any bot seat (see the
+// effect below). Between HEARTBEAT_INTERVAL_MS and END_HAND_RETRY_INTERVAL_MS
+// - fast enough that a bot's move reads as "taking its turn" rather than an
+// awkward pause, slow enough not to look instant/robotic.
+const DRIVE_BOTS_INTERVAL_MS = 1_200;
+
 // This client's own link to the games:[id] realtime channel - distinct from
 // GameParticipant.isConnected, which is now tracked server-side via
 // heartbeat/route.ts (Task 6.2) and derived fresh from lastHeartbeat rather
@@ -394,6 +400,38 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     return () => clearInterval(interval);
   }, [gameStatus, roundStatus, currentPlayerTurn, myPosition]);
 
+  // Bot turns (IMPLEMENTATION.md Phase 8) happen automatically as the game
+  // progresses, driven by whichever seated client happens to be connected -
+  // same pattern as the end-hand effect above, polling a cheap, idempotent
+  // "do one bot action if the game's current state calls for one" route
+  // instead of computing anything about bots client-side. Gated on this
+  // game actually having a bot seat (`participants` already carries
+  // `isBot`) so an ordinary all-human game never picks up this traffic.
+  const hasBotParticipant = participants.some((p) => p.isBot);
+  const driveBotsInFlightRef = useRef(false);
+  useEffect(() => {
+    if (gameStatus !== "in_progress") return;
+    if (myPosition === null) return;
+    if (!hasBotParticipant) return;
+
+    function attemptDriveBots() {
+      if (driveBotsInFlightRef.current) return;
+      driveBotsInFlightRef.current = true;
+      actionsRef.current
+        .driveBots()
+        .catch(() => {
+          // Best-effort, same as heartbeat/end-hand above - the next tick
+          // retries regardless of why this one failed.
+        })
+        .finally(() => {
+          driveBotsInFlightRef.current = false;
+        });
+    }
+    attemptDriveBots();
+    const interval = setInterval(attemptDriveBots, DRIVE_BOTS_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [gameStatus, myPosition, hasBotParticipant]);
+
   const chooseTribute = useCallback(
     (take: PlayerPosition) => actionsRef.current.chooseTribute(take),
     [],
@@ -557,5 +595,9 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     startGame,
     isStartingGame: actions.isStartingGame,
     startGameError: actions.startGameError,
+
+    addBot: actions.addBot,
+    isAddingBot: actions.isAddingBot,
+    addBotError: actions.addBotError,
   };
 }

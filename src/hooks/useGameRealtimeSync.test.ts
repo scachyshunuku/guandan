@@ -172,6 +172,7 @@ describe("useGameRealtimeSync", () => {
       connectedAt: "2026-01-01T00:00:00.000Z",
       lastHeartbeat: "2026-01-01T00:00:00.000Z",
       createdAt: "2026-01-01T00:00:00.000Z",
+      isBot: false,
     });
     renderHook(() => useGameRealtimeSync("game-1"));
 

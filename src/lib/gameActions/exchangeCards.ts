@@ -69,7 +69,15 @@ export async function exchangeCards(
     // so if that attempt errored, every returning player already has an
     // "already submitted" row on file and would otherwise have no way to
     // ever advance the round again.
-    if (returnActions.length >= initialActions.length) {
+    //
+    // Checked via pendingReturnPositions (dedups by *position*, not row
+    // count) rather than `returnActions.length >= initialActions.length`:
+    // two returns landing for the same position (the exact double-submit
+    // race this branch exists to catch) would otherwise inflate a raw row
+    // count past initialActions.length while a genuinely different owed
+    // position still hasn't returned — finalizing the round prematurely
+    // with one player's card never actually collected.
+    if (pendingReturnPositions(actionRows).length === 0) {
       const outcome = await finalizeExchangeAndStartRound(game, round);
       if (outcome === "error") {
         return { status: 500, body: { error: "The round could not be finalized. Please retry." } };
@@ -145,9 +153,12 @@ export async function exchangeCards(
   // one that observes both returns present is the one that proceeds to
   // finalize; finalizeExchangeAndStartRound's own compare-and-swap on the
   // round's status handles the case where both requests reach that point.
+  // Same reasoning as the pendingReturnPositions check above: dedups by
+  // position, so a concurrent duplicate return for the position that just
+  // wrote here can't be mistaken for a genuinely different position's
+  // still-outstanding return.
   const postInsertActions = await getRoundCardExchangeActions(round.id);
-  const postReturnCount = postInsertActions.filter((a) => asCardExchangeData(a).type === "return").length;
-  if (postReturnCount >= initialActions.length) {
+  if (pendingReturnPositions(postInsertActions).length === 0) {
     const outcome = await finalizeExchangeAndStartRound(game, round);
     if (outcome === "error") {
       // This return itself is safely recorded above — but exchangeCards'

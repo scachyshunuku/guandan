@@ -223,6 +223,11 @@ export interface GameParticipant {
   connectedAt: string;
   lastHeartbeat: string;
   createdAt: string;
+  // Server-seeded bot participant (IMPLEMENTATION.md Phase 7/8) vs a real
+  // human. Not redacted like hand/handOrder - which seats are bot-controlled
+  // is public information, needed client-side to decide when to poll for a
+  // bot's turn (see useGame.ts's drive-bots effect).
+  isBot: boolean;
 }
 
 export interface CardPlayedActionData {
@@ -338,6 +343,26 @@ export interface StartGameRequest {
 export interface StartGameResponse {
   success: true;
   hand: CardWithWild[];
+}
+
+// IMPLEMENTATION.md Phase 8 (mixed human+bot play): the caller must already
+// be seated, same as StartGameRequest. No target position — the server
+// assigns the bot to the first open seat, same as join/route.ts.
+export interface AddBotRequest {
+  playerId: string;
+}
+
+export interface AddBotResponse {
+  success: true;
+  position: PlayerPosition;
+}
+
+// IMPLEMENTATION.md Phase 8: no request fields beyond playerId isn't even
+// required — callable by anyone, the same "any seated/connected caller may
+// nudge this along" reasoning as EndHandRequest, since it's a no-op unless
+// it's actually a bot's turn.
+export interface DriveBotsResponse {
+  acted: boolean;
 }
 
 // No `position` field: the server derives it from `playerId` (a
