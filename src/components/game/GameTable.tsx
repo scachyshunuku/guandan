@@ -47,11 +47,22 @@ export default function GameTable({
       )
       .map((p) => [p.position, p]),
   );
-  const playByPosition = new Map(
-    (round?.gameState.currentTrick ?? []).map((entry) => [
-      entry.position,
-      entry.play,
-    ]),
+  // A trick can go around the table more than once (RULES.md — it only ends
+  // after three consecutive passes), so the same position can carry several
+  // plays this trick. Group them in chronological order per seat rather than
+  // collapsing to the latest, so the full trick history stays visible.
+  const playsByPosition = new Map<PlayerPosition, TrickPlay[]>();
+  for (const entry of round?.gameState.currentTrick ?? []) {
+    const existing = playsByPosition.get(entry.position);
+    if (existing) {
+      existing.push(entry.play);
+    } else {
+      playsByPosition.set(entry.position, [entry.play]);
+    }
+  }
+  const maxRounds = Math.max(
+    1,
+    ...ALL_POSITIONS.map((position) => playsByPosition.get(position)?.length ?? 0),
   );
 
   return (
@@ -59,17 +70,38 @@ export default function GameTable({
       data-testid="game-table"
       className="flex w-full flex-col items-start gap-2 py-2 sm:gap-4 sm:py-4"
     >
-      <div className="flex w-full max-w-md flex-col gap-2 sm:gap-3">
-        {ALL_POSITIONS.map((position) => (
-          <div
-            key={position}
-            data-testid={`seat-position-${position}`}
-            className="flex items-center gap-3"
-          >
-            {renderSeat(position, byPosition.get(position), round, myPosition)}
-            {renderPlay(playByPosition.get(position))}
-          </div>
-        ))}
+      {/* One shared grid (not four independent rows) so a given round's
+          plays land in the same column for every seat. Wrapped in
+          overflow-x-auto rather than letting a long-running trick's cards
+          wrap onto a second line, which reads as a mess once several seats
+          have gone around more than once. The seat column stays sticky so
+          it's still visible after scrolling to see later rounds. */}
+      <div className="w-full overflow-x-auto">
+        <div
+          className="grid items-center gap-x-2 gap-y-2 sm:gap-y-3"
+          style={{ gridTemplateColumns: `auto repeat(${maxRounds}, auto)` }}
+        >
+          {ALL_POSITIONS.map((position, rowIndex) => (
+            // display:contents keeps this element out of the box tree so
+            // its children are the grid's actual items (and so every seat's
+            // Nth-round column lines up with every other seat's), while
+            // still giving the seat + its plays a shared testid ancestor
+            // for tests to query into, same as when they were a flex row.
+            <div
+              key={position}
+              data-testid={`seat-position-${position}`}
+              className="contents"
+            >
+              <div
+                className="sticky left-0 z-10 bg-slate-100"
+                style={{ gridRow: rowIndex + 1, gridColumn: 1 }}
+              >
+                {renderSeat(position, byPosition.get(position), round, myPosition)}
+              </div>
+              {renderPlays(playsByPosition.get(position), rowIndex)}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -104,33 +136,47 @@ function renderSeat(
   );
 }
 
-// undefined means this position hasn't acted yet this trick.
-function renderPlay(play: TrickPlay | undefined) {
-  if (play === undefined) {
+// undefined/empty means this position hasn't acted yet this trick. `plays`
+// is oldest-first (turn order) and each entry is rendered into the grid
+// column matching its round number (index + 2 — column 1 is the seat), so
+// round 1 lines up under every other seat's round 1, round 2 under round 2,
+// and so on, rather than each seat's plays only lining up with themselves.
+function renderPlays(plays: TrickPlay[] | undefined, rowIndex: number) {
+  if (!plays || plays.length === 0) {
     return (
       <span
         data-testid="trick-display-waiting"
         className="text-sm text-gray-300"
+        style={{ gridRow: rowIndex + 1, gridColumn: 2 }}
       >
         —
       </span>
     );
   }
 
-  if (play === PASS) {
-    return <PassCard />;
-  }
-
-  return (
+  return plays.map((play, i) => (
     <div
-      data-testid="trick-display-cards"
-      className="flex flex-wrap gap-1 animate-card-in"
+      key={i}
+      data-testid="trick-display-round"
+      className={`flex items-center ${
+        i > 0 ? "border-l border-gray-200 pl-2" : ""
+      }`}
+      style={{ gridRow: rowIndex + 1, gridColumn: i + 2 }}
     >
-      {play.map((card, cardIndex) => (
-        <Card key={cardIndex} card={card} />
-      ))}
+      {play === PASS ? (
+        <PassCard />
+      ) : (
+        <div
+          data-testid="trick-display-cards"
+          className="flex gap-1 animate-card-in"
+        >
+          {play.map((card, cardIndex) => (
+            <Card key={cardIndex} card={card} />
+          ))}
+        </div>
+      )}
     </div>
-  );
+  ));
 }
 
 // Card-shaped placeholder for a pass, sized to match Card.tsx so a row reads
