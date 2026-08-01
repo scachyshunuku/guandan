@@ -50,10 +50,9 @@ const HEARTBEAT_INTERVAL_MS = 2 * 60_000;
 const END_HAND_RETRY_INTERVAL_MS = 3_000;
 
 // How often to poll drive-bots while this game has any bot seat (see the
-// effect below). Between HEARTBEAT_INTERVAL_MS and END_HAND_RETRY_INTERVAL_MS
-// - paces bot moves so they read as "taking a turn" rather than resolving
-// instantly.
-const DRIVE_BOTS_INTERVAL_MS = 5_000;
+// effect below) - paces bot moves so they read as "taking a turn" rather
+// than resolving instantly.
+const DRIVE_BOTS_INTERVAL_MS = 2_000;
 
 // This client's own link to the games:[id] realtime channel - distinct from
 // GameParticipant.isConnected, which is now tracked server-side via
