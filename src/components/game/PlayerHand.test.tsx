@@ -9,6 +9,36 @@ const HAND: CardWithWild[] = [
   { rank: "RED_JOKER" },
 ];
 
+// jsdom has no `PointerEvent` constructor at all, so
+// @testing-library/dom's fireEvent.pointer* helpers silently fall back to a
+// bare `Event` when they look one up - which drops clientX/clientY/buttons
+// entirely, since the plain Event constructor only recognizes
+// bubbles/cancelable/composed from its init dict. That's invisible to every
+// other test in this file (they stub document.elementFromPoint and never
+// read real coordinates), but tests that need genuine coordinates - the
+// pointer-follow drag animation, marquee select - dispatch a MouseEvent
+// carrying the pointer event's type name instead: jsdom does implement
+// MouseEvent (with working clientX/clientY/buttons), and both the DOM and
+// React dispatch listeners by an event's `type` string, not its exact
+// constructor.
+function firePointerEvent(
+  type: "pointerdown" | "pointermove" | "pointerup",
+  target: Element | Window,
+  init: { clientX?: number; clientY?: number; button?: number; buttons?: number } = {},
+) {
+  fireEvent(
+    target,
+    new MouseEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      button: init.button ?? 0,
+      buttons: init.buttons ?? (type === "pointerup" ? 0 : 1),
+      clientX: init.clientX ?? 0,
+      clientY: init.clientY ?? 0,
+    }),
+  );
+}
+
 describe("PlayerHand", () => {
   it("renders one card per hand entry", () => {
     render(<PlayerHand hand={HAND} />);
@@ -433,6 +463,311 @@ describe("PlayerHand", () => {
       // @ts-expect-error - test-only stub
       delete document.elementFromPoint;
       jest.useRealTimers();
+    });
+  });
+
+  describe("multiselect group drag", () => {
+    const FOUR_CARD_HAND: CardWithWild[] = [
+      { suit: "CLUBS", rank: "3" },
+      { suit: "HEARTS", rank: "7" },
+      { rank: "RED_JOKER" },
+      { suit: "DIAMONDS", rank: "5" },
+    ];
+
+    function mockElementFromPoint(target: Element | null) {
+      document.elementFromPoint = jest.fn().mockReturnValue(target);
+    }
+
+    afterEach(() => {
+      // @ts-expect-error - removing the test-only stub added above
+      delete document.elementFromPoint;
+    });
+
+    it("moves the whole selection together, preserving relative order, when dragging a selected card", () => {
+      render(<PlayerHand hand={FOUR_CARD_HAND} />);
+      const cards = screen.getAllByTestId("card");
+      // Select "3 of clubs" and "red joker" (indices 0 and 2), leaving "7 of
+      // hearts" (index 1) unselected and in between them.
+      fireEvent.click(cards[0]);
+      fireEvent.click(cards[2]);
+
+      const slots = screen.getAllByTestId("hand-card-slot");
+      mockElementFromPoint(slots[3]); // hover "5 of diamonds", the last slot
+
+      fireEvent.pointerDown(slots[0], { pointerId: 1, pointerType: "mouse", button: 0 });
+      fireEvent.pointerMove(slots[0], { pointerId: 1, clientX: 300, clientY: 0 });
+      fireEvent.pointerUp(slots[0], { pointerId: 1 });
+
+      const reorderedLabels = screen
+        .getAllByTestId("card")
+        .map((card) => card.getAttribute("aria-label"));
+      // Both dragged cards land after "5 of diamonds", still adjacent to
+      // each other and in their original relative order - "7 of hearts",
+      // never part of the drag, stays where the group left it.
+      expect(reorderedLabels).toEqual([
+        "7 of hearts",
+        "5 of diamonds",
+        "3 of clubs",
+        "red joker",
+      ]);
+    });
+
+    it("still only drags the single grabbed card when it isn't part of a multi-card selection", () => {
+      render(<PlayerHand hand={FOUR_CARD_HAND} />);
+      const cards = screen.getAllByTestId("card");
+      fireEvent.click(cards[2]); // select just "red joker" - a lone selection
+
+      const slots = screen.getAllByTestId("hand-card-slot");
+      mockElementFromPoint(slots[3]);
+
+      fireEvent.pointerDown(slots[0], { pointerId: 1, pointerType: "mouse", button: 0 });
+      fireEvent.pointerMove(slots[0], { pointerId: 1, clientX: 300, clientY: 0 });
+      fireEvent.pointerUp(slots[0], { pointerId: 1 });
+
+      const reorderedLabels = screen
+        .getAllByTestId("card")
+        .map((card) => card.getAttribute("aria-label"));
+      expect(reorderedLabels).toEqual([
+        "7 of hearts",
+        "red joker",
+        "5 of diamonds",
+        "3 of clubs",
+      ]);
+    });
+
+    it("lands the group in the same place regardless of which selected card is grabbed", () => {
+      // Same selection ("3 of clubs" + "red joker", "7 of hearts" untouched
+      // in between) and hover target as the first test above, but grabbed
+      // from the *other* end of the selection - the result must be
+      // identical, since the gesture (drag this selection over "5 of
+      // diamonds") is the same regardless of which card the pointer
+      // happened to land on.
+      render(<PlayerHand hand={FOUR_CARD_HAND} />);
+      const cards = screen.getAllByTestId("card");
+      fireEvent.click(cards[0]);
+      fireEvent.click(cards[2]);
+
+      const slots = screen.getAllByTestId("hand-card-slot");
+      mockElementFromPoint(slots[3]);
+
+      fireEvent.pointerDown(slots[2], { pointerId: 1, pointerType: "mouse", button: 0 }); // grab "red joker" this time
+      fireEvent.pointerMove(slots[2], { pointerId: 1, clientX: 300, clientY: 0 });
+      fireEvent.pointerUp(slots[2], { pointerId: 1 });
+
+      const reorderedLabels = screen
+        .getAllByTestId("card")
+        .map((card) => card.getAttribute("aria-label"));
+      expect(reorderedLabels).toEqual([
+        "7 of hearts",
+        "5 of diamonds",
+        "3 of clubs",
+        "red joker",
+      ]);
+    });
+  });
+
+  describe("hold/drag animation", () => {
+    function mockElementFromPoint(target: Element | null) {
+      document.elementFromPoint = jest.fn().mockReturnValue(target);
+    }
+
+    afterEach(() => {
+      // @ts-expect-error - removing the test-only stub added above
+      delete document.elementFromPoint;
+    });
+
+    it("lifts the dragged card to follow the pointer and disables its own pointer events", () => {
+      render(<PlayerHand hand={HAND} />);
+      const slots = screen.getAllByTestId("hand-card-slot");
+      mockElementFromPoint(slots[0]); // stays over its own slot - isolates the follow animation from any reorder
+
+      firePointerEvent("pointerdown", slots[0], { clientX: 0, clientY: 0 });
+      firePointerEvent("pointermove", slots[0], { clientX: 40, clientY: 15 });
+
+      expect(slots[0].style.transform).toBe("translate(40px, 15px) scale(1.06)");
+      expect(slots[0].style.pointerEvents).toBe("none");
+
+      firePointerEvent("pointerup", slots[0]);
+      expect(slots[0].style.transform).toBe("");
+      expect(slots[0].style.pointerEvents).toBe("");
+    });
+  });
+
+  describe("marquee (rubber-band) box select", () => {
+    function stubRect(
+      el: Element,
+      rect: { left: number; top: number; right: number; bottom: number },
+    ) {
+      el.getBoundingClientRect = jest.fn(() => ({
+        ...rect,
+        width: rect.right - rect.left,
+        height: rect.bottom - rect.top,
+        x: rect.left,
+        y: rect.top,
+        toJSON() {},
+      })) as unknown as () => DOMRect;
+    }
+
+    it("selects every card the box touches as it's dragged, and shows a translucent overlay", () => {
+      render(<PlayerHand hand={HAND} />);
+      const container = screen.getByTestId("player-hand");
+      const slots = screen.getAllByTestId("hand-card-slot");
+      stubRect(container, { left: 0, top: 0, right: 300, bottom: 100 });
+      stubRect(slots[0], { left: 0, top: 0, right: 50, bottom: 90 }); // 3 of clubs
+      stubRect(slots[1], { left: 60, top: 0, right: 110, bottom: 90 }); // 7 of hearts
+      stubRect(slots[2], { left: 120, top: 0, right: 170, bottom: 90 }); // red joker
+
+      // Starts in the empty gap between slot 0 and slot 1, and is dragged
+      // far enough right to touch slots 1 and 2 but never slot 0.
+      firePointerEvent("pointerdown", container, { clientX: 70, clientY: 10 });
+      expect(screen.getByTestId("marquee-select-box")).toBeInTheDocument();
+
+      firePointerEvent("pointermove", window, { clientX: 200, clientY: 50 });
+
+      const cards = screen.getAllByTestId("card");
+      expect(cards.map((c) => c.getAttribute("aria-pressed"))).toEqual(["false", "true", "true"]);
+
+      firePointerEvent("pointerup", window);
+      expect(screen.queryByTestId("marquee-select-box")).not.toBeInTheDocument();
+      // Selection stays as the box left it once the drag ends.
+      expect(
+        screen.getAllByTestId("card").map((c) => c.getAttribute("aria-pressed")),
+      ).toEqual(["false", "true", "true"]);
+    });
+
+    it("clears the selection on a click in empty panel space (a zero-size box)", () => {
+      render(<PlayerHand hand={HAND} />);
+      const container = screen.getByTestId("player-hand");
+      const cards = screen.getAllByTestId("card");
+      stubRect(container, { left: 0, top: 0, right: 300, bottom: 100 });
+
+      fireEvent.click(cards[0]);
+      expect(cards[0]).toHaveAttribute("aria-pressed", "true");
+
+      firePointerEvent("pointerdown", container, { clientX: 10, clientY: 10 });
+      firePointerEvent("pointerup", window, { clientX: 10, clientY: 10 });
+
+      expect(
+        screen.getAllByTestId("card").map((c) => c.getAttribute("aria-pressed")),
+      ).toEqual(["false", "false", "false"]);
+    });
+
+    it("does not start a marquee when the press originates on a card slot", () => {
+      render(<PlayerHand hand={HAND} />);
+      const slots = screen.getAllByTestId("hand-card-slot");
+
+      fireEvent.pointerDown(slots[0], { pointerId: 1, pointerType: "mouse", button: 0 });
+      expect(screen.queryByTestId("marquee-select-box")).not.toBeInTheDocument();
+    });
+
+    it("hit-tests against the current hand, not a stale snapshot, if the hand changes mid-drag", () => {
+      // Reproduces: a marquee is in progress when a card leaves the hand
+      // (e.g. a play resolves through another input path) - the drag's
+      // window-level listeners must keep selecting against the hand as it
+      // now stands, not whatever it looked like when the gesture started.
+      const { rerender } = render(<PlayerHand hand={HAND} />); // 3 of clubs, 7 of hearts, red joker
+      const container = screen.getByTestId("player-hand");
+      const slots = screen.getAllByTestId("hand-card-slot");
+      stubRect(container, { left: 0, top: 0, right: 300, bottom: 100 });
+      stubRect(slots[0], { left: 0, top: 0, right: 50, bottom: 90 });
+      stubRect(slots[1], { left: 60, top: 0, right: 110, bottom: 90 });
+      stubRect(slots[2], { left: 120, top: 0, right: 170, bottom: 90 });
+
+      firePointerEvent("pointerdown", container, { clientX: 70, clientY: 10 });
+
+      // "3 of clubs" is played away mid-drag - the remaining two cards' DOM
+      // slots (React reuses them by their stable slot key) keep the rects
+      // already stubbed above.
+      rerender(<PlayerHand hand={HAND.slice(1)} />);
+
+      firePointerEvent("pointermove", window, { clientX: 200, clientY: 50 });
+
+      const remainingCards = screen.getAllByTestId("card");
+      expect(remainingCards).toHaveLength(2);
+      expect(remainingCards.map((c) => c.getAttribute("aria-pressed"))).toEqual(["true", "true"]);
+
+      firePointerEvent("pointerup", window);
+    });
+  });
+
+  describe("shift-click range select", () => {
+    const FIVE_CARD_HAND: CardWithWild[] = [
+      { suit: "CLUBS", rank: "3" },
+      { suit: "HEARTS", rank: "7" },
+      { rank: "RED_JOKER" },
+      { suit: "DIAMONDS", rank: "5" },
+      { suit: "SPADES", rank: "9" },
+    ];
+
+    it("selects the visual range from the last plain-clicked card to the shift-clicked one", () => {
+      render(<PlayerHand hand={FIVE_CARD_HAND} />);
+      const cards = screen.getAllByTestId("card");
+
+      fireEvent.click(cards[0]);
+      fireEvent.click(cards[3], { shiftKey: true });
+
+      expect(cards.map((c) => c.getAttribute("aria-pressed"))).toEqual([
+        "true",
+        "true",
+        "true",
+        "true",
+        "false",
+      ]);
+    });
+
+    it("keeps re-anchoring from the same origin across a chain of shift-clicks, replacing the selection each time", () => {
+      render(<PlayerHand hand={FIVE_CARD_HAND} />);
+      const cards = screen.getAllByTestId("card");
+
+      fireEvent.click(cards[0]);
+      fireEvent.click(cards[3], { shiftKey: true });
+      fireEvent.click(cards[1], { shiftKey: true });
+
+      expect(cards.map((c) => c.getAttribute("aria-pressed"))).toEqual([
+        "true",
+        "true",
+        "false",
+        "false",
+        "false",
+      ]);
+    });
+
+    it("works in either direction from the anchor", () => {
+      render(<PlayerHand hand={FIVE_CARD_HAND} />);
+      const cards = screen.getAllByTestId("card");
+
+      fireEvent.click(cards[3]);
+      fireEvent.click(cards[1], { shiftKey: true });
+
+      expect(cards.map((c) => c.getAttribute("aria-pressed"))).toEqual([
+        "false",
+        "true",
+        "true",
+        "true",
+        "false",
+      ]);
+    });
+
+    it("falls back to selecting just the clicked card when there is no anchor yet", () => {
+      render(<PlayerHand hand={HAND} />);
+      const cards = screen.getAllByTestId("card");
+
+      fireEvent.click(cards[1], { shiftKey: true });
+
+      expect(cards.map((c) => c.getAttribute("aria-pressed"))).toEqual(["false", "true", "false"]);
+    });
+
+    it("falls back to the clicked card when the anchor card has left the hand (e.g. played)", () => {
+      const { rerender } = render(<PlayerHand hand={HAND} />);
+      const cards = screen.getAllByTestId("card");
+      fireEvent.click(cards[0]); // anchor = "3 of clubs"
+
+      rerender(<PlayerHand hand={HAND.slice(1)} />); // "3 of clubs" played away
+
+      const remainingCards = screen.getAllByTestId("card");
+      fireEvent.click(remainingCards[1], { shiftKey: true }); // shift-click "red joker"
+
+      expect(remainingCards.map((c) => c.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
     });
   });
 });
