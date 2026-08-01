@@ -63,3 +63,9 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Tailwind's preflight resets button cursor to `default`; restore the
+   clickable pointer for every non-disabled button app-wide. */
+button:not(:disabled) {
+  cursor: pointer;
+}
