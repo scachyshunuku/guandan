@@ -282,10 +282,15 @@ export default function GamePage() {
       <ConnectionStatus status={connectionStatus} />
       <ScoreBoard game={game} />
 
-      <div className="flex w-full flex-col gap-4 sm:gap-6 lg:flex-row lg:items-start lg:justify-center">
+      {/* Grid (not flex) so the cards-panel row below can col-span-full to
+          exactly the width of main + aside - a fixed lg:grid-cols-[36rem_20rem]
+          (matching main's old lg:max-w-xl and aside's old lg:w-80) gives the
+          grid an intrinsic width for lg:w-fit to shrink to, which flex's
+          content-based sizing can't do for a spanning row. */}
+      <div className="grid w-full grid-cols-1 gap-4 sm:gap-6 lg:w-fit lg:grid-cols-[36rem_20rem] lg:items-start">
         <main
           data-testid="game-page"
-          className="flex flex-1 flex-col items-center gap-4 sm:gap-6 lg:max-w-xl"
+          className="flex flex-col items-center gap-4 sm:gap-6"
         >
           <GameTable
             round={round}
@@ -388,7 +393,7 @@ export default function GamePage() {
 
         <aside
           data-testid="game-history-panel"
-          className="w-full shrink-0 rounded-2xl bg-white p-4 shadow-sm lg:w-80"
+          className="w-full rounded-2xl bg-white p-4 shadow-sm"
         >
           <h2 className="mb-2 text-sm font-semibold text-slate-900">History</h2>
           <GameHistory
@@ -398,63 +403,68 @@ export default function GamePage() {
             error={history.error}
           />
         </aside>
-      </div>
 
-      {/* Full width (unlike everything above, which stays capped to main's
-          lg:max-w-xl) so the hand's card grid can use the space all the way
-          under the history panel instead of wrapping into a narrow column -
-          mirrors the last branch of the status ternary above, which renders
-          null in this exact case. */}
-      {gameStatus !== "completed" &&
-        myPosition !== null &&
-        roundStatus !== "card_exchange" &&
-        !(roundStatus === "awaiting_giver_choice" && pendingGiverChoice) &&
-        !(roundStatus === "awaiting_tribute_choice" && pendingTributeChoice) &&
-        currentPlayerTurn !== null && (
-          <div className="flex w-full flex-col items-start gap-3">
-            <PlayerHand
-              hand={hand}
-              selectedIndices={selectedIndices}
-              onSelectionChange={setSelectedIndices}
-              persistenceKey={`${gameId}:${myPosition}`}
-              initialServerOrder={myHandOrder}
-              onOrderChange={updateHandOrder}
-            />
-            {needsWildChoice && pendingWildIndex !== undefined && (
-              // Keyed by which card this prompt is for, so a second wild in
-              // the same selection (a double deck can hold two level-rank
-              // hearts) gets a fresh selector rather than one still showing
-              // the first card's already-picked rank/suit.
-              <WildCardSelector
-                key={pendingWildIndex}
-                card={{ rank: levelRank, suit: "HEARTS" }}
-                onConfirm={(actsAs) =>
-                  setWildActsAsByIndex((prev) => ({
-                    ...prev,
-                    [pendingWildIndex]: actsAs,
-                  }))
-                }
-                onCancel={() => setSelectedIndices([])}
+        {/* Spans both grid columns - the hand's card grid uses the space
+            under the history panel too instead of wrapping into a narrow
+            column, but stays capped to main + aside's combined width rather
+            than the full screen (mirrors the last branch of the status
+            ternary above, which renders null in this exact case). */}
+        {gameStatus !== "completed" &&
+          myPosition !== null &&
+          roundStatus !== "card_exchange" &&
+          !(roundStatus === "awaiting_giver_choice" && pendingGiverChoice) &&
+          !(
+            roundStatus === "awaiting_tribute_choice" && pendingTributeChoice
+          ) &&
+          currentPlayerTurn !== null && (
+            <div className="col-span-full flex w-full flex-col items-start gap-3">
+              <PlayerHand
+                hand={hand}
+                selectedIndices={selectedIndices}
+                onSelectionChange={setSelectedIndices}
+                persistenceKey={`${gameId}:${myPosition}`}
+                initialServerOrder={myHandOrder}
+                onOrderChange={updateHandOrder}
               />
-            )}
-            <ActionButtons
-              hand={hand}
-              selectedCards={effectiveSelectedCards}
-              currentTrick={currentTrick}
-              levelRank={levelRank}
-              isMyTurn={isMyTurn}
-              onPlay={handlePlay}
-              onPass={handlePass}
-              hasPendingWildChoice={needsWildChoice}
-              isSubmitting={isPlayingCards || isPassing}
-            />
-            {(playCardsError ?? passError) && (
-              <p data-testid="action-error" className="text-xs text-red-500">
-                {(playCardsError ?? passError)?.message}
-              </p>
-            )}
-          </div>
-        )}
+              {needsWildChoice && pendingWildIndex !== undefined && (
+                // Keyed by which card this prompt is for, so a second wild in
+                // the same selection (a double deck can hold two level-rank
+                // hearts) gets a fresh selector rather than one still showing
+                // the first card's already-picked rank/suit.
+                <WildCardSelector
+                  key={pendingWildIndex}
+                  card={{ rank: levelRank, suit: "HEARTS" }}
+                  onConfirm={(actsAs) =>
+                    setWildActsAsByIndex((prev) => ({
+                      ...prev,
+                      [pendingWildIndex]: actsAs,
+                    }))
+                  }
+                  onCancel={() => setSelectedIndices([])}
+                />
+              )}
+              <ActionButtons
+                hand={hand}
+                selectedCards={effectiveSelectedCards}
+                currentTrick={currentTrick}
+                levelRank={levelRank}
+                isMyTurn={isMyTurn}
+                onPlay={handlePlay}
+                onPass={handlePass}
+                hasPendingWildChoice={needsWildChoice}
+                isSubmitting={isPlayingCards || isPassing}
+              />
+              {(playCardsError ?? passError) && (
+                <p
+                  data-testid="action-error"
+                  className="text-xs text-red-500"
+                >
+                  {(playCardsError ?? passError)?.message}
+                </p>
+              )}
+            </div>
+          )}
+      </div>
     </div>
   );
 }
