@@ -66,7 +66,7 @@ export default function GameHistory({
   return (
     <ul
       data-testid="game-history"
-      className="flex flex-col gap-2 text-xs text-slate-700"
+      className="flex max-h-64 flex-col gap-2 overflow-y-auto text-xs text-slate-700"
     >
       {[...actions].reverse().map((action) => (
         <li

@@ -287,7 +287,7 @@ export default function GamePage() {
           (matching main's old lg:max-w-xl and aside's old lg:w-80) gives the
           grid an intrinsic width for lg:w-fit to shrink to, which flex's
           content-based sizing can't do for a spanning row. */}
-      <div className="grid w-full grid-cols-1 gap-4 sm:gap-6 lg:w-fit lg:grid-cols-[36rem_20rem]">
+      <div className="grid w-full grid-cols-1 gap-4 sm:gap-6 lg:w-fit lg:grid-cols-[36rem_20rem] lg:items-start">
         <main
           data-testid="game-page"
           className="flex flex-col items-center gap-4 sm:gap-6"
@@ -393,17 +393,15 @@ export default function GamePage() {
 
         <aside
           data-testid="game-history-panel"
-          className="flex w-full flex-col rounded-2xl bg-white p-4 shadow-sm"
+          className="w-full rounded-2xl bg-white p-4 shadow-sm"
         >
           <h2 className="mb-2 text-sm font-semibold text-slate-900">History</h2>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <GameHistory
-              actions={history.actions}
-              participants={participants}
-              isLoading={history.isLoading}
-              error={history.error}
-            />
-          </div>
+          <GameHistory
+            actions={history.actions}
+            participants={participants}
+            isLoading={history.isLoading}
+            error={history.error}
+          />
         </aside>
 
         {/* Spans both grid columns - the hand's card grid uses the space
