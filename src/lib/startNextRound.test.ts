@@ -97,9 +97,19 @@ describe("startNextRound", () => {
 
     // No transfer — the dealt hands land as-is.
     expect(handOf(gameId, 2)).toEqual([{ rank: "RED_JOKER" }, { rank: "RED_JOKER" }]);
-    expect(fake._tables.game_actions ?? []).toHaveLength(0);
+    expect(fake._tables.game_actions).toHaveLength(1);
+    expect(fake._tables.game_actions[0]).toMatchObject({
+      round_id: round?.id,
+      action_type: "tribute_cancelled",
+      action_data: {},
+    });
 
     expect(mockBroadcastToGame).toHaveBeenCalledWith(gameId, "round_updated", expect.objectContaining({ id: round?.id }));
+    expect(mockBroadcastToGame).toHaveBeenCalledWith(
+      gameId,
+      "game_action",
+      expect.objectContaining({ action_type: "tribute_cancelled" }),
+    );
   });
 
   it("pauses on 'awaiting_giver_choice' when the new hand ties a single giver's best card, without transferring anything", async () => {

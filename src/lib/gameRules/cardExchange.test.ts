@@ -44,6 +44,26 @@ describe("planInitialExchanges: single-team lead (1-3/1-4)", () => {
     expect(plan).toEqual({ cancelled: true, needsGiverChoice: false, needsChoice: false, transfers: [] });
   });
 
+  it("does not cancel a 1-4 finish when the Red Jokers are split one each between 1st and 4th (teammates)", () => {
+    // RULES.md "Single-Team Lead": cancellation is keyed on 4th place's own
+    // hand alone, not the team as a whole - even though 1st and 4th are
+    // partners in a 1-4 finish, 1st holding the other joker doesn't count.
+    const participants = [
+      participant(0, [{ rank: "RED_JOKER" }]),
+      participant(1, []),
+      participant(2, []),
+      participant(3, [{ rank: "RED_JOKER" }, { rank: "9", suit: "CLUBS" }]),
+    ];
+    const plan = planInitialExchanges("1-4", [1, 2, 3, 4], participants, levelRank);
+    expect(plan).toEqual({
+      cancelled: false,
+      needsGiverChoice: false,
+      needsChoice: false,
+      // 4th's best card is their own Red Joker (outranks the 9), still sent to 1st.
+      transfers: [{ from: 3, to: 0, card: { rank: "RED_JOKER" } }],
+    });
+  });
+
   it("surfaces needsGiverChoice, with every tied candidate, when 4th's hand has more than one card tied for best", () => {
     // RULES.md "Best card, when tied": a double deck can give 4th place two
     // physical cards of the same top rank (here, two Kings) - they choose

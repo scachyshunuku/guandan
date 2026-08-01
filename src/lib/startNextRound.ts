@@ -8,8 +8,11 @@
 // just ended. This function deals the hand, plans the initial exchange
 // against it (gameRules/cardExchange.ts), and creates the new round already
 // in the right status for wherever that plan lands:
-//   - cancelled (both Red Jokers held by the losing side) -> 'in_progress'
-//     immediately, 1st place leads (RULES.md "Cancelled tribute")
+//   - cancelled (both Red Jokers held by the tribute giver(s) - not
+//     necessarily "the losing side": in a 1-4 finish the sole giver, 4th
+//     place, is on the winning team) -> 'in_progress'
+//     immediately, 1st place leads (RULES.md "Cancelled tribute"), and a
+//     'tribute_cancelled' action is logged so GameHistory shows it happened
 //   - a giver's own tie needs resolving -> 'awaiting_giver_choice'
 //     (choose-giver-card/route.ts)
 //   - 3rd/4th's cards tie against each other -> 'awaiting_tribute_choice'
@@ -34,10 +37,12 @@ import type { FinishCombo } from "./gameRules/scoring";
 import type {
   CardExchangeActionData,
   CardWithWild,
+  GameActionType,
   GameState,
   PlayerPosition,
   RoundStatus,
   StandardRank,
+  TributeCancelledActionData,
 } from "./types";
 
 export type StartNextRoundOutcome = "started" | "error";
@@ -78,13 +83,16 @@ export async function startNextRound(
   let status: RoundStatus;
   let leaderPosition: PlayerPosition | null = null;
   let gameState: GameState = { currentTrick: [], trickCount: 0, finishOrder: [] };
-  let transferActionData: CardExchangeActionData[] = [];
+  let roundActions: { actionType: GameActionType; actionData: CardExchangeActionData | TributeCancelledActionData }[] =
+    [];
 
   if (plan.cancelled) {
     // RULES.md "Cancelled tribute": no card-giver to hand leadership to, so
-    // 1st place leads instead, and the round is playable right away.
+    // 1st place leads instead, and the round is playable right away. Logged
+    // so GameHistory doesn't just skip silently from one round to the next.
     status = "in_progress";
     leaderPosition = firstPos;
+    roundActions = [{ actionType: "tribute_cancelled", actionData: {} }];
   } else if (plan.needsGiverChoice) {
     status = "awaiting_giver_choice";
     gameState = {
@@ -120,7 +128,10 @@ export async function startNextRound(
     for (const write of computeExchangeHandWrites(seatedWithNewHands, plan.transfers)) {
       finalHandByPosition.set(write.position, write.newHand);
     }
-    transferActionData = plan.transfers.map((t) => ({ from: t.from, to: t.to, card: t.card, type: "initial" }));
+    roundActions = plan.transfers.map((t) => ({
+      actionType: "card_exchange",
+      actionData: { from: t.from, to: t.to, card: t.card, type: "initial" },
+    }));
   }
 
   const newRoundInsert = await supabaseAdmin
@@ -163,15 +174,15 @@ export async function startNextRound(
       dealWrites.map((w) => supabaseAdmin.from("game_participants").update({ hand: w.newHand }).eq("id", w.id)),
     ),
     Promise.all(
-      transferActionData.map((actionData) =>
+      roundActions.map((action) =>
         supabaseAdmin
           .from("game_actions")
           .insert({
             game_id: gameId,
             round_id: newRound.id,
             player_id: playerId,
-            action_type: "card_exchange",
-            action_data: actionData,
+            action_type: action.actionType,
+            action_data: action.actionData,
           })
           .select("*")
           .single(),

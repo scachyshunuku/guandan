@@ -170,6 +170,7 @@ export type GameActionType =
   | "trick_end"
   | "player_finished"
   | "card_exchange"
+  | "tribute_cancelled"
   | "join"
   | "leave";
 
@@ -254,6 +255,13 @@ export interface CardExchangeActionData {
   type: "initial" | "return";
 }
 
+// Logged by startNextRound when RULES.md "Cancelled tribute" fires (the
+// tribute giver(s) hold both Red Jokers between them — not necessarily "the
+// losing side": in a 1-4 finish the sole giver, 4th place, is on the winning
+// team) — no cards change hands, so unlike CardExchangeActionData there's
+// nothing to name beyond the fact itself.
+export type TributeCancelledActionData = Record<string, never>;
+
 export interface JoinActionData {
   playerName: string;
   // Seat assigned at join time (null = joined as spectator). Recorded here,
@@ -277,6 +285,7 @@ export type GameActionData =
   | TrickEndActionData
   | PlayerFinishedActionData
   | CardExchangeActionData
+  | TributeCancelledActionData
   | JoinActionData
   | LeaveActionData;
 

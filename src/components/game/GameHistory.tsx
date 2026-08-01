@@ -129,6 +129,13 @@ function renderEntry(action: GameAction, participants: GameParticipant[]) {
       );
     }
 
+    case "tribute_cancelled":
+      // Not necessarily "the losing side" - in a 1-4 finish the sole giver
+      // (4th place) is on the *winning* team, so this is worded around the
+      // giver(s) themselves rather than team framing. See RULES.md "Card
+      // Exchange" → "Cancelled if ...".
+      return <span>Tribute cancelled — the tribute giver(s) held both Red Jokers</span>;
+
     case "join": {
       const data = action.actionData as JoinActionData;
       return (

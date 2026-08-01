@@ -140,6 +140,13 @@ describe("GameHistory", () => {
     );
   });
 
+  it("describes a tribute_cancelled action", () => {
+    render(<GameHistory actions={[makeAction({ actionType: "tribute_cancelled", actionData: {} })]} />);
+    expect(screen.getByTestId("game-history-entry")).toHaveTextContent(
+      "Tribute cancelled — the tribute giver(s) held both Red Jokers",
+    );
+  });
+
   it("describes a join action for a seated player", () => {
     render(
       <GameHistory
