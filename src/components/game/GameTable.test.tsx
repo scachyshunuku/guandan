@@ -224,6 +224,87 @@ describe("GameTable", () => {
     expect(screen.getAllByTestId("card")).toHaveLength(2);
   });
 
+  it("lines up every seat's plays by round: each seat's Nth play in the same grid column, oldest leftmost, no round-number labels", () => {
+    render(
+      <GameTable
+        round={round({
+          leaderPosition: 0,
+          gameState: {
+            currentTrick: [
+              { position: 0, play: [{ suit: "CLUBS", rank: "3" }] },
+              { position: 1, play: PASS },
+              { position: 2, play: PASS },
+              { position: 3, play: [{ suit: "HEARTS", rank: "4" }] },
+              // 0 comes back around and plays again, since only 3 has beaten
+              // them so far and everyone else has passed.
+              { position: 0, play: [{ suit: "SPADES", rank: "5" }] },
+            ],
+            trickCount: 0,
+            finishOrder: [],
+          },
+        })}
+        participants={PARTICIPANTS}
+        myPosition={0}
+      />,
+    );
+
+    const alice = screen.getByTestId("seat-position-0");
+    const aliceRounds = alice.querySelectorAll(
+      '[data-testid="trick-display-round"]',
+    );
+    expect(aliceRounds).toHaveLength(2);
+    // Oldest play (the 3 of clubs) is leftmost/lowest column, the round-2
+    // play (5 of spades) is to its right — chronological order, not
+    // newest-first.
+    expect(
+      aliceRounds[0].querySelector('[data-testid="card"]'),
+    ).toHaveAccessibleName("3 of clubs");
+    expect(
+      aliceRounds[1].querySelector('[data-testid="card"]'),
+    ).toHaveAccessibleName("5 of spades");
+    const aliceRound1Column = (aliceRounds[0] as HTMLElement).style.gridColumn;
+    const aliceRound2Column = (aliceRounds[1] as HTMLElement).style.gridColumn;
+    expect(aliceRound1Column).not.toBe(aliceRound2Column);
+
+    // Dave only acted once, in what's still round 1 — his single play lands
+    // in the same column as Alice's round-1 play, not off on its own.
+    const dave = screen.getByTestId("seat-position-3");
+    const daveRounds = dave.querySelectorAll(
+      '[data-testid="trick-display-round"]',
+    );
+    expect(daveRounds).toHaveLength(1);
+    expect((daveRounds[0] as HTMLElement).style.gridColumn).toBe(
+      aliceRound1Column,
+    );
+
+    // No numeric round-number labels anywhere in the trick display.
+    expect(screen.queryByText("1")).not.toBeInTheDocument();
+    expect(screen.queryByText("2")).not.toBeInTheDocument();
+  });
+
+  it("keeps every pass a seat has made this trick, not just the latest", () => {
+    render(
+      <GameTable
+        round={round({
+          leaderPosition: 0,
+          gameState: {
+            currentTrick: [
+              { position: 1, play: PASS },
+              { position: 1, play: PASS },
+            ],
+            trickCount: 0,
+            finishOrder: [],
+          },
+        })}
+        participants={PARTICIPANTS}
+        myPosition={0}
+      />,
+    );
+
+    const bob = screen.getByTestId("seat-position-1");
+    expect(bob.querySelectorAll('[data-testid="trick-display-pass"]')).toHaveLength(2);
+  });
+
   it("handles no round yet (game still waiting)", () => {
     render(
       <GameTable round={null} participants={PARTICIPANTS} myPosition={0} />,
