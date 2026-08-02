@@ -414,6 +414,12 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
   // pointer, without needing any of them to stay mounted in the grid.
   const dragStartRectRef = useRef<ClientRectLike | null>(null);
   const dragOffsetsRef = useRef<Map<string, Point>>(new Map());
+  // The dragged group's own starting position, expressed the same way as
+  // dropIndexRef (an index among the *other* cards) - lets endDrag tell a
+  // real reorder apart from a drag that's released back where it started,
+  // so a no-op drop can skip the reorder commit and its FLIP fly-back
+  // instead of refreshing the whole hand for nothing.
+  const dragStartIndexRef = useRef<number | null>(null);
 
   // Respect the user's OS-level motion preference for both the FLIP settle
   // animation and the lifted-card scale. The initial false value keeps the
@@ -578,7 +584,9 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
     // doesn't cause a visible jump.
     const visualKeys = visualEntries.map((entry) => entry.key);
     const leadingIndex = Math.min(...group.map((k) => visualKeys.indexOf(k)));
-    setDropIndex(visualKeys.slice(0, leadingIndex).filter((k) => !group.includes(k)).length);
+    const startIndex = visualKeys.slice(0, leadingIndex).filter((k) => !group.includes(k)).length;
+    dragStartIndexRef.current = startIndex;
+    setDropIndex(startIndex);
 
     setDraggingKeys(group);
   }
@@ -638,7 +646,12 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
     if (group === null) return;
     draggingKeysRef.current = null;
 
-    if (!cancelled && justDraggedRef.current && dropIndexRef.current !== null) {
+    if (
+      !cancelled &&
+      justDraggedRef.current &&
+      dropIndexRef.current !== null &&
+      dropIndexRef.current !== dragStartIndexRef.current
+    ) {
       const finalDropIndex = dropIndexRef.current;
       // Seeds this render's FLIP baseline for each dropped card to its last
       // floating position, computed the same way the overlay below renders
@@ -680,6 +693,7 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
     setDragDelta({ x: 0, y: 0 });
     dragStartRectRef.current = null;
     dragOffsetsRef.current = new Map();
+    dragStartIndexRef.current = null;
     if (cancelled) justDraggedRef.current = false;
     else if (justDraggedRef.current) {
       // A pointer released outside the hand may not produce the trailing
