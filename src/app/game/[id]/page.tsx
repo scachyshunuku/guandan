@@ -317,7 +317,7 @@ export default function GamePage() {
           (matching main's old lg:max-w-xl and aside's old lg:w-80) gives the
           grid an intrinsic width for lg:w-fit to shrink to, which flex's
           content-based sizing can't do for a spanning row. */}
-      <div className="grid w-full grid-cols-1 gap-4 sm:gap-6 lg:w-fit lg:grid-cols-[36rem_20rem] lg:items-start">
+      <div className="grid w-full grid-cols-1 gap-4 sm:gap-6 lg:w-fit lg:grid-cols-[36rem_20rem]">
         <main
           data-testid="game-page"
           className="flex flex-col items-center gap-4 sm:gap-6"
@@ -434,17 +434,34 @@ export default function GamePage() {
           )}
         </main>
 
+        {/* lg:relative + the child's lg:absolute lg:inset-0 is what pins
+            this panel's height to main's without measuring anything in JS:
+            an absolutely positioned box doesn't count toward its container's
+            content height, so once the child drops out of flow at lg, this
+            aside has no in-flow content of its own left to size itself by -
+            main (the grid's other, still in-flow item) becomes the row's
+            only height driver, and the grid's default align-items:stretch
+            (no lg:items-start override on the row above) stretches this
+            aside to that height. The child then gets that exact height back
+            via inset-0 against aside's now-definite box, and can scroll its
+            own (potentially very long) content inside it without growing
+            the row further. Below lg, main and aside stack into separate
+            rows instead of sharing one, so there's no height to match - the
+            child stays static and the panel is left to its natural height
+            there. */}
         <aside
           data-testid="game-history-panel"
-          className="w-full rounded-2xl bg-white p-4 shadow-sm"
+          className="w-full rounded-2xl bg-white shadow-sm lg:relative"
         >
-          <h2 className="mb-2 text-sm font-semibold text-slate-900">History</h2>
-          <GameHistory
-            actions={history.actions}
-            participants={participants}
-            isLoading={history.isLoading}
-            error={history.error}
-          />
+          <div className="p-4 lg:absolute lg:inset-0 lg:overflow-y-auto">
+            <h2 className="mb-2 text-sm font-semibold text-slate-900">History</h2>
+            <GameHistory
+              actions={history.actions}
+              participants={participants}
+              isLoading={history.isLoading}
+              error={history.error}
+            />
+          </div>
         </aside>
 
         {/* Spans both grid columns - the hand's card grid uses the space
