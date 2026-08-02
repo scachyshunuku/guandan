@@ -98,8 +98,10 @@ export default function GamePreviewPage() {
           data-testid="game-history-panel"
           className="w-full rounded-2xl bg-white shadow-sm lg:relative"
         >
-          <div className="p-4 lg:absolute lg:inset-0 lg:overflow-y-auto">
-            <h2 className="mb-2 text-sm font-semibold text-slate-900">History</h2>
+          <div className="px-4 pb-4 lg:absolute lg:inset-x-0 lg:top-0 lg:bottom-4 lg:overflow-y-auto">
+            <h2 className="border-b border-slate-200 bg-white pt-4 pb-2 text-sm font-semibold text-slate-900 lg:sticky lg:top-0 lg:z-10">
+              History
+            </h2>
             <GameHistory
               actions={mockActions}
               participants={mockParticipants}

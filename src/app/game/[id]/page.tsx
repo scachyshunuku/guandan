@@ -479,27 +479,40 @@ export default function GamePage() {
           )}
         </main>
 
-        {/* lg:relative + the child's lg:absolute lg:inset-0 is what pins
-            this panel's height to main's without measuring anything in JS:
-            an absolutely positioned box doesn't count toward its container's
-            content height, so once the child drops out of flow at lg, this
-            aside has no in-flow content of its own left to size itself by -
-            main (the grid's other, still in-flow item) becomes the row's
-            only height driver, and the grid's default align-items:stretch
-            (no lg:items-start override on the row above) stretches this
-            aside to that height. The child then gets that exact height back
-            via inset-0 against aside's now-definite box, and can scroll its
-            own (potentially very long) content inside it without growing
-            the row further. Below lg, main and aside stack into separate
-            rows instead of sharing one, so there's no height to match - the
-            child stays static and the panel is left to its natural height
-            there. */}
+        {/* lg:relative + the child's lg:absolute lg:inset-x-0 lg:top-0 is
+            what pins this panel's height to main's without measuring
+            anything in JS: an absolutely positioned box doesn't count
+            toward its container's content height, so once the child drops
+            out of flow at lg, this aside has no in-flow content of its own
+            left to size itself by - main (the grid's other, still in-flow
+            item) becomes the row's only height driver, and the grid's
+            default align-items:stretch (no lg:items-start override on the
+            row above) stretches this aside to that height. The child then
+            gets that exact height back via top-0/inset-x-0 against aside's
+            now-definite box, and can scroll its own (potentially very long)
+            content inside it without growing the row further. lg:bottom-4
+            (rather than closing the loop with inset-0) leaves a strip of
+            aside's own white background permanently uncovered below the
+            scrollable child, so there's always a gap under the last entry
+            even mid-scroll - closing it with inset-0 would only reserve
+            that gap once the list happened to be scrolled to its true end.
+            Below lg, main and aside stack into separate rows instead of
+            sharing one, so there's no height to match - the child stays
+            static and the panel is left to its natural height there. */}
         <aside
           data-testid="game-history-panel"
           className="w-full rounded-2xl bg-white shadow-sm lg:relative"
         >
-          <div className="p-4 lg:absolute lg:inset-0 lg:overflow-y-auto">
-            <h2 className="mb-2 text-sm font-semibold text-slate-900">History</h2>
+          <div className="px-4 pb-4 lg:absolute lg:inset-x-0 lg:top-0 lg:bottom-4 lg:overflow-y-auto">
+            {/* pt-4/pb-2 live on the heading itself (not the scrolling div
+                above) so they travel with it once lg:sticky pins it in
+                place - otherwise the container's own top padding scrolls
+                away like any other content, and whatever entry ends up
+                underneath is left uncovered (no opaque box there to hide
+                it) rather than tucked behind a solid heading. */}
+            <h2 className="border-b border-slate-200 bg-white pt-4 pb-2 text-sm font-semibold text-slate-900 lg:sticky lg:top-0 lg:z-10">
+              History
+            </h2>
             <GameHistory
               actions={history.actions}
               participants={participants}
