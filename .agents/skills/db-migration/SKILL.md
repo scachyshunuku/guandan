@@ -1,6 +1,6 @@
 ---
 name: db-migration
-description: "Create or change Supabase/Postgres schema for the Guandan project. Use whenever a task requires adding, altering, or dropping a table/column/index/policy — 'add a migration', 'change the schema', 'alter the games table', etc. Writes a new numbered migration file (never edits one already applied), runs a focused review of the SQL for safety and consistency with ARCHITECTURE.md, and only pushes to the remote Supabase database after the user explicitly approves — using `supabase db push` with the session-pooler URL, then verifying the remote schema matches. Triggers: 'make a migration', 'add a migration', 'apply migrations', 'update the db schema'."
+description: "Create or change Supabase/Postgres schema for the Guandan project. Use whenever a task requires adding, altering, or dropping a table/column/index/policy — 'add a migration', 'change the schema', 'alter the games table', etc. Writes a new numbered migration file (never edits one already applied), runs a subagent review of the SQL for safety and consistency with ARCHITECTURE.md, and only pushes to the remote Supabase database after the user explicitly approves — using `supabase db push` with the session-pooler URL, then verifying the remote schema matches. Triggers: 'make a migration', 'add a migration', 'apply migrations', 'update the db schema'."
 metadata:
   type: project-skill
 ---
@@ -26,14 +26,13 @@ supabase migration list --db-url "$DATABASE_MIGRATION_URL"
 - Cross-check against `ARCHITECTURE.md` section 2 (schema) — if the migration changes something documented there, plan to update that doc too (see step 5).
 - If the change affects `src/lib/types.ts` row interfaces or API request/response types, update those in the same pass so the PR is self-consistent.
 
-## 3. Focused review before touching remote
+## 3. Subagent review before touching remote
 
-Launch a focused review subagent when delegation is available; its findings gate the apply step. Give it:
+Launch a subagent (Agent tool, foreground — its findings gate the apply step) to review the new migration file(s):
 
 - The migration SQL itself, plus `ARCHITECTURE.md` section 2 for the intended schema and any RLS/security notes in the existing migrations for context.
-- An explicit request to check correctness (does the SQL do what's intended, will it actually run against the current remote schema), safety (data loss from a `drop column`/`drop table`/`not null` addition on a table that may have rows, locking behavior on large tables, missing `if exists`/`if not exists` guards where useful), and consistency (naming conventions, RLS coverage for new tables, index coverage for new foreign keys).
-
-Relay findings in full. If they call for changes, fix the migration file and re-run this review — don't proceed to step 4 on a round that produced changes.
+- Ask it to check: correctness (does the SQL do what's intended, will it actually run against the current remote schema), safety (data loss from a `drop column`/`drop table`/`not null` addition on a table that may have rows, locking behavior on large tables, missing `if exists`/`if not exists` guards where useful), and consistency (naming conventions, RLS coverage for new tables, index coverage for new foreign keys).
+- Relay findings in full. If they call for changes, fix the migration file and re-run this review — don't proceed to step 4 on a round that produced changes.
 
 ## 4. Confirm before applying to remote
 
@@ -78,4 +77,4 @@ curl -s "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/" \
 
 ## 7. Summarize
 
-Report: which migration file(s) were added, what the review flagged (and how it was resolved), and confirmation that remote now matches — including the verification query output, not just "it succeeded."
+Report: which migration file(s) were added, what the subagent review flagged (and how it was resolved), and confirmation that remote now matches — including the verification query output, not just "it succeeded."

@@ -1,6 +1,6 @@
 ---
 name: verify-task
-description: "Verify a completed Guandan implementation task before it ships. Use when a task from IMPLEMENTATION.md is believed complete and needs checking off, when asked to 'verify' or 'check' a task, or before opening a PR (open-pr assumes this has already run). Confirms every checklist sub-item is actually implemented (not just believed to be), runs a staff-engineer-style review for architecture soundness, reusable/duplicated logic, and unhandled bugs/edge cases, runs the full unit test suite, exercises any changed UI with agent-browser (uploading screenshots via gh-image for reuse in the PR), and exercises any changed API routes with real curl requests (saving request/response pairs for reuse in the PR) — looping fixes back through review until everything passes cleanly. Triggers: 'verify this task', 'is task X done', 'check off IMPLEMENTATION.md', 'ready for review'."
+description: "Verify a completed Guandan implementation task before it ships. Use when a task from IMPLEMENTATION.md is believed complete and needs checking off, when asked to 'verify' or 'check' a task, or before opening a PR (open-pr assumes this has already run). Confirms every checklist sub-item is actually implemented (not just believed to be), kicks off a staff-engineer-style subagent review for architecture soundness, reusable/duplicated logic, and unhandled bugs/edge cases, runs the full unit test suite, exercises any changed UI with agent-browser (uploading screenshots via gh-image for reuse in the PR), and exercises any changed API routes with real curl requests (saving request/response pairs for reuse in the PR) — looping fixes back through the subagent review until everything passes cleanly. Triggers: 'verify this task', 'is task X done', 'check off IMPLEMENTATION.md', 'ready for review'."
 metadata:
   type: project-skill
 ---
@@ -20,9 +20,9 @@ Read the task's section in `IMPLEMENTATION.md`, plus the relevant parts of `ARCH
 - Every sub-item confirmed → check it off (`- [x]`) with an Edit to `IMPLEMENTATION.md`.
 - Any sub-item missing or incomplete → do **not** check it off. Report the gap to the user and stop; don't continue to step 3 for an incomplete task.
 
-## 3. Staff-engineer review
+## 3. Staff-engineer subagent review
 
-Launch a focused review subagent when delegation is available; its findings gate the rest of this skill. Give it:
+Launch a subagent (Agent tool, run in the foreground since its findings gate the rest of this skill) with:
 
 - The exact files changed: `git diff origin/main...HEAD --name-only`
 - `ARCHITECTURE.md` and `RULES.md` for the intended design and game rules
@@ -30,11 +30,11 @@ Launch a focused review subagent when delegation is available; its findings gate
 - A specific ask: find reusable or duplicated logic in this diff (and against existing code elsewhere in the repo) worth consolidating.
 - A specific ask: look for bugs or edge cases that aren't handled — invalid/malformed input, empty hands, wild-card edge cases, concurrent plays, boundary conditions in scoring/level promotion — anything the happy-path tests wouldn't catch.
 
-Relay its findings to the user in full — don't silently accept or silently drop them. If the findings call for code changes, make them now, then **restart this step** — re-run the review against the updated diff before moving on. Only proceed to step 4 once a review round comes back with nothing to fix.
+Relay its findings to the user in full — don't silently accept or silently drop them. If the findings call for code changes, make them now, then **restart this step** — re-run the subagent review against the updated diff before moving on. Only proceed to step 4 once a review round comes back with nothing to fix.
 
 ## 4. Run the unit test suite
 
-Run the full suite (check `package.json` → `scripts.test` for the exact command), not just tests for the new code. If anything fails and requires a code fix, make the fix, then **go back to step 3** — a fresh review must see the updated code before tests are re-run. Don't check off the task or proceed on a round that produced changes.
+Run the full suite (check `package.json` → `scripts.test` for the exact command), not just tests for the new code. If anything fails and requires a code fix, make the fix, then **go back to step 3** — a fresh subagent review must see the updated code before tests are re-run. Don't check off the task or proceed on a round that produced changes.
 
 ## 5. Exercise changed UI with agent-browser
 
@@ -60,4 +60,4 @@ Steps 3-6 form a loop: any code change made because of a review finding, a test 
 
 ## 8. Summarize
 
-Report: which checklist items were confirmed/checked off, how many review-fix cycles it took, final test results, UI verification result, API verification result, and the review's last-round architecture/reuse findings. Only call the task "verified" if steps 2-7 all came back clean.
+Report: which checklist items were confirmed/checked off, how many review-fix cycles it took, final test results, UI verification result, API verification result, and the subagent's last-round architecture/reuse findings. Only call the task "verified" if steps 2-7 all came back clean.
