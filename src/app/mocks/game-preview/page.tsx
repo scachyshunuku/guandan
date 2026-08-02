@@ -109,7 +109,7 @@ export default function GamePreviewPage() {
           </div>
         </aside>
 
-        <section
+        <div
           data-testid="mock-player-area"
           className="col-span-full flex w-full flex-col items-start gap-3 rounded-2xl bg-white p-4 shadow-sm"
           onPointerDown={(event) => startHandPanelMarquee(event, playerHandRef)}
@@ -138,7 +138,7 @@ export default function GamePreviewPage() {
             onPlay={handlePlay}
             onPass={handlePass}
           />
-        </section>
+        </div>
       </div>
     </div>
   );
