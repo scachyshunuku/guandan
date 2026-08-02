@@ -43,7 +43,7 @@ export default function GameHistory({
 }: GameHistoryProps) {
   if (isLoading) {
     return (
-      <p data-testid="game-history-loading" className="text-xs text-slate-500">
+      <p data-testid="game-history-loading" className="pt-2 text-xs text-slate-500">
         Loading history…
       </p>
     );
@@ -51,7 +51,7 @@ export default function GameHistory({
 
   if (error) {
     return (
-      <p data-testid="game-history-error" className="text-xs text-red-500">
+      <p data-testid="game-history-error" className="pt-2 text-xs text-red-500">
         {error.message}
       </p>
     );
@@ -59,7 +59,7 @@ export default function GameHistory({
 
   if (actions.length === 0) {
     return (
-      <p data-testid="game-history-empty" className="text-xs text-slate-500">
+      <p data-testid="game-history-empty" className="pt-2 text-xs text-slate-500">
         No actions recorded yet.
       </p>
     );
@@ -68,7 +68,7 @@ export default function GameHistory({
   return (
     <ul
       data-testid="game-history"
-      className="flex flex-col gap-2 pb-2 text-xs text-slate-700"
+      className="flex flex-col gap-2 pt-2 pb-2 text-xs text-slate-700"
     >
       {[...actions].reverse().map((action) => (
         <li
