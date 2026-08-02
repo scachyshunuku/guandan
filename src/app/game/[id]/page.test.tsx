@@ -436,7 +436,7 @@ describe("GamePage", () => {
     expect(screen.getByTestId("tribute-choice-waiting")).toBeInTheDocument();
   });
 
-  it("lets a pending giver resolve their own tied best-card choice", async () => {
+  it("keeps a pending giver's full hand visible and lets them give a tied best card", async () => {
     const chooseGiverCardMock = jest.fn().mockResolvedValue(undefined);
     useGameContextMock.mockReturnValue(
       baseContext({
@@ -446,18 +446,33 @@ describe("GamePage", () => {
         hand: [
           { suit: "SPADES", rank: "KING" },
           { suit: "HEARTS", rank: "KING" },
+          { suit: "CLUBS", rank: "4" },
         ],
         pendingGiverChoice: { levelRank: "2", pendingPositions: [0], resolvedCards: {} },
         chooseGiverCard: chooseGiverCardMock,
+        // Tribute selection happens between hands, so no player has a turn.
+        currentPlayerTurn: null,
       }),
     );
     const user = userEvent.setup();
     render(<GamePage />);
 
-    expect(screen.getByTestId("giver-card-choice-modal")).toBeInTheDocument();
-    const cards = screen.getByTestId("giver-card-choice-options").querySelectorAll('[data-testid="card"]');
-    expect(cards).toHaveLength(2);
+    expect(screen.getByTestId("player-hand")).toBeInTheDocument();
+    expect(screen.getByTestId("tribute-give-instruction")).toHaveTextContent("highest eligible cards");
+    expect(screen.queryByTestId("action-buttons")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("giver-card-choice-modal")).not.toBeInTheDocument();
+    const cards = screen.getByTestId("player-hand").querySelectorAll('[data-testid="card"]');
+    expect(cards).toHaveLength(3);
+
+    // A lower card remains visible but cannot be given.
+    await user.click(cards[2]);
+    expect(screen.getByTestId("give-tribute-button")).toBeDisabled();
+    expect(screen.getByTestId("tribute-give-invalid-reason")).toBeInTheDocument();
+
+    await user.click(cards[2]);
     await user.click(cards[1]);
+    expect(screen.getByTestId("give-tribute-button")).toBeEnabled();
+    await user.click(screen.getByTestId("give-tribute-button"));
     expect(chooseGiverCardMock).toHaveBeenCalledWith({ suit: "HEARTS", rank: "KING" });
   });
 
@@ -471,7 +486,7 @@ describe("GamePage", () => {
     );
     render(<GamePage />);
     expect(screen.getByTestId("giver-choice-waiting")).toBeInTheDocument();
-    expect(screen.queryByTestId("giver-card-choice-modal")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("tribute-give-controls")).not.toBeInTheDocument();
   });
 
   it("always opens the selector for a selected wild card, even when playing it as itself would already be legal", async () => {

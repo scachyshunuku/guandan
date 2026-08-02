@@ -10,14 +10,13 @@ import ScoreBoard from "@/components/game/ScoreBoard";
 import ActionButtons from "@/components/game/ActionButtons";
 import CardExchangeModal from "@/components/game/CardExchangeModal";
 import ConnectionStatus from "@/components/game/ConnectionStatus";
-import GiverCardChoiceModal from "@/components/game/GiverCardChoiceModal";
 import SpectatorList from "@/components/game/SpectatorList";
 import GameHistory from "@/components/game/GameHistory";
 import TributeChoiceModal from "@/components/game/TributeChoiceModal";
 import RoundEndSummary from "@/components/game/RoundEndSummary";
 import WildCardSelector from "@/components/game/WildCardSelector";
 import { bestCardCandidates } from "@/lib/gameRules/cardExchange";
-import { levelRankForLevels } from "@/lib/cardUtils";
+import { encodeCard, levelRankForLevels } from "@/lib/cardUtils";
 import { gameShareLink } from "@/lib/format";
 import { filterSpectators } from "@/store/gameStore";
 import type {
@@ -241,11 +240,27 @@ export default function GamePage() {
   const round = { currentPlayerTurn, gameState: { currentTrick } };
   const isMyTurn = myPosition !== null && currentPlayerTurn === myPosition;
   const levelRank = levelRankForLevels(teamLevels[0], teamLevels[1]);
+  const isAwaitingGiverChoice = roundStatus === "awaiting_giver_choice" && pendingGiverChoice != null;
+  const isGivingTribute =
+    roundStatus === "awaiting_giver_choice" &&
+    myPosition !== null &&
+    pendingGiverChoice?.pendingPositions.includes(myPosition) === true;
+  // The player still sees their complete hand while choosing tribute, but
+  // only one of these tied best eligible cards may be given. The server
+  // recomputes and enforces this same candidate set on submission.
+  const tributeCandidates = isGivingTribute && pendingGiverChoice
+    ? bestCardCandidates(hand, pendingGiverChoice.levelRank)
+    : [];
+  const selectedTributeCard =
+    isGivingTribute && selectedIndices.length === 1 ? hand[selectedIndices[0]] : undefined;
+  const canGiveTribute =
+    selectedTributeCard !== undefined &&
+    tributeCandidates.some((candidate) => encodeCard(candidate) === encodeCard(selectedTributeCard));
 
   // Every level-rank heart in the current selection (RULES.md "Level Cards &
   // Wild Cards") - a double deck (ARCHITECTURE.md) means more than one can
   // legitimately be selected together (e.g. two wilds completing a bomb).
-  const wildEligibleIndices = selectedIndices.filter(
+  const wildEligibleIndices = (isGivingTribute ? [] : selectedIndices).filter(
     (index) =>
       hand[index]?.rank === levelRank && hand[index]?.suit === "HEARTS",
   );
@@ -296,8 +311,10 @@ export default function GamePage() {
     });
   }
 
-  function handleChooseGiverCard(card: Card) {
-    chooseGiverCard(card).catch(() => {
+  function handleGiveTribute() {
+    if (!selectedTributeCard || !canGiveTribute) return;
+    setSelectedIndices([]);
+    chooseGiverCard(selectedTributeCard).catch(() => {
       // Failure surfaces via chooseGiverCardError below.
     });
   }
@@ -372,16 +389,7 @@ export default function GamePage() {
               isSubmitting={isExchangingCards}
             />
           ) : roundStatus === "awaiting_giver_choice" && pendingGiverChoice ? (
-            pendingGiverChoice.pendingPositions.includes(myPosition) ? (
-              <GiverCardChoiceModal
-                candidates={bestCardCandidates(
-                  hand,
-                  pendingGiverChoice.levelRank,
-                )}
-                onChoose={handleChooseGiverCard}
-                isSubmitting={isChoosingGiverCard}
-              />
-            ) : (
+            !isGivingTribute ? (
               <p
                 data-testid="giver-choice-waiting"
                 className="text-sm text-slate-500"
@@ -390,7 +398,7 @@ export default function GamePage() {
                 {pendingGiverChoice.pendingPositions.join(", ")} to choose which
                 card to give…
               </p>
-            )
+            ) : null
           ) : roundStatus === "awaiting_tribute_choice" &&
             pendingTributeChoice ? (
             <TributeChoiceModal
@@ -472,11 +480,11 @@ export default function GamePage() {
         {gameStatus !== "completed" &&
           myPosition !== null &&
           roundStatus !== "card_exchange" &&
-          !(roundStatus === "awaiting_giver_choice" && pendingGiverChoice) &&
+          (!isAwaitingGiverChoice || isGivingTribute) &&
           !(
             roundStatus === "awaiting_tribute_choice" && pendingTributeChoice
           ) &&
-          currentPlayerTurn !== null && (
+          (currentPlayerTurn !== null || isGivingTribute) && (
             <div className="col-span-full flex w-full flex-col items-start gap-3">
               <PlayerHand
                 hand={hand}
@@ -486,7 +494,27 @@ export default function GamePage() {
                 initialServerOrder={myHandOrder}
                 onOrderChange={updateHandOrder}
               />
-              {needsWildChoice && pendingWildIndex !== undefined && (
+              {isGivingTribute ? (
+                <div data-testid="tribute-give-controls" className="flex flex-col items-start gap-2">
+                  <p data-testid="tribute-give-instruction" className="text-sm text-slate-700">
+                    Choose one of your highest eligible cards to give as tribute. Level hearts are exempt.
+                  </p>
+                  <button
+                    type="button"
+                    data-testid="give-tribute-button"
+                    disabled={!canGiveTribute || isChoosingGiverCard}
+                    onClick={handleGiveTribute}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+                  >
+                    Give
+                  </button>
+                  {selectedIndices.length > 0 && !canGiveTribute && (
+                    <p data-testid="tribute-give-invalid-reason" className="text-xs text-red-500">
+                      Select exactly one card tied for your highest eligible rank.
+                    </p>
+                  )}
+                </div>
+              ) : needsWildChoice && pendingWildIndex !== undefined && (
                 // Keyed by which card this prompt is for, so a second wild in
                 // the same selection (a double deck can hold two level-rank
                 // hearts) gets a fresh selector rather than one still showing
@@ -503,7 +531,7 @@ export default function GamePage() {
                   onCancel={() => setSelectedIndices([])}
                 />
               )}
-              <ActionButtons
+              {!isGivingTribute && <ActionButtons
                 hand={hand}
                 selectedCards={effectiveSelectedCards}
                 currentTrick={currentTrick}
@@ -513,8 +541,8 @@ export default function GamePage() {
                 onPass={handlePass}
                 hasPendingWildChoice={needsWildChoice}
                 isSubmitting={isPlayingCards || isPassing}
-              />
-              {(playCardsError ?? passError) && (
+              />}
+              {!isGivingTribute && (playCardsError ?? passError) && (
                 <p
                   data-testid="action-error"
                   className="text-xs text-red-500"

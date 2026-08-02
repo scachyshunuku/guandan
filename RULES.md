@@ -30,7 +30,8 @@ Two cards of the same rank are otherwise equivalent — suit never breaks a tie,
 - Level cards rank above aces but below black jokers
 - **Hearts level cards are wild**: They can represent any card except a joker
   - Example: If level is 5, the 5 of hearts can be played as any card except a joker
-- **Among level cards, hearts ranks highest** when picking a single "best card" from a hand (e.g. for the card exchange below) — this reflects hearts' unique wild-card status. The other three suits remain equivalent to each other. This doesn't change trick-beating: a level card played as itself (not as a wild substitution) beats or loses to other plays purely by rank, regardless of suit.
+- **Among level cards, hearts ranks highest** when picking a single "best card" from a hand outside tribute — this reflects hearts' unique wild-card status. The other three suits remain equivalent to each other. This doesn't change trick-beating: a level card played as itself (not as a wild substitution) beats or loses to other plays purely by rank, regardless of suit.
+- **Wild hearts are exempt from tribute**: when a player must give their best card in the card exchange, a hearts card of the current level is not eligible and is never given. Their best eligible non-wild card is used instead.
 
 ## Dealing
 
@@ -147,7 +148,7 @@ If a team reaches level A but fails to achieve 1-2 or 1-3, they remain at level 
 
 The next round's 27 cards are **shuffled and dealt to each player immediately once a hand ends** — before any tribute card is given or returned. Tribute is exchanged based on finishing positions, but **against this freshly-dealt hand**, not whatever was left over from the hand that just ended: both the automatic "best card" giving and the both-Red-Jokers cancellation check (below) are evaluated on the new hand. **All card exchanges are visible to all players.** Actual play of the new hand doesn't begin until the full exchange (giving and returning) is resolved.
 
-**Best card, when tied**: if the player giving their "best card" (4th place, or 3rd/4th place in a two-team lead) holds more than one card tied for that best rank, **they choose which one to give** — the same choice 1st place gets when 3rd's and 4th's cards tie against each other (see "Two-Team Lead" below). They might prefer to keep one of the tied cards for a combination (a pair, a straight, etc.) still in their hand.
+**Best card, when tied**: a hearts card of the current level is exempt and cannot be given as tribute. Among the remaining eligible cards, if the player giving their "best card" (4th place, or 3rd/4th place in a two-team lead) holds more than one card tied for that best rank, **they choose which one to give** — the same choice 1st place gets when 3rd's and 4th's cards tie against each other (see "Two-Team Lead" below). They might prefer to keep one of the tied cards for a combination (a pair, a straight, etc.) still in their hand.
 
 ### Single-Team Lead (1-3 or 1-4 finish)
 - **4th place** gives their **best card** to **1st place**

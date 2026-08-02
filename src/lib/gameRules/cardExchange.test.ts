@@ -33,6 +33,25 @@ describe("planInitialExchanges: single-team lead (1-3/1-4)", () => {
     });
   });
 
+  it("exempts a level-rank heart from tribute and sends the best eligible card instead", () => {
+    const participants = [
+      participant(0, []),
+      participant(1, []),
+      participant(2, []),
+      participant(3, [
+        { rank: "9", suit: "HEARTS" },
+        { rank: "ACE", suit: "SPADES" },
+      ]),
+    ];
+    const plan = planInitialExchanges("1-3", [1, 2, 3, 4], participants, "9");
+    expect(plan).toEqual({
+      cancelled: false,
+      needsGiverChoice: false,
+      needsChoice: false,
+      transfers: [{ from: 3, to: 0, card: { rank: "ACE", suit: "SPADES" } }],
+    });
+  });
+
   it("cancels the tribute when 4th alone holds both Red Jokers", () => {
     const participants = [
       participant(0, []),
@@ -169,16 +188,19 @@ describe("planInitialExchanges: two-team lead (1-2)", () => {
     });
   });
 
-  it("a tie between level-rank hearts and another suit still resolves via hearts' wild-card priority (RULES.md), not needsChoice", () => {
-    // Level is "9": among 9s specifically, hearts outranks the other three
-    // suits (RULES.md "Level Cards & Wild Cards") — so this isn't a genuine
-    // tie despite both cards sharing a rank.
+  it("exempts a level-rank heart from tribute before comparing the two givers", () => {
+    // Level is "9": the 9 of hearts is normally the best level card, but
+    // wild level hearts can never be tribute. 3rd therefore gives their Ace,
+    // not the 9 of hearts, and it beats 4th's King.
     const levelRankNine: StandardRank = "9";
     const participants = [
       participant(0, []),
-      participant(1, [{ rank: "9", suit: "HEARTS" }]),
+      participant(1, [
+        { rank: "9", suit: "HEARTS" },
+        { rank: "ACE", suit: "CLUBS" },
+      ]),
       participant(2, []),
-      participant(3, [{ rank: "9", suit: "SPADES" }]),
+      participant(3, [{ rank: "KING", suit: "SPADES" }]),
     ];
     const plan = planInitialExchanges("1-2", [1, 3, 2, 4], participants, levelRankNine);
     expect(plan).toEqual({
@@ -186,8 +208,8 @@ describe("planInitialExchanges: two-team lead (1-2)", () => {
       needsGiverChoice: false,
       needsChoice: false,
       transfers: [
-        { from: 1, to: 0, card: { rank: "9", suit: "HEARTS" } },
-        { from: 3, to: 2, card: { rank: "9", suit: "SPADES" } },
+        { from: 1, to: 0, card: { rank: "ACE", suit: "CLUBS" } },
+        { from: 3, to: 2, card: { rank: "KING", suit: "SPADES" } },
       ],
     });
   });
