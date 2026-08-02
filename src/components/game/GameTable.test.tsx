@@ -153,7 +153,7 @@ describe("GameTable", () => {
     expect(screen.getAllByTestId("trick-display-waiting")).toHaveLength(4);
   });
 
-  it("shows each seat's play next to their player card, in the same row", () => {
+  it("shows each seat's play in its corresponding row beside the fixed seat column", () => {
     render(
       <GameTable
         round={round({
@@ -174,29 +174,27 @@ describe("GameTable", () => {
 
     const alice = screen.getByTestId("seat-position-0");
     expect(alice).toHaveTextContent("Alice");
+    const aliceCards = screen.getAllByTestId("trick-display-cards").find(
+      (element) => (element.parentElement as HTMLElement).style.gridRow === "1",
+    );
     expect(
-      alice.querySelector(
-        '[data-testid="trick-display-cards"] [data-testid="card"]',
-      ),
+      aliceCards?.querySelector('[data-testid="card"]'),
     ).toBeInTheDocument();
 
     const bob = screen.getByTestId("seat-position-1");
     expect(bob).toHaveTextContent("Bob");
     expect(
-      bob.querySelector('[data-testid="trick-display-pass"]'),
+      screen.getAllByTestId("trick-display-pass").find(
+        (element) => (element.parentElement as HTMLElement).style.gridRow === "2",
+      ),
     ).toBeInTheDocument();
 
     // Carol/Dave haven't acted yet this trick.
-    expect(
-      screen
-        .getByTestId("seat-position-2")
-        .querySelector('[data-testid="trick-display-waiting"]'),
-    ).toBeInTheDocument();
-    expect(
-      screen
-        .getByTestId("seat-position-3")
-        .querySelector('[data-testid="trick-display-waiting"]'),
-    ).toBeInTheDocument();
+    const waitingRows = screen
+      .getAllByTestId("trick-display-waiting")
+      .filter((element) => ["3", "4"].includes((element as HTMLElement).style.gridRow));
+    expect(waitingRows).toHaveLength(2);
+    expect(screen.getByTestId("trick-scroll-container")).not.toContainElement(alice);
   });
 
   it("renders the actual cards played, not just a count", () => {
@@ -224,7 +222,7 @@ describe("GameTable", () => {
     expect(screen.getAllByTestId("card")).toHaveLength(2);
   });
 
-  it("lines up every seat's plays by round: each seat's Nth play in the same grid column, oldest leftmost, no round-number labels", () => {
+  it("keeps seats on the left while newest plays appear leftmost and push older plays right", () => {
     render(
       <GameTable
         round={round({
@@ -249,13 +247,12 @@ describe("GameTable", () => {
     );
 
     const alice = screen.getByTestId("seat-position-0");
-    const aliceRounds = alice.querySelectorAll(
-      '[data-testid="trick-display-round"]',
-    );
+    const aliceRounds = screen
+      .getAllByTestId("trick-display-round")
+      .filter((element) => (element as HTMLElement).style.gridRow === "1");
     expect(aliceRounds).toHaveLength(2);
-    // Oldest play (the 3 of clubs) is leftmost/lowest column, the round-2
-    // play (5 of spades) is to its right — chronological order, not
-    // newest-first.
+    // The newest play (5 of spades) is nearest the seat on the left, while
+    // the older play (3 of clubs) has been pushed to the right.
     expect(
       aliceRounds[0].querySelector('[data-testid="card"]'),
     ).toHaveAccessibleName("3 of clubs");
@@ -265,13 +262,22 @@ describe("GameTable", () => {
     const aliceRound1Column = (aliceRounds[0] as HTMLElement).style.gridColumn;
     const aliceRound2Column = (aliceRounds[1] as HTMLElement).style.gridColumn;
     expect(aliceRound1Column).not.toBe(aliceRound2Column);
+    expect(aliceRound1Column).toBe("4");
+    expect(aliceRound2Column).toBe("2");
+    expect(
+      (alice.querySelector('[data-testid="player-card"]') as HTMLElement)
+        .parentElement?.style.gridColumn,
+    ).toBe("1");
+    const dividers = screen.getAllByTestId("trick-display-divider");
+    expect(dividers).toHaveLength(1);
+    expect((dividers[0] as HTMLElement).style.gridColumn).toBe("3");
+    expect((dividers[0] as HTMLElement).style.gridRow).toBe("1 / span 4");
 
     // Dave only acted once, in what's still round 1 — his single play lands
     // in the same column as Alice's round-1 play, not off on its own.
-    const dave = screen.getByTestId("seat-position-3");
-    const daveRounds = dave.querySelectorAll(
-      '[data-testid="trick-display-round"]',
-    );
+    const daveRounds = screen
+      .getAllByTestId("trick-display-round")
+      .filter((element) => (element as HTMLElement).style.gridRow === "4");
     expect(daveRounds).toHaveLength(1);
     expect((daveRounds[0] as HTMLElement).style.gridColumn).toBe(
       aliceRound1Column,
@@ -302,7 +308,12 @@ describe("GameTable", () => {
     );
 
     const bob = screen.getByTestId("seat-position-1");
-    expect(bob.querySelectorAll('[data-testid="trick-display-pass"]')).toHaveLength(2);
+    expect(bob).toHaveTextContent("Bob");
+    expect(
+      screen
+        .getAllByTestId("trick-display-pass")
+        .filter((element) => (element.parentElement as HTMLElement).style.gridRow === "2"),
+    ).toHaveLength(2);
   });
 
   it("handles no round yet (game still waiting)", () => {
