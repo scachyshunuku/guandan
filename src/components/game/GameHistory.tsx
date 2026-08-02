@@ -68,14 +68,14 @@ export default function GameHistory({
   return (
     <ul
       data-testid="game-history"
-      className="flex flex-col gap-2 text-xs text-slate-700"
+      className="flex flex-col gap-2 pb-2 text-xs text-slate-700"
     >
       {[...actions].reverse().map((action) => (
         <li
           key={action.id}
           data-testid="game-history-entry"
           data-action-type={action.actionType}
-          className="flex flex-wrap items-center gap-1 border-b border-slate-100 pb-2"
+          className="flex flex-wrap items-center gap-1 border-b border-slate-200 pb-2"
         >
           {renderEntry(action, participants)}
         </li>
