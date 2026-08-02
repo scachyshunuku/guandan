@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGameContext } from "./GameProvider";
 import { useGameHistory } from "@/hooks/useGameHistory";
 import type { ConnectionStatus as ConnectionStatusValue } from "@/hooks/useGame";
@@ -14,6 +14,7 @@ import GiverCardChoiceModal from "@/components/game/GiverCardChoiceModal";
 import SpectatorList from "@/components/game/SpectatorList";
 import GameHistory from "@/components/game/GameHistory";
 import TributeChoiceModal from "@/components/game/TributeChoiceModal";
+import RoundEndSummary from "@/components/game/RoundEndSummary";
 import WildCardSelector from "@/components/game/WildCardSelector";
 import { bestCardCandidates } from "@/lib/gameRules/cardExchange";
 import { levelRankForLevels } from "@/lib/cardUtils";
@@ -46,6 +47,7 @@ export default function GamePage() {
     updateHandOrder,
     currentTrick,
     currentPlayerTurn,
+    roundId,
     roundStatus,
     finishingPositions,
     pendingTributeChoice,
@@ -121,6 +123,34 @@ export default function GamePage() {
     // defeat this effect's point.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrick, gameStatus, history.refetch]);
+
+  // Round-end placements banner (RULES.md "Round End"): finishingPositions
+  // mirrors the *current* round's own finishing_positions column, which -
+  // per ARCHITECTURE.md's game_rounds doc comment - holds the *previous*
+  // hand's finishing order from the moment startNextRound deals a fresh
+  // round, right up until this new round eventually concludes and
+  // overwrites it with its own. So "a new roundId just arrived carrying a
+  // non-null finishingPositions" is exactly the signal that the round which
+  // just ended has a full 1st-4th placement to show - including whichever
+  // seat(s) were auto-placed last (RULES.md: a 1-2/1-3/1-4 finish never has
+  // every seat actually play out its last card) rather than only the ones
+  // GameHistory's per-play "player_finished" entries cover. Guarded on
+  // `previousRoundId !== null` so this doesn't fire on the very first round
+  // this client ever observes (initial load/join, or joining an already
+  // in-progress game) - there's no round that "just ended" from this
+  // client's point of view then.
+  const previousRoundIdRef = useRef<string | null>(null);
+  const [roundEndPlacements, setRoundEndPlacements] = useState<number[] | null>(null);
+  useEffect(() => {
+    const previousRoundId = previousRoundIdRef.current;
+    previousRoundIdRef.current = roundId;
+    if (previousRoundId === null || roundId === null || roundId === previousRoundId || !finishingPositions) {
+      return;
+    }
+    setRoundEndPlacements(finishingPositions);
+    const timer = setTimeout(() => setRoundEndPlacements(null), 8000);
+    return () => clearTimeout(timer);
+  }, [roundId, finishingPositions]);
 
   if (isLoading) {
     return (
@@ -299,19 +329,32 @@ export default function GamePage() {
           />
           <SpectatorList spectators={spectators} />
 
+          {/* Non-blocking: sits above whatever the status-driven branch
+              below renders (e.g. the very next round can already be
+              awaiting a giver/tribute choice by the time this appears), and
+              clears itself after a few seconds via the effect above. */}
+          {roundEndPlacements && (
+            <RoundEndSummary finishingPositions={roundEndPlacements} participants={participants} />
+          )}
+
           {gameStatus === "completed" ? (
-            <p
-              data-testid="game-over-message"
-              className="text-sm font-semibold text-slate-700"
-            >
-              {winningTeam === null
-                ? "Game over"
-                : myPosition === null
-                  ? `Game over — Team ${winningTeam === 0 ? "A" : "B"} wins`
-                  : myPosition % 2 === winningTeam
-                    ? "Game over — your team wins!"
-                    : "Game over — your team lost"}
-            </p>
+            <>
+              <p
+                data-testid="game-over-message"
+                className="text-sm font-semibold text-slate-700"
+              >
+                {winningTeam === null
+                  ? "Game over"
+                  : myPosition === null
+                    ? `Game over — Team ${winningTeam === 0 ? "A" : "B"} wins`
+                    : myPosition % 2 === winningTeam
+                      ? "Game over — your team wins!"
+                      : "Game over — your team lost"}
+              </p>
+              {finishingPositions && (
+                <RoundEndSummary finishingPositions={finishingPositions} participants={participants} />
+              )}
+            </>
           ) : myPosition === null ? (
             <p data-testid="spectator-note" className="text-sm text-slate-500">
               You&apos;re spectating

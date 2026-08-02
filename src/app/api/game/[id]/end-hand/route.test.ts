@@ -195,6 +195,22 @@ describe("POST /api/game/[id]/end-hand", () => {
       "game_updated",
       expect.objectContaining({ id: gameId, team_a_level: 3 }),
     );
+
+    // The just-finished round's own placements are logged against *its* id
+    // (not the new round's), same as trick_end/player_finished describe the
+    // round they occurred in - RULES.md "Round End".
+    expect(fake._tables.game_actions).toContainEqual(
+      expect.objectContaining({
+        round_id: roundId,
+        action_type: "round_ended",
+        action_data: { finishingPositions: [1, 2, 4, 3] },
+      }),
+    );
+    expect(mockBroadcastToGame).toHaveBeenCalledWith(
+      gameId,
+      "game_action",
+      expect.objectContaining({ round_id: roundId, action_type: "round_ended" }),
+    );
   });
 
   it("resolves a single-team-lead (1-3) finish and promotes two levels", async () => {
@@ -265,13 +281,28 @@ describe("POST /api/game/[id]/end-hand", () => {
     // is already won.
     expect(handOf(gameId, 1)).toEqual([{ rank: "9", suit: "CLUBS" }]);
     expect(handOf(gameId, 3)).toEqual([{ rank: "QUEEN", suit: "SPADES" }]);
-    expect(fake._tables.game_actions ?? []).toHaveLength(0);
     expect(newRoundOf(gameId)).toBeUndefined();
+
+    // The only game_action logged for the won game itself is the round's
+    // own final placements (RULES.md "Round End") - no card exchange, since
+    // there's no next round to plan one against.
+    expect(fake._tables.game_actions ?? []).toEqual([
+      expect.objectContaining({
+        round_id: roundId,
+        action_type: "round_ended",
+        action_data: { finishingPositions: [1, 3, 2, 4] },
+      }),
+    ]);
 
     expect(mockBroadcastToGame).toHaveBeenCalledWith(
       gameId,
       "game_updated",
       expect.objectContaining({ status: "completed", winning_team: 0 }),
+    );
+    expect(mockBroadcastToGame).toHaveBeenCalledWith(
+      gameId,
+      "game_action",
+      expect.objectContaining({ action_type: "round_ended" }),
     );
   });
 

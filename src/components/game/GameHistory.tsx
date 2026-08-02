@@ -9,10 +9,12 @@ import type {
   JoinActionData,
   LeaveActionData,
   PlayerFinishedActionData,
+  RoundEndedActionData,
   TrickEndActionData,
 } from "@/lib/types";
 import { encodeCard, isRedCard } from "@/lib/cardUtils";
-import { nameForPosition, ordinalPlace, teamForPosition, teamTextClass } from "@/lib/format";
+import { nameForPosition, ordinalPlace } from "@/lib/format";
+import TeamName from "./TeamName";
 
 export interface GameHistoryProps {
   actions: GameAction[];
@@ -90,14 +92,6 @@ function positionFor(playerId: string, participants: GameParticipant[]): number 
   return participants.find((p) => p.playerId === playerId)?.position ?? null;
 }
 
-// A player's name colored by team (blue for Team A, orange for Team B) —
-// `position` is null for a spectator or an unresolvable player, in which
-// case the name renders uncolored since there's no team to show.
-function TeamName({ name, position }: { name: string; position: number | null }) {
-  if (position === null) return <>{name}</>;
-  return <span className={teamTextClass(teamForPosition(position))}>{name}</span>;
-}
-
 // Compact acronym form of a card for the history log (e.g. "AD" for ace of
 // diamonds, "RJ"/"BJ" for the jokers) — encodeCard already produces this
 // shorthand for URL/storage purposes, so it's reused here rather than the
@@ -157,6 +151,29 @@ function renderEntry(action: GameAction, participants: GameParticipant[]) {
         <span>
           <TeamName name={nameForPosition(data.position, participants)} position={data.position} />{" "}
           finished in {ordinalPlace(data.place)}
+        </span>
+      );
+    }
+
+    case "round_ended": {
+      // Unlike "player_finished" above (only logged for a seat that actually
+      // played out its last card), this always has all four seats' places -
+      // RULES.md "Round End": a 1-2/1-3/1-4 finish auto-assigns at least one
+      // seat's place without them playing it out.
+      const data = action.actionData as RoundEndedActionData;
+      return (
+        <span>
+          Round complete —{" "}
+          {([1, 2, 3, 4] as const).map((place, i) => {
+            const position = data.finishingPositions.indexOf(place);
+            return (
+              <span key={place}>
+                {i > 0 && ", "}
+                {ordinalPlace(place)}:{" "}
+                <TeamName name={nameForPosition(position, participants)} position={position} />
+              </span>
+            );
+          })}
         </span>
       );
     }
