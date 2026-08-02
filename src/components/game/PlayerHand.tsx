@@ -414,6 +414,12 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
   // pointer, without needing any of them to stay mounted in the grid.
   const dragStartRectRef = useRef<ClientRectLike | null>(null);
   const dragOffsetsRef = useRef<Map<string, Point>>(new Map());
+  // The dragged group's own starting position, expressed the same way as
+  // dropIndexRef (an index among the *other* cards) - lets endDrag tell a
+  // real reorder apart from a drag that's released back where it started,
+  // so a no-op drop can skip the reorder commit and its FLIP fly-back
+  // instead of refreshing the whole hand for nothing.
+  const dragStartIndexRef = useRef<number | null>(null);
 
   // Respect the user's OS-level motion preference for both the FLIP settle
   // animation and the lifted-card scale. The initial false value keeps the
@@ -578,7 +584,9 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
     // doesn't cause a visible jump.
     const visualKeys = visualEntries.map((entry) => entry.key);
     const leadingIndex = Math.min(...group.map((k) => visualKeys.indexOf(k)));
-    setDropIndex(visualKeys.slice(0, leadingIndex).filter((k) => !group.includes(k)).length);
+    const startIndex = visualKeys.slice(0, leadingIndex).filter((k) => !group.includes(k)).length;
+    dragStartIndexRef.current = startIndex;
+    setDropIndex(startIndex);
 
     setDraggingKeys(group);
   }
@@ -638,7 +646,12 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
     if (group === null) return;
     draggingKeysRef.current = null;
 
-    if (!cancelled && justDraggedRef.current && dropIndexRef.current !== null) {
+    if (
+      !cancelled &&
+      justDraggedRef.current &&
+      dropIndexRef.current !== null &&
+      dropIndexRef.current !== dragStartIndexRef.current
+    ) {
       const finalDropIndex = dropIndexRef.current;
       // Seeds this render's FLIP baseline for each dropped card to its last
       // floating position, computed the same way the overlay below renders
@@ -680,6 +693,7 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
     setDragDelta({ x: 0, y: 0 });
     dragStartRectRef.current = null;
     dragOffsetsRef.current = new Map();
+    dragStartIndexRef.current = null;
     if (cancelled) justDraggedRef.current = false;
     else if (justDraggedRef.current) {
       // A pointer released outside the hand may not produce the trailing
@@ -854,10 +868,37 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
     startMarqueeFrom: (event) => beginMarquee(event.clientX, event.clientY, event.pointerId),
   }));
 
+  // draggingKeys/dropIndex are both seeded on every card press (see
+  // handleCardPointerDown) and cleared on every release (see endDrag), even
+  // a plain click that never becomes a drag - so neither is a safe FLIP
+  // dependency on its own, it'd re-measure (and, since a selected card's own
+  // "lifted" styling genuinely shifts its rect, sometimes re-animate) the
+  // whole hand on every click. This only changes once a press has actually
+  // crossed the drag-activation threshold, and only to the hover-driven
+  // dropIndex from then on - exactly mirroring isActivelyDragging/
+  // displayItems below, which is what actually determines the rendered
+  // layout the effect needs to react to.
+  const isActivelyDragging =
+    draggingKeys !== null && Math.hypot(dragDelta.x, dragDelta.y) > DRAG_ACTIVATION_THRESHOLD_PX;
+  const dragReflowKey = isActivelyDragging ? dropIndex : null;
+
   // FLIP reflow for every reorder (drag-triggered or a hand-shape change
   // filling a gap): compares each slot's position just before this render
   // to where it landed just after, and if it moved, animates from the old
   // position to the new one instead of letting it pop.
+  // Also keyed on dragReflowKey, not just orderKeys - the "make room" gap
+  // reflows the other cards' DOM positions on every hover-target change
+  // during a live drag, well before orderKeys itself ever changes. Without
+  // that in the deps, prevRectsRef only ever got refreshed by committed
+  // reorders, so it went stale for the whole drag; the eventual orderKeys
+  // commit at drop would then compare against that stale, pre-drag baseline
+  // and yank every already-settled card back to where it was before the
+  // drag started, then slide it forward again - a single large, spurious
+  // animation across most of the hand for what was really just one card
+  // moving. Including it here keeps the baseline current throughout the
+  // gesture, so the drop only animates whatever actually changed since the
+  // last hover step, and the live gap now slides smoothly too instead of
+  // popping between hover targets.
   useLayoutEffect(() => {
     const prevRects = prevRectsRef.current;
     slotRefs.current.forEach((el, key) => {
@@ -883,7 +924,7 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
     const nextRects = new Map<string, ClientRectLike>();
     slotRefs.current.forEach((el, key) => nextRects.set(key, el.getBoundingClientRect()));
     prevRectsRef.current = nextRects;
-  }, [orderKeys, prefersReducedMotion]);
+  }, [orderKeys, dragReflowKey, prefersReducedMotion]);
 
   const visualEntries = resolveVisualOrder(orderKeys, hand);
   // Refs can't be written during render (React lint rule) - this mirrors it
@@ -908,13 +949,12 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
     );
   }
 
-  // Only once a press has actually crossed the drag threshold does a card
-  // leave its normal grid slot for the floating overlay - a stationary
-  // press (an ordinary click) never touches this, so it never risks a
-  // native pointerup/click resolving to the wrong element (see
+  // isActivelyDragging computed above (see dragReflowKey) - only once a
+  // press has actually crossed the drag threshold does a card leave its
+  // normal grid slot for the floating overlay - a stationary press (an
+  // ordinary click) never touches this, so it never risks a native
+  // pointerup/click resolving to the wrong element (see
   // DRAG_ACTIVATION_THRESHOLD_PX above).
-  const isActivelyDragging =
-    draggingKeys !== null && Math.hypot(dragDelta.x, dragDelta.y) > DRAG_ACTIVATION_THRESHOLD_PX;
 
   type DisplayItem =
     | { type: "card"; key: string; handIndex: number }

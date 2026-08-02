@@ -232,6 +232,44 @@ describe("PlayerHand", () => {
       expect(labels).toEqual(["7 of hearts", "red joker", "3 of clubs"]);
     });
 
+    it("treats a drag dropped back on its own starting slot as a no-op, without re-syncing the unchanged order", () => {
+      // Regression test: releasing a drag exactly where it started used to
+      // still commit a freshly-built (but content-identical) orderKeys
+      // array, which reset the debounced server-sync timer and replayed
+      // every downstream effect keyed on orderKeys - a full, pointless
+      // "hand refresh" for a gesture that changed nothing.
+      jest.useFakeTimers();
+      const onOrderChange = jest.fn();
+      render(<PlayerHand hand={HAND} persistenceKey="game-1:0" onOrderChange={onOrderChange} />);
+
+      // Let the mount-triggered sync settle first so it can't be confused
+      // with one caused by the no-op drag below.
+      act(() => {
+        jest.advanceTimersByTime(3000);
+      });
+      expect(onOrderChange).toHaveBeenCalledTimes(1);
+      onOrderChange.mockClear();
+
+      const slots = screen.getAllByTestId("hand-card-slot");
+      const container = screen.getByTestId("player-hand");
+      mockElementFromPoint(slots[1]); // hover "7 of hearts", now sitting where "3 of clubs" left off
+      stubRect(slots[1], { left: 100, top: 0, right: 200, bottom: 90 }); // midpoint at x=150
+
+      firePointerEvent("pointerdown", slots[0], { clientX: 0, clientY: 0 }); // grab "3 of clubs"
+      firePointerEvent("pointermove", container, { clientX: 120, clientY: 0 }); // left of the midpoint - back where it started
+      firePointerEvent("pointerup", container);
+
+      const labels = screen.getAllByTestId("card").map((c) => c.getAttribute("aria-label"));
+      expect(labels).toEqual(["3 of clubs", "7 of hearts", "red joker"]);
+
+      act(() => {
+        jest.advanceTimersByTime(3000);
+      });
+      expect(onOrderChange).not.toHaveBeenCalled();
+
+      jest.useRealTimers();
+    });
+
     it("reorders on touch pointer drag", () => {
       render(<PlayerHand hand={HAND} />);
       const slots = screen.getAllByTestId("hand-card-slot");
@@ -388,6 +426,29 @@ describe("PlayerHand", () => {
       fireEvent.click(within(slots[0]).getByTestId("card"));
 
       expect(within(slots[0]).getByTestId("card")).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("does not re-run the FLIP layout pass for a plain click (regression: draggingKeys/dropIndex are also seeded and cleared on every press, not just real drags)", () => {
+      render(<PlayerHand hand={HAND} />);
+      const slots = screen.getAllByTestId("hand-card-slot");
+      const container = screen.getByTestId("player-hand");
+      slots.forEach((slot, i) => stubRect(slot, { left: i * 100, top: 0, right: i * 100 + 90, bottom: 90 }));
+      // Excludes slot 0 (the grabbed card): handleCardPointerDown always
+      // reads its own currentTarget rect to seed drag state, on every press
+      // regardless of whether it turns into a real drag - that's expected,
+      // unrelated to the FLIP pass this test is isolating. The other slots
+      // have no legitimate reason to be measured at all for a plain click.
+      const otherRectMocks = slots.slice(1).map((slot) => slot.getBoundingClientRect as jest.Mock);
+      const callsBefore = otherRectMocks.reduce((sum, mock) => sum + mock.mock.calls.length, 0);
+
+      firePointerEvent("pointerdown", slots[0], { clientX: 0, clientY: 0 });
+      // A plain click's jitter never exceeds the drag-activation threshold.
+      firePointerEvent("pointermove", container, { clientX: 1, clientY: 0 });
+      firePointerEvent("pointerup", container);
+      fireEvent.click(within(slots[0]).getByTestId("card"));
+
+      const callsAfter = otherRectMocks.reduce((sum, mock) => sum + mock.mock.calls.length, 0);
+      expect(callsAfter).toBe(callsBefore);
     });
 
     it("keeps selection attached to the dragged card's identity, not its slot", () => {
