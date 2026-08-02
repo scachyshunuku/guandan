@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 // Interactive, DB-free rendering of the game page's layout (ScoreBoard + GameTable
 // + history panel) using fixed fixtures from src/mocks/gameFixtures.ts, so CSS
 // changes to that layout - like the history panel's height being pinned to
@@ -9,8 +7,12 @@ import { useState } from "react";
 // through the real create-game/join/fill-with-bots/start flow. Select a card
 // below and Play to simulate a realtime broadcast; no API request is made.
 
+import { useRef, useState } from "react";
 import GameTable from "@/components/game/GameTable";
-import PlayerHand from "@/components/game/PlayerHand";
+import PlayerHand, {
+  startHandPanelMarquee,
+  type PlayerHandHandle,
+} from "@/components/game/PlayerHand";
 import ActionButtons from "@/components/game/ActionButtons";
 import ScoreBoard from "@/components/game/ScoreBoard";
 import SpectatorList from "@/components/game/SpectatorList";
@@ -35,6 +37,7 @@ export default function GamePreviewPage() {
   const [broadcastMessage, setBroadcastMessage] = useState(
     "Select a card below to simulate a play broadcast.",
   );
+  const playerHandRef = useRef<PlayerHandHandle>(null);
 
   const spectators = filterSpectators(participants);
   const round = {
@@ -109,6 +112,7 @@ export default function GamePreviewPage() {
         <section
           data-testid="mock-player-area"
           className="col-span-full flex w-full flex-col items-start gap-3 rounded-2xl bg-white p-4 shadow-sm"
+          onPointerDown={(event) => startHandPanelMarquee(event, playerHandRef)}
         >
           <div>
             <h2 className="text-sm font-semibold text-slate-900">Your hand</h2>
@@ -117,6 +121,7 @@ export default function GamePreviewPage() {
             </p>
           </div>
           <PlayerHand
+            ref={playerHandRef}
             hand={hand}
             selectedIndices={selectedIndices}
             onSelectionChange={setSelectedIndices}

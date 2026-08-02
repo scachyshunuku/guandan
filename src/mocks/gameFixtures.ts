@@ -20,6 +20,7 @@ import type {
 
 const SUITS: readonly Suit[] = ["CLUBS", "HEARTS", "SPADES", "DIAMONDS"];
 const RANKS: readonly Rank[] = [
+  "2",
   "3",
   "4",
   "5",

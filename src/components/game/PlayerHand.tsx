@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import type { CardWithWild } from "@/lib/types";
 import { encodeCard } from "@/lib/cardUtils";
 import Card from "./Card";
@@ -34,11 +34,69 @@ export interface PlayerHandProps {
   onOrderChange?: (order: string[]) => void;
 }
 
+// Exposed so an ancestor (app/game/[id]/page.tsx) can extend marquee
+// box-select's hit area beyond PlayerHand's own tightly-wrapped bounds -
+// e.g. to the whole cards+buttons panel - without PlayerHand needing to
+// know anything about what else is on the page. The ancestor owns deciding
+// *when* an empty-space press should start a marquee (its own pointerdown
+// handler); PlayerHand still owns everything about *how* one behaves (hit-
+// testing against its own cards, the overlay, the selection callback).
+export interface PlayerHandHandle {
+  startMarqueeFrom: (event: { clientX: number; clientY: number; pointerId: number }) => void;
+}
+
+export function remapCardIndices(
+  previousHand: CardWithWild[],
+  nextHand: CardWithWild[],
+  selectedIndices: number[],
+): number[] {
+  const usedNextIndices = new Set<number>();
+  const remapped: number[] = [];
+  for (const previousIndex of selectedIndices) {
+    const previousCard = previousHand[previousIndex];
+    if (!previousCard) continue;
+    const nextIndex = nextHand.findIndex(
+      (card, index) =>
+        !usedNextIndices.has(index) && encodeCard(card) === encodeCard(previousCard),
+    );
+    if (nextIndex === -1) continue;
+    usedNextIndices.add(nextIndex);
+    remapped.push(nextIndex);
+  }
+  return remapped;
+}
+
+// Shared by the real game page and the DB-free previews. A press on a card or
+// action button belongs to that control; an empty panel press is the only
+// thing the ancestor should forward to PlayerHand for marquee selection.
+export function isHandPanelControlTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement &&
+    Boolean(target.closest('[data-key], button, [data-testid="player-hand"]'));
+}
+
+export function startHandPanelMarquee(
+  event: React.PointerEvent<HTMLDivElement>,
+  playerHandRef: { current: PlayerHandHandle | null },
+) {
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  if (isHandPanelControlTarget(event.target)) return;
+  playerHandRef.current?.startMarqueeFrom(event);
+}
+
 // Coalesces a multi-card drag session (or several drags in quick succession)
 // into a single write instead of one per card moved.
 const SERVER_SYNC_DEBOUNCE_MS = 3_000;
 
 const STORAGE_PREFIX = "guandan:hand-order:";
+
+// A press must move the pointer further than this (in either axis combined,
+// via distance) before it counts as a drag rather than a click - without a
+// deadzone, the sub-pixel jitter real mice/trackpads produce even during a
+// stationary press would flip a card into "dragging" visuals for a single
+// frame, which is enough to make its native pointerup/click land on
+// whatever's underneath it instead of the card itself (see the drag-state
+// render logic below).
+const DRAG_ACTIVATION_THRESHOLD_PX = 4;
 
 // jsdom (used by the component tests) doesn't implement
 // requestAnimationFrame, so the FLIP reflow effect below falls back to a
@@ -200,15 +258,18 @@ function rectsIntersect(a: ClientRectLike, b: ClientRectLike): boolean {
 // select, and drag-to-reorder/drag-to-move-selection via Pointer Events —
 // used instead of the HTML5 drag-and-drop API since that has no reliable
 // touch support, and Task 5.1a requires touch drag on mobile.
-export default function PlayerHand({
-  hand,
-  isOwnHand = true,
-  selectedIndices,
-  onSelectionChange,
-  persistenceKey,
-  initialServerOrder,
-  onOrderChange,
-}: PlayerHandProps) {
+const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function PlayerHand(
+  {
+    hand,
+    isOwnHand = true,
+    selectedIndices,
+    onSelectionChange,
+    persistenceKey,
+    initialServerOrder,
+    onOrderChange,
+  },
+  ref,
+) {
   const [internalSelected, setInternalSelected] = useState<number[]>([]);
   const selected = selectedIndices ?? internalSelected;
 
@@ -218,6 +279,14 @@ export default function PlayerHand({
   }
 
   const signature = handSignature(hand);
+  const [selectionHand, setSelectionHand] = useState(hand);
+  const [selectionSignature, setSelectionSignature] = useState(signature);
+  if (selectionSignature !== signature) {
+    const remapped = remapCardIndices(selectionHand, hand, internalSelected);
+    setSelectionHand(hand);
+    setSelectionSignature(signature);
+    if (selectedIndices === undefined) setInternalSelected(remapped);
+  }
   // Natural (dealt) order by default - reading localStorage here would run
   // during the server-rendered first pass too and disagree with the client's
   // hydration (same pitfall GameProvider's playerId documents), so the
@@ -244,7 +313,6 @@ export default function PlayerHand({
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     if (!persistenceKey) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- external-sync gate, see comment above
       setHydrated(true);
       return;
     }
@@ -288,22 +356,82 @@ export default function PlayerHand({
     return () => clearTimeout(timeout);
   }, [hydrated, orderKeys, onOrderChange]);
 
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
   // Tracked by slot key rather than visual index/position (Task 5.1b): a
   // multi-card group drag needs a stable way to identify "the cards being
-  // dragged" that survives the array splicing every hover-crossing below
-  // triggers, which a position-based index can't offer once more than one
-  // card is moving at once.
-  const [draggingKeys, setDraggingKeys] = useState<string[] | null>(null);
+  // dragged" that survives reordering, which a position-based index can't
+  // offer once more than one card is moving at once. Mirrored into a ref for
+  // the same stale-window-listener-closure reason as dragDelta/dropIndex
+  // below - endDrag additionally uses the ref as a single-execution guard
+  // (see endDrag), since it can otherwise be invoked twice for one release
+  // (the container's own onPointerUp, and the window-level fallback, both
+  // firing for the same native event).
+  const [draggingKeys, setDraggingKeysState] = useState<string[] | null>(null);
+  const draggingKeysRef = useRef<string[] | null>(null);
+  const dragPointerIdRef = useRef<number | null>(null);
+  const marqueePointerIdRef = useRef<number | null>(null);
+  function setDraggingKeys(next: string[] | null) {
+    draggingKeysRef.current = next;
+    setDraggingKeysState(next);
+  }
   // Sits outside React state because it must be readable synchronously by a
   // native click event that fires immediately after pointerup, in the same
   // gesture - a state update wouldn't commit in time.
   const justDraggedRef = useRef(false);
   // Pointerdown client position for the active drag, and the live delta
-  // from it - drives the "lift and follow the pointer" animation on the
-  // dragged card(s) below. Kept separate from draggingKeys so a drag's
-  // origin survives the array reorders that replace `orderKeys` mid-drag.
+  // from it - drives the floating drag overlay below. `dragDelta` is also
+  // mirrored into a ref: `endDrag` is registered as a window listener whose
+  // *closure* is only refreshed when a drag starts/ends (see the effect
+  // below), so reading the state value directly from inside it could see a
+  // stale pre-drag delta - the ref is always current regardless of which
+  // closure ends up invoked.
   const dragOriginRef = useRef<Point | null>(null);
-  const [dragDelta, setDragDelta] = useState<Point>({ x: 0, y: 0 });
+  const [dragDelta, setDragDeltaState] = useState<Point>({ x: 0, y: 0 });
+  const dragDeltaRef = useRef<Point>({ x: 0, y: 0 });
+  function setDragDelta(next: Point) {
+    dragDeltaRef.current = next;
+    setDragDeltaState(next);
+  }
+
+  // Where the dragged group would land if dropped right now - an index into
+  // the *other* (non-dragged) cards' visual order. Reorder is deferred
+  // until drop (see endDrag): while dragging, this only ever affects which
+  // single card-width gap is shown, never the underlying order, so a group
+  // of any size parts the hand by exactly one card-width instead of its own
+  // width. Same stale-closure concern as dragDelta above, same fix (a
+  // mirrored ref for endDrag to read).
+  const [dropIndex, setDropIndexState] = useState<number | null>(null);
+  const dropIndexRef = useRef<number | null>(null);
+  function setDropIndex(next: number | null) {
+    dropIndexRef.current = next;
+    setDropIndexState(next);
+  }
+
+  // The grabbed card's own on-screen rect at drag start, and each dragged
+  // card's offset from it - together they let the floating overlay
+  // reproduce the group's original relative spacing while it follows the
+  // pointer, without needing any of them to stay mounted in the grid.
+  const dragStartRectRef = useRef<ClientRectLike | null>(null);
+  const dragOffsetsRef = useRef<Map<string, Point>>(new Map());
+
+  // Respect the user's OS-level motion preference for both the FLIP settle
+  // animation and the lifted-card scale. The initial false value keeps the
+  // server/client render identical; the effect updates it immediately after
+  // mount in a browser.
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setPrefersReducedMotion(media.matches);
+    update();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", update);
+      return () => media.removeEventListener("change", update);
+    }
+    media.addListener(update);
+    return () => media.removeListener(update);
+  }, []);
 
   // Slot key of the last plain-clicked (non-shift) card - the range anchor
   // for shift-click select, same "identity by slot key" system as
@@ -317,10 +445,14 @@ export default function PlayerHand({
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
 
   // FLIP reflow: measured slot positions after the most recent render, so
-  // the next reorder can compute how far each (non-dragged) slot moved and
-  // animate it sliding into place instead of popping - flex-wrap reordering
-  // changes DOM position, not a `transform`, so nothing animates on its own
-  // without this.
+  // the next reorder can compute how far each slot moved and animate it
+  // sliding into place instead of popping - flex-wrap reordering changes
+  // DOM position, not a `transform`, so nothing animates on its own without
+  // this. Dragged cards are never in `slotRefs` while actively dragging
+  // (see the render logic below), so this naturally only ever covers
+  // settled, non-floating cards - including, once `endDrag` below seeds a
+  // synthetic "last floating position" baseline for them, the cards that
+  // were just dropped.
   const slotRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const prevRectsRef = useRef<Map<string, ClientRectLike>>(new Map());
   // Always holds the latest render's visual order - the marquee's
@@ -373,108 +505,221 @@ export default function PlayerHand({
     toggleCard(handIndex);
   }
 
-  function handlePointerDown(
+  function selectKeyboardRange(
+    key: string,
+    visualEntries: { key: string; handIndex: number }[],
+    targetKey: string,
+  ) {
+    const anchorKey = anchorKeyRef.current ?? key;
+    const anchorIndex = visualEntries.findIndex((entry) => entry.key === anchorKey);
+    const targetIndex = visualEntries.findIndex((entry) => entry.key === targetKey);
+    if (anchorIndex === -1 || targetIndex === -1) return;
+    const [from, to] = anchorIndex <= targetIndex
+      ? [anchorIndex, targetIndex]
+      : [targetIndex, anchorIndex];
+    applySelection(visualEntries.slice(from, to + 1).map((entry) => entry.handIndex));
+  }
+
+  function handleCardPointerDown(
     event: React.PointerEvent<HTMLDivElement>,
     key: string,
     handIndex: number,
     visualEntries: { key: string; handIndex: number }[],
   ) {
     if (event.pointerType === "mouse" && event.button !== 0) return;
-    // Deliberately no setPointerCapture here (only every card's own
-    // onPointerMove, all wired to this same handler, is relied on instead):
-    // per spec, capturing a pointer also redirects the compatibility mouse
-    // events that follow - including the trailing "click" - to the
-    // capturing element. Since that element is this wrapper div, not the
-    // Card <button> inside it, a captured gesture's click would fire on the
-    // div (no onClick) instead of the button, silently breaking
-    // click-to-select for every click, not just drags. Capture isn't needed
-    // for correctness anyway: mouse pointermove naturally fires on whatever
-    // slot is currently under the cursor (its own listener, same shared
-    // handler), and touch pointers are implicitly target-locked to their
+    if (dragPointerIdRef.current !== null || marqueePointerIdRef.current !== null) return;
+    // Deliberately no setPointerCapture here: per spec, capturing a pointer
+    // also redirects the compatibility mouse events that follow - including
+    // the trailing "click" - to the capturing element. Since that element
+    // is this wrapper div, not the Card <button> inside it, a captured
+    // gesture's click would fire on the div (no onClick) instead of the
+    // button, silently breaking click-to-select for every click, not just
+    // drags. Capture isn't needed for correctness anyway: the container's
+    // own onPointerMove (below) naturally keeps receiving events for the
+    // whole gesture regardless of which element is currently under the
+    // pointer, and touch pointers are implicitly target-locked to their
     // origin element for the whole gesture per spec regardless.
     justDraggedRef.current = false;
+    dragPointerIdRef.current = event.pointerId;
     dragOriginRef.current = { x: event.clientX, y: event.clientY };
     setDragDelta({ x: 0, y: 0 });
+
     // Dragging a card that's part of a multi-card selection moves the whole
     // selection together, in its current visual order; dragging anything
     // else (an unselected card, or a lone selected one) only moves that one
-    // card - unchanged from the pre-multiselect behavior.
+    // card.
     const group =
       selected.length > 1 && selected.includes(handIndex)
         ? visualEntries.filter((entry) => selected.includes(entry.handIndex)).map((entry) => entry.key)
         : [key];
+
+    const grabbedRect = event.currentTarget.getBoundingClientRect();
+    dragStartRectRef.current = {
+      left: grabbedRect.left,
+      top: grabbedRect.top,
+      right: grabbedRect.right,
+      bottom: grabbedRect.bottom,
+    };
+    const offsets = new Map<string, Point>();
+    for (const groupKey of group) {
+      if (groupKey === key) {
+        offsets.set(groupKey, { x: 0, y: 0 });
+        continue;
+      }
+      const el = slotRefs.current.get(groupKey);
+      const rect = el?.getBoundingClientRect();
+      offsets.set(groupKey, rect ? { x: rect.left - grabbedRect.left, y: rect.top - grabbedRect.top } : { x: 0, y: 0 });
+    }
+    dragOffsetsRef.current = offsets;
+
+    // Where the group currently sits, translated into an index among the
+    // *other* cards - keeps the drop placeholder starting exactly where the
+    // group already is, so crossing the drag-activation threshold below
+    // doesn't cause a visible jump.
+    const visualKeys = visualEntries.map((entry) => entry.key);
+    const leadingIndex = Math.min(...group.map((k) => visualKeys.indexOf(k)));
+    setDropIndex(visualKeys.slice(0, leadingIndex).filter((k) => !group.includes(k)).length);
+
     setDraggingKeys(group);
   }
 
-  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
-    if (draggingKeys === null) return;
-    if (event.buttons === 0) {
+  function updateDragPointer(
+    clientX: number,
+    clientY: number,
+    buttons: number,
+    pointerId: number,
+  ) {
+    if (draggingKeysRef.current === null || dragPointerIdRef.current !== pointerId) return;
+    if (buttons === 0) {
       // The primary button/touch contact is no longer held - the pointer
-      // was released outside every card slot (no local pointerup/cancel
-      // fired to end the drag; the window-level listener below is the
-      // primary defense, this is a cheap belt-and-suspenders check so a
-      // stray hover afterward can't keep silently reordering cards).
-      endDrag();
+      // was released outside the panel (no local pointerup/cancel fired to
+      // end the drag; the window-level listener below is the primary
+      // defense, this is a cheap belt-and-suspenders check so a stray hover
+      // afterward can't keep silently updating the drop target).
+      endDrag(false, pointerId);
       return;
     }
-    if (dragOriginRef.current) {
-      setDragDelta({
-        x: event.clientX - dragOriginRef.current.x,
-        y: event.clientY - dragOriginRef.current.y,
+    if (!dragOriginRef.current) return;
+    const newDelta = {
+      x: clientX - dragOriginRef.current.x,
+      y: clientY - dragOriginRef.current.y,
+    };
+    setDragDelta(newDelta);
+    // Below the activation threshold, the pressed card is still rendered
+    // normally in the grid (see the render logic below) - deliberately
+    // don't touch justDraggedRef/dropIndex yet, so a press that never moves
+    // enough to count as a drag behaves as a plain, unmodified click.
+    if (Math.hypot(newDelta.x, newDelta.y) <= DRAG_ACTIVATION_THRESHOLD_PX) return;
+    justDraggedRef.current = true;
+
+    const hit = document.elementFromPoint(clientX, clientY);
+    const hoveredSlot = hit instanceof Element ? hit.closest<HTMLElement>("[data-key]") : null;
+    const hoveredKey = hoveredSlot?.dataset.key;
+    // No target (e.g. hovering the placeholder gap, or empty panel space)
+    // is a no-op - the drop target simply stays wherever it last was.
+    if (!hoveredKey || !hoveredSlot) return;
+    const draggingGroup = draggingKeysRef.current;
+    const currentKeys = visualEntriesRef.current.map((entry) => entry.key);
+    const remaining = currentKeys.filter((k) => !draggingGroup.includes(k));
+    const hoveredIndex = remaining.indexOf(hoveredKey);
+    if (hoveredIndex === -1) return;
+    const rect = hoveredSlot.getBoundingClientRect();
+    const insertAfter = clientX > rect.left + rect.width / 2;
+    setDropIndex(insertAfter ? hoveredIndex + 1 : hoveredIndex);
+  }
+
+  function endDrag(cancelled = false, pointerId?: number) {
+    if (pointerId !== undefined && dragPointerIdRef.current !== pointerId) return;
+    const group = draggingKeysRef.current;
+    // Already ended by whichever of the container's own onPointerUp or the
+    // window-level fallback listener (see the effect below) fired first for
+    // this release - guards against running the commit logic below twice
+    // for the same drop.
+    if (group === null) return;
+    draggingKeysRef.current = null;
+
+    if (!cancelled && justDraggedRef.current && dropIndexRef.current !== null) {
+      const finalDropIndex = dropIndexRef.current;
+      // Seeds this render's FLIP baseline for each dropped card to its last
+      // floating position, computed the same way the overlay below renders
+      // it - so instead of popping into its final slot, it's picked up by
+      // the same "animate from previous rect" effect that already handles
+      // every other displaced card, and visibly flies in from wherever it
+      // was actually hovering.
+      const startRect = dragStartRectRef.current;
+      if (startRect) {
+        const width = startRect.right - startRect.left;
+        const height = startRect.bottom - startRect.top;
+        for (const groupKey of group) {
+          const offset = dragOffsetsRef.current.get(groupKey) ?? { x: 0, y: 0 };
+          const left = startRect.left + dragDeltaRef.current.x + offset.x;
+          const top = startRect.top + dragDeltaRef.current.y + offset.y;
+          prevRectsRef.current.set(groupKey, { left, top, right: left + width, bottom: top + height });
+        }
+      }
+      setOrderKeys((prev) => {
+        // A card in the dragged group may have left the hand mid-drag (e.g.
+        // a play/exchange resolving through another input path while this
+        // one was still held) - the render-time reconcile already dropped
+        // its key from `prev` in that case. Re-inserting it here regardless
+        // would resurrect a dead slot key with no matching card, which then
+        // lingers in orderKeys (and gets persisted to localStorage/the
+        // server) forever, since resolveVisualOrder silently skips keys it
+        // can't match instead of surfacing the mismatch.
+        const stillDraggedGroup = group.filter((k) => prev.includes(k));
+        if (stillDraggedGroup.length === 0) return prev;
+        const remaining = prev.filter((k) => !stillDraggedGroup.includes(k));
+        const clamped = Math.max(0, Math.min(finalDropIndex, remaining.length));
+        return [...remaining.slice(0, clamped), ...stillDraggedGroup, ...remaining.slice(clamped)];
       });
     }
-    const hit = document.elementFromPoint(event.clientX, event.clientY);
-    const hovered = hit instanceof Element ? hit.closest<HTMLElement>("[data-key]") : null;
-    const hoveredKey = hovered?.dataset.key;
-    // No target, or hovering over a slot that's already part of the dragged
-    // group, is a no-op - only a real cross-slot move counts as "dragged"
-    // for click-suppression purposes, same as the single-card case.
-    if (!hoveredKey || draggingKeys.includes(hoveredKey)) return;
-    justDraggedRef.current = true;
-    setOrderKeys((prev) => {
-      const remaining = prev.filter((existingKey) => !draggingKeys.includes(existingKey));
-      const hoveredRemainingIndex = remaining.indexOf(hoveredKey);
-      if (hoveredRemainingIndex === -1) return prev;
-      // Whether the hovered slot was originally ahead of or behind the
-      // dragged group decides which side of it the group lands on - matches
-      // the single-card drag's existing feel (swap into the hovered slot,
-      // displacing it toward where the drag came from) and, unlike always
-      // inserting on a fixed side, generalizes correctly to a multi-card
-      // group instead of collapsing every hover onto one edge of the hand
-      // once the group spans more than one removed slot. Uses the group's
-      // own leading edge (its lowest original index), not whichever member
-      // happened to be grabbed - two different cards in the same selection
-      // dragged to the same hovered slot must produce the same result.
-      const groupOriginIndex = Math.min(...draggingKeys.map((k) => prev.indexOf(k)));
-      const hoveredOriginalIndex = prev.indexOf(hoveredKey);
-      const insertAt =
-        hoveredOriginalIndex > groupOriginIndex ? hoveredRemainingIndex + 1 : hoveredRemainingIndex;
-      return [...remaining.slice(0, insertAt), ...draggingKeys, ...remaining.slice(insertAt)];
-    });
-  }
-
-  function endDrag() {
     setDraggingKeys(null);
+    setDropIndex(null);
+    dragPointerIdRef.current = null;
     dragOriginRef.current = null;
     setDragDelta({ x: 0, y: 0 });
+    dragStartRectRef.current = null;
+    dragOffsetsRef.current = new Map();
+    if (cancelled) justDraggedRef.current = false;
+    else if (justDraggedRef.current) {
+      // A pointer released outside the hand may not produce the trailing
+      // click that handleClickCapture uses to clear this flag. Expire it at
+      // the end of the current browser task so an actual trailing click is
+      // still suppressed, while the next unrelated click is not swallowed.
+      window.setTimeout(() => {
+        justDraggedRef.current = false;
+      }, 0);
+    }
   }
 
-  // Without pointer capture (see handlePointerDown), a mouse release outside
-  // every card slot - e.g. dragging up into the score board above the hand,
-  // a perfectly natural gesture - would never fire any slot's onPointerUp,
-  // leaving the drag stuck. A window-level listener guarantees the drag
-  // always ends wherever the pointer actually comes up.
+  // Without pointer capture (see handleCardPointerDown), a mouse release
+  // outside the panel - e.g. dragging up into the score board above the
+  // hand, a perfectly natural gesture - would never fire the container's
+  // own onPointerUp, leaving the drag stuck. A window-level listener
+  // guarantees the drag always ends wherever the pointer actually comes up.
   useEffect(() => {
     if (draggingKeys === null) return;
-    window.addEventListener("pointerup", endDrag);
-    window.addEventListener("pointercancel", endDrag);
+    function handleWindowPointerMove(event: PointerEvent) {
+      updateDragPointer(event.clientX, event.clientY, event.buttons, event.pointerId);
+    }
+    function handleWindowPointerUp(event: PointerEvent) {
+      endDrag(false, event.pointerId);
+    }
+    function handleWindowPointerCancel(event: PointerEvent) {
+      endDrag(true, event.pointerId);
+    }
+    window.addEventListener("pointermove", handleWindowPointerMove);
+    window.addEventListener("pointerup", handleWindowPointerUp);
+    window.addEventListener("pointercancel", handleWindowPointerCancel);
     return () => {
-      window.removeEventListener("pointerup", endDrag);
-      window.removeEventListener("pointercancel", endDrag);
+      window.removeEventListener("pointermove", handleWindowPointerMove);
+      window.removeEventListener("pointerup", handleWindowPointerUp);
+      window.removeEventListener("pointercancel", handleWindowPointerCancel);
     };
     // Only the active/inactive transition needs to (re)install the
-    // listeners - `endDrag` is stable across renders in everything that
-    // matters (it doesn't close over per-render values).
+    // listeners - endDrag reads dropIndexRef/dragDeltaRef (always current)
+    // rather than closing over dropIndex/dragDelta, so the specific closure
+    // instance attached here doesn't need to be refreshed on every update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draggingKeys !== null]);
 
@@ -496,24 +741,22 @@ export default function PlayerHand({
     const hits: number[] = [];
     for (const entry of visualEntries) {
       const el = slotRefs.current.get(entry.key);
-      if (el && rectsIntersect(rect, el.getBoundingClientRect())) hits.push(entry.handIndex);
+      const card = el?.querySelector<HTMLElement>('[data-testid="card"]');
+      const cardBounds = card?.getBoundingClientRect();
+      const bounds = cardBounds && (cardBounds.width > 0 || cardBounds.height > 0)
+        ? cardBounds
+        : el?.getBoundingClientRect();
+      if (bounds && rectsIntersect(rect, bounds)) hits.push(entry.handIndex);
     }
     return hits;
   }
 
-  function handleContainerPointerDown(event: React.PointerEvent<HTMLDivElement>) {
-    if (event.pointerType === "mouse" && event.button !== 0) return;
-    // Only a press directly on the panel's empty space starts a marquee -
-    // a press that bubbled up from a card slot (its target is deep inside
-    // that slot, not this container) is a card drag/click instead, already
-    // handled by handlePointerDown above.
-    if (event.target !== event.currentTarget) return;
-    const containerRect = event.currentTarget.getBoundingClientRect();
-    const start: Point = { x: event.clientX, y: event.clientY };
-    // Bound to this gesture's specific pointer so a second, unrelated
-    // pointer touching down mid-marquee (e.g. an accidental second touch
-    // point on mobile) can't feed its moves into this one.
-    const pointerId = event.pointerId;
+  function beginMarquee(clientX: number, clientY: number, pointerId: number) {
+    if (!containerRef.current) return;
+    if (dragPointerIdRef.current !== null || marqueePointerIdRef.current !== null) return;
+    marqueePointerIdRef.current = pointerId;
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const start: Point = { x: clientX, y: clientY };
     setMarquee({
       startX: start.x,
       startY: start.y,
@@ -530,13 +773,15 @@ export default function PlayerHand({
       if (moveEvent.pointerId !== pointerId) return;
       const cur: Point = { x: moveEvent.clientX, y: moveEvent.clientY };
       setMarquee((prev) => (prev ? { ...prev, curX: cur.x, curY: cur.y } : prev));
-      // Reads the ref rather than the `visualEntries` closed over above, so
-      // a hand change mid-drag (a play resolving, a server update landing)
-      // is reflected immediately instead of hit-testing a stale mapping.
+      // Reads the ref rather than a `visualEntries` closed over at gesture
+      // start, so a hand change mid-drag (a play resolving, a server
+      // update landing) is reflected immediately instead of hit-testing a
+      // stale mapping.
       applySelection(computeMarqueeHits(rectFromPoints(start, cur), visualEntriesRef.current));
     }
     function handleUp(upEvent: PointerEvent) {
       if (upEvent.pointerId !== pointerId) return;
+      marqueePointerIdRef.current = null;
       setMarquee(null);
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
@@ -550,25 +795,79 @@ export default function PlayerHand({
     window.addEventListener("pointercancel", handleUp);
   }
 
+  function handleContainerPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    // Only a press directly on the panel's empty space starts a marquee -
+    // a press that bubbled up from a card slot (its target is deep inside
+    // that slot, not this container) is a card drag/click instead, already
+    // handled by handleCardPointerDown above.
+    if (event.target !== event.currentTarget) return;
+    beginMarquee(event.clientX, event.clientY, event.pointerId);
+  }
+
+  function handleCardKeyDown(
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    key: string,
+    handIndex: number,
+    visualEntries: { key: string; handIndex: number }[],
+  ) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+      const currentIndex = visualEntries.findIndex((entry) => entry.key === key);
+      const targetIndex = currentIndex + (event.key === "ArrowLeft" ? -1 : 1);
+      if (targetIndex < 0 || targetIndex >= visualEntries.length) return;
+      selectKeyboardRange(key, visualEntries, visualEntries[targetIndex].key);
+      event.preventDefault();
+      return;
+    }
+    if (event.shiftKey && (event.key === "Enter" || event.key === " ")) {
+      selectKeyboardRange(key, visualEntries, key);
+      event.preventDefault();
+      return;
+    }
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    const group =
+      selected.length > 1 && selected.includes(handIndex)
+        ? visualEntries.filter((entry) => selected.includes(entry.handIndex)).map((entry) => entry.key)
+        : [key];
+    const keys = visualEntries.map((entry) => entry.key);
+    const indices = group.map((groupKey) => keys.indexOf(groupKey));
+    const minIndex = Math.min(...indices);
+    const maxIndex = Math.max(...indices);
+    const movingLeft = event.key === "ArrowLeft";
+    const adjacentIndex = movingLeft ? minIndex - 1 : maxIndex + 1;
+    if (adjacentIndex < 0 || adjacentIndex >= keys.length) return;
+    const remaining = keys.filter((candidate) => !group.includes(candidate));
+    const adjacentKey = keys[adjacentIndex];
+    const insertionIndex = movingLeft
+      ? remaining.indexOf(adjacentKey)
+      : remaining.indexOf(adjacentKey) + 1;
+    setOrderKeys([
+      ...remaining.slice(0, insertionIndex),
+      ...group,
+      ...remaining.slice(insertionIndex),
+    ]);
+    event.preventDefault();
+  }
+
+  useImperativeHandle(ref, () => ({
+    startMarqueeFrom: (event) => beginMarquee(event.clientX, event.clientY, event.pointerId),
+  }));
+
   // FLIP reflow for every reorder (drag-triggered or a hand-shape change
-  // filling a gap): compares each non-dragged slot's position just before
-  // this render to where it landed just after, and if it moved, animates
-  // from the old position to the new one instead of letting it pop.
-  // Dragged slots are skipped here - their position is driven by the
-  // pointer-follow transform below instead, and comparing their rect while
-  // that transform is active would (harmlessly) produce a "settle back into
-  // place" animation on drop, since prevRects captured a lifted position.
+  // filling a gap): compares each slot's position just before this render
+  // to where it landed just after, and if it moved, animates from the old
+  // position to the new one instead of letting it pop.
   useLayoutEffect(() => {
     const prevRects = prevRectsRef.current;
-    const draggingSet = new Set(draggingKeys ?? []);
     slotRefs.current.forEach((el, key) => {
-      if (draggingSet.has(key)) return;
       const prev = prevRects.get(key);
       if (!prev) return;
       const next = el.getBoundingClientRect();
       const dx = prev.left - next.left;
       const dy = prev.top - next.top;
       if (!dx && !dy) return;
+      if (prefersReducedMotion) return;
       el.style.transition = "none";
       el.style.transform = `translate(${dx}px, ${dy}px)`;
       // Forces the browser to paint the "from" position above before the
@@ -582,31 +881,9 @@ export default function PlayerHand({
     });
 
     const nextRects = new Map<string, ClientRectLike>();
-    slotRefs.current.forEach((el, key) => {
-      const rect = el.getBoundingClientRect();
-      // A dragging slot's own measured rect includes the pointer-follow
-      // transform's offset (see the style block below) - recording that
-      // directly would bake today's arbitrary lift position in as this
-      // card's baseline, producing a bogus slide-in animation from a
-      // position it never rested at the next time some *other* reorder
-      // moves it. Subtracting the known live delta recovers its actual
-      // resting position in the grid, same as every non-dragging slot's
-      // rect already reflects.
-      nextRects.set(
-        key,
-        draggingSet.has(key)
-          ? {
-              left: rect.left - dragDelta.x,
-              top: rect.top - dragDelta.y,
-              right: rect.right - dragDelta.x,
-              bottom: rect.bottom - dragDelta.y,
-            }
-          : rect,
-      );
-    });
+    slotRefs.current.forEach((el, key) => nextRects.set(key, el.getBoundingClientRect()));
     prevRectsRef.current = nextRects;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderKeys]);
+  }, [orderKeys, prefersReducedMotion]);
 
   const visualEntries = resolveVisualOrder(orderKeys, hand);
   // Refs can't be written during render (React lint rule) - this mirrors it
@@ -631,6 +908,32 @@ export default function PlayerHand({
     );
   }
 
+  // Only once a press has actually crossed the drag threshold does a card
+  // leave its normal grid slot for the floating overlay - a stationary
+  // press (an ordinary click) never touches this, so it never risks a
+  // native pointerup/click resolving to the wrong element (see
+  // DRAG_ACTIVATION_THRESHOLD_PX above).
+  const isActivelyDragging =
+    draggingKeys !== null && Math.hypot(dragDelta.x, dragDelta.y) > DRAG_ACTIVATION_THRESHOLD_PX;
+
+  type DisplayItem =
+    | { type: "card"; key: string; handIndex: number }
+    | { type: "placeholder" };
+
+  let displayItems: DisplayItem[];
+  if (isActivelyDragging && draggingKeys) {
+    const remaining = visualEntries.filter((entry) => !draggingKeys.includes(entry.key));
+    const clampedDropIndex = Math.max(0, Math.min(dropIndex ?? remaining.length, remaining.length));
+    const asCards = remaining.map((entry) => ({ type: "card" as const, key: entry.key, handIndex: entry.handIndex }));
+    displayItems = [
+      ...asCards.slice(0, clampedDropIndex),
+      { type: "placeholder" as const },
+      ...asCards.slice(clampedDropIndex),
+    ];
+  } else {
+    displayItems = visualEntries.map((entry) => ({ type: "card" as const, key: entry.key, handIndex: entry.handIndex }));
+  }
+
   const marqueeRect = marquee
     ? {
         left: Math.min(marquee.startX, marquee.curX) - marquee.containerLeft,
@@ -642,7 +945,10 @@ export default function PlayerHand({
 
   return (
     <div
+      ref={containerRef}
       data-testid="player-hand"
+      aria-label="Your hand"
+      aria-describedby="player-hand-instructions"
       // w-full (not shrink-wrapped to the cards) so there's real empty
       // panel space to start a marquee drag from - this sits inside a
       // `flex-col items-start` parent (app/game/[id]/page.tsx), which
@@ -651,18 +957,20 @@ export default function PlayerHand({
       className="relative flex w-full flex-wrap gap-1"
       onClickCapture={handleClickCapture}
       onPointerDown={handleContainerPointerDown}
+      onPointerUp={(event) => endDrag(false, event.pointerId)}
+      onPointerCancel={(event) => endDrag(true, event.pointerId)}
     >
-      {visualEntries.map(({ key, handIndex }) => {
-        const isDragging = draggingKeys?.includes(key) ?? false;
-        // Real movement, not just "a pointer is currently down on this
-        // card" - pointerdown alone (a stationary click) must leave this
-        // slot hit-testable, or the browser's native pointerup/click ends
-        // up targeting whatever's beneath it (here, the panel background)
-        // instead of the card button, silently breaking every plain click
-        // in a real browser. jsdom's fireEvent dispatches straight at a
-        // target regardless of pointer-events, so this only ever showed up
-        // testing an actual rendered page.
-        const isActivelyDragging = isDragging && (dragDelta.x !== 0 || dragDelta.y !== 0);
+      {displayItems.map((item) => {
+        if (item.type === "placeholder") {
+          return (
+            <div
+              key="__drop-placeholder__"
+              data-testid="drop-placeholder"
+              className="h-20 w-14 rounded-xl border-2 border-dashed border-blue-300 sm:h-24 sm:w-16"
+            />
+          );
+        }
+        const { key, handIndex } = item;
         return (
           <div
             key={key}
@@ -672,46 +980,46 @@ export default function PlayerHand({
             }}
             data-testid="hand-card-slot"
             data-key={key}
-            style={{
-              touchAction: "none",
-              userSelect: "none",
-              ...(isDragging
-                ? {
-                    transform: `translate(${dragDelta.x}px, ${dragDelta.y}px) scale(1.06)`,
-                    zIndex: 30,
-                    ...(isActivelyDragging
-                      ? // Lets elementFromPoint hit-test the slot underneath
-                        // the lifted card instead of the lifted card itself.
-                        { pointerEvents: "none" as const }
-                      : undefined),
-                  }
-                : undefined),
-            }}
-            className={
-              isDragging
-                ? // No `transform` in this transition-property: the dragged
-                  // slot's transform is driven directly every pointermove
-                  // (see handlePointerMove) and must track the pointer with
-                  // zero lag, not ease toward it.
-                  "shadow-xl transition-[box-shadow] duration-150 ease-out"
-                : // Covers the FLIP reflow effect below, which drives this
-                  // slot's transform imperatively (set, then cleared next
-                  // frame) whenever a reorder displaces it.
-                  "transition-[transform,box-shadow] duration-200 ease-out"
-            }
-            onPointerDown={(event) => handlePointerDown(event, key, handIndex, visualEntries)}
-            onPointerMove={handlePointerMove}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
+            style={{ touchAction: "none", userSelect: "none" }}
+            className={prefersReducedMotion ? undefined : "transition-[transform,box-shadow] duration-200 ease-out"}
+            onPointerDown={(event) => handleCardPointerDown(event, key, handIndex, visualEntries)}
           >
-            <Card
-              card={hand[handIndex]}
-              selected={selected.includes(handIndex)}
-              onClick={(event) => handleCardClick(event, handIndex, key, visualEntries)}
-            />
+              <Card
+                card={hand[handIndex]}
+                selected={selected.includes(handIndex)}
+                onClick={(event) => handleCardClick(event, handIndex, key, visualEntries)}
+                onKeyDown={(event) => handleCardKeyDown(event, key, handIndex, visualEntries)}
+              />
           </div>
         );
       })}
+      {isActivelyDragging &&
+        draggingKeys &&
+        dragStartRectRef.current &&
+        draggingKeys.map((key) => {
+          const entry = visualEntries.find((candidate) => candidate.key === key);
+          if (!entry) return null;
+          const offset = dragOffsetsRef.current.get(key) ?? { x: 0, y: 0 };
+          const startRect = dragStartRectRef.current!;
+          return (
+            <div
+              key={key}
+              aria-hidden="true"
+              data-testid="dragging-card"
+              style={{
+                position: "fixed",
+                left: startRect.left + dragDelta.x + offset.x,
+                top: startRect.top + dragDelta.y + offset.y,
+                zIndex: 50,
+                pointerEvents: "none",
+                transform: prefersReducedMotion ? undefined : "scale(1.06)",
+              }}
+              className="shadow-xl"
+            >
+              <Card card={hand[entry.handIndex]} selected={selected.includes(entry.handIndex)} />
+            </div>
+          );
+        })}
       {marqueeRect && (
         <div
           data-testid="marquee-select-box"
@@ -719,6 +1027,17 @@ export default function PlayerHand({
           style={marqueeRect}
         />
       )}
+      <span id="player-hand-instructions" className="sr-only">
+        Click a card to select it. Shift-click, Shift+Enter, or Shift+Arrow selects a range. Use the
+        left and right arrow keys to reorder the focused card or selected group. Drag from empty
+        space to select cards with a box, or drag selected cards to move them together.
+      </span>
+      <span aria-live="polite" className="sr-only">
+        {selected.length} card{selected.length === 1 ? "" : "s"} selected
+        {marquee ? "; selecting with box" : ""}
+      </span>
     </div>
   );
-}
+});
+
+export default PlayerHand;
