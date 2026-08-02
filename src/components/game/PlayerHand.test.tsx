@@ -428,6 +428,29 @@ describe("PlayerHand", () => {
       expect(within(slots[0]).getByTestId("card")).toHaveAttribute("aria-pressed", "true");
     });
 
+    it("does not re-run the FLIP layout pass for a plain click (regression: draggingKeys/dropIndex are also seeded and cleared on every press, not just real drags)", () => {
+      render(<PlayerHand hand={HAND} />);
+      const slots = screen.getAllByTestId("hand-card-slot");
+      const container = screen.getByTestId("player-hand");
+      slots.forEach((slot, i) => stubRect(slot, { left: i * 100, top: 0, right: i * 100 + 90, bottom: 90 }));
+      // Excludes slot 0 (the grabbed card): handleCardPointerDown always
+      // reads its own currentTarget rect to seed drag state, on every press
+      // regardless of whether it turns into a real drag - that's expected,
+      // unrelated to the FLIP pass this test is isolating. The other slots
+      // have no legitimate reason to be measured at all for a plain click.
+      const otherRectMocks = slots.slice(1).map((slot) => slot.getBoundingClientRect as jest.Mock);
+      const callsBefore = otherRectMocks.reduce((sum, mock) => sum + mock.mock.calls.length, 0);
+
+      firePointerEvent("pointerdown", slots[0], { clientX: 0, clientY: 0 });
+      // A plain click's jitter never exceeds the drag-activation threshold.
+      firePointerEvent("pointermove", container, { clientX: 1, clientY: 0 });
+      firePointerEvent("pointerup", container);
+      fireEvent.click(within(slots[0]).getByTestId("card"));
+
+      const callsAfter = otherRectMocks.reduce((sum, mock) => sum + mock.mock.calls.length, 0);
+      expect(callsAfter).toBe(callsBefore);
+    });
+
     it("keeps selection attached to the dragged card's identity, not its slot", () => {
       render(<PlayerHand hand={HAND} />);
       const slots = screen.getAllByTestId("hand-card-slot");
