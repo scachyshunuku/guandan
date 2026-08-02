@@ -1,6 +1,6 @@
 "use client";
 
-import { pluralize } from "@/lib/format";
+import { pluralize, teamForPosition, teamTextClass } from "@/lib/format";
 import type { PlayerPosition } from "@/lib/types";
 
 export interface PlayerCardProps {
@@ -26,7 +26,8 @@ export default function PlayerCard({
   // Team A = positions 0 & 2, Team B = positions 1 & 3 (lib/types.ts's
   // `Team` type) — shown instead of the compass seat (north/south/east/west)
   // since players care which team someone's on, not where they're sitting.
-  const teamLabel = position % 2 === 0 ? "Team A" : "Team B";
+  const team = teamForPosition(position);
+  const teamLabel = team === 0 ? "Team A" : "Team B";
 
   return (
     <div
@@ -50,7 +51,7 @@ export default function PlayerCard({
       </span>
       <span
         data-testid="team-label"
-        className="text-xs uppercase text-gray-400"
+        className={`text-xs uppercase ${teamTextClass(team)}`}
       >
         {teamLabel}
       </span>

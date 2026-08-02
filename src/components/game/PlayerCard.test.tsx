@@ -14,18 +14,20 @@ describe("PlayerCard", () => {
     );
   });
 
-  it("shows Team A for positions 0 and 2", () => {
+  it.each([0, 2] as const)("shows Team A for position %i", (position) => {
     render(
-      <PlayerCard playerName="Alice" position={0} isConnected cardCount={13} />,
+      <PlayerCard playerName="Alice" position={position} isConnected cardCount={13} />,
     );
     expect(screen.getByTestId("team-label")).toHaveTextContent("Team A");
+    expect(screen.getByTestId("team-label")).toHaveClass("text-blue-600");
   });
 
-  it("shows Team B for positions 1 and 3", () => {
+  it.each([1, 3] as const)("shows Team B for position %i", (position) => {
     render(
-      <PlayerCard playerName="Dave" position={3} isConnected cardCount={13} />,
+      <PlayerCard playerName="Dave" position={position} isConnected cardCount={13} />,
     );
     expect(screen.getByTestId("team-label")).toHaveTextContent("Team B");
+    expect(screen.getByTestId("team-label")).toHaveClass("text-orange-600");
   });
 
   it("marks the viewer's own seat", () => {
