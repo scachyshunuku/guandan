@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import { PASS } from "@/lib/types";
 import type {
   GameParticipant,
@@ -64,42 +65,64 @@ export default function GameTable({
     1,
     ...ALL_POSITIONS.map((position) => playsByPosition.get(position)?.length ?? 0),
   );
+  // Each play gets a max-content column, with a dedicated one-pixel column
+  // between it and the next older play. Dedicated divider columns can span
+  // every seat row, so the separator stays continuous even when a row has no
+  // play in that round.
+  const trickColumns = Array.from({ length: maxRounds }, (_, i) =>
+    i < maxRounds - 1 ? ["max-content", "1px"] : ["max-content"],
+  ).flat();
+  const gridTemplateColumns = ["max-content", ...trickColumns].join(" ");
 
   return (
     <div
       data-testid="game-table"
       className="flex w-full flex-col items-start gap-2 py-2 sm:gap-4 sm:py-4"
     >
-      {/* One shared grid (not four independent rows) so a given round's
-          plays land in the same column for every seat. Wrapped in
-          overflow-x-auto rather than letting a long-running trick's cards
-          wrap onto a second line, which reads as a mess once several seats
-          have gone around more than once. The seat column stays sticky so
-          it's still visible after scrolling to see later rounds. */}
-      <div className="w-full overflow-x-auto">
+      {/* The seats live outside the horizontal scroller, so they remain
+          visible while only the trick columns move. Both grids share the
+          outer grid's four row tracks via CSS subgrid, keeping each play
+          aligned with its player card. */}
+      <div
+        className="grid w-full grid-cols-[max-content_minmax(0,1fr)] items-stretch gap-x-3 gap-y-2 sm:gap-y-3"
+        style={{ gridTemplateRows: "repeat(4, auto)" }}
+      >
+        {ALL_POSITIONS.map((position, rowIndex) => (
+          <div
+            key={position}
+            data-testid={`seat-position-${position}`}
+            className="flex items-center"
+            style={{ gridColumn: 1, gridRow: rowIndex + 1 }}
+          >
+            {renderSeat(position, byPosition.get(position), round, myPosition)}
+          </div>
+        ))}
         <div
-          className="grid items-center gap-x-2 gap-y-2 sm:gap-y-3"
-          style={{ gridTemplateColumns: `auto repeat(${maxRounds}, auto)` }}
+          data-testid="trick-scroll-container"
+          className="grid min-w-0 overflow-x-auto justify-start items-center gap-x-4"
+          style={{
+            gridColumn: 2,
+            gridRow: "1 / -1",
+            gridTemplateColumns,
+            gridTemplateRows: "subgrid",
+          }}
         >
-          {ALL_POSITIONS.map((position, rowIndex) => (
-            // display:contents keeps this element out of the box tree so
-            // its children are the grid's actual items (and so every seat's
-            // Nth-round column lines up with every other seat's), while
-            // still giving the seat + its plays a shared testid ancestor
-            // for tests to query into, same as when they were a flex row.
+          {Array.from({ length: maxRounds - 1 }, (_, i) => (
             <div
-              key={position}
-              data-testid={`seat-position-${position}`}
-              className="contents"
-            >
-              <div
-                className="sticky left-0 z-10 bg-slate-100"
-                style={{ gridRow: rowIndex + 1, gridColumn: 1 }}
-              >
-                {renderSeat(position, byPosition.get(position), round, myPosition)}
-              </div>
-              {renderPlays(playsByPosition.get(position), rowIndex)}
-            </div>
+              key={`trick-divider-${i}`}
+              data-testid="trick-display-divider"
+              aria-hidden="true"
+              className="pointer-events-none self-stretch z-0 border-l border-gray-200"
+              style={{
+                gridRow: "1 / span 4",
+                gridColumn: 3 + i * 2,
+              }}
+            />
+          ))}
+          {ALL_POSITIONS.map((position, rowIndex) => (
+            <Fragment key={position}>
+              {renderPlays(playsByPosition.get(position), rowIndex, maxRounds)}
+            </Fragment>
           ))}
         </div>
       </div>
@@ -137,11 +160,17 @@ function renderSeat(
 }
 
 // undefined/empty means this position hasn't acted yet this trick. `plays`
-// is oldest-first (turn order) and each entry is rendered into the grid
-// column matching its round number (index + 2 — column 1 is the seat), so
-// round 1 lines up under every other seat's round 1, round 2 under round 2,
-// and so on, rather than each seat's plays only lining up with themselves.
-function renderPlays(plays: TrickPlay[] | undefined, rowIndex: number) {
+// is oldest-first (turn order), but the newest entry is rendered in the
+// leftmost trick column so each new play appears beside the fixed seat and
+// pushes older plays to the right. The interleaved divider columns mean play
+// columns are 2, 4, 6, ...; `2 + (maxRounds - i - 1) * 2` keeps each seat's
+// Nth play aligned with every other seat's Nth play while reversing the
+// visual order of the columns.
+function renderPlays(
+  plays: TrickPlay[] | undefined,
+  rowIndex: number,
+  maxRounds: number,
+) {
   if (!plays || plays.length === 0) {
     return (
       <span
@@ -158,10 +187,11 @@ function renderPlays(plays: TrickPlay[] | undefined, rowIndex: number) {
     <div
       key={i}
       data-testid="trick-display-round"
-      className={`flex items-center ${
-        i > 0 ? "border-l border-gray-200 pl-2" : ""
-      }`}
-      style={{ gridRow: rowIndex + 1, gridColumn: i + 2 }}
+      className="flex items-center"
+      style={{
+        gridRow: rowIndex + 1,
+        gridColumn: 2 + (maxRounds - i - 1) * 2,
+      }}
     >
       {play === PASS ? (
         <PassCard />

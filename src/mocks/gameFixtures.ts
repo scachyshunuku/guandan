@@ -1,8 +1,7 @@
-// Static fixtures for the game page's layout/CSS-only mock at
-// /mocks/game-preview - lets us eyeball layout changes (e.g. the history
-// panel's height matching the game table) without spinning up the DB-backed
-// game flow (create → join → fill-with-bots → start) just to get pixels on
-// screen.
+// Fixtures for the interactive, DB-free game preview at /mocks/game-preview.
+// The preview uses these values to exercise the real table, hand, and action
+// components without spinning up the DB-backed game flow (create → join →
+// fill-with-bots → start) just to get pixels on screen.
 
 import { PASS } from "@/lib/types";
 import type {
@@ -13,6 +12,7 @@ import type {
   GameActionData,
   GameActionType,
   GameParticipant,
+  CardWithWild,
   PlayerPosition,
   Rank,
   Suit,
@@ -52,7 +52,7 @@ export const mockParticipants: GameParticipant[] = [
     playerId: "player-0",
     position: 0,
     hand: [],
-    handCount: 13,
+    handCount: 10,
     handOrder: null,
     isConnected: true,
     connectedAt: "",
@@ -122,18 +122,39 @@ export const mockParticipants: GameParticipant[] = [
   },
 ];
 
-// A trick that's gone around more than once (RULES.md - a trick only ends
-// after three consecutive passes), so GameTable's grid has several columns -
-// exercises its horizontal overflow-x-auto alongside the history panel's
-// vertical sizing.
-export const mockCurrentTrick: CurrentTrick = [
-  { position: 0, play: [card("7", "SPADES")] },
-  { position: 1, play: PASS },
-  { position: 2, play: [card("7", "HEARTS")] },
-  { position: 3, play: PASS },
-  { position: 0, play: [card("KING", "CLUBS"), card("KING", "DIAMONDS")] },
-  { position: 2, play: PASS },
+// A face-up hand for Player 1. It contains several pairs, including K♠/K♦,
+// which is a legal response to Player 4's J♥/J♠ in the mock trick below.
+export const mockHand: CardWithWild[] = [
+  card("3", "CLUBS"),
+  card("3", "DIAMONDS"),
+  card("5", "HEARTS"),
+  card("5", "SPADES"),
+  card("KING", "SPADES"),
+  card("KING", "DIAMONDS"),
+  card("QUEEN", "HEARTS"),
+  card("QUEEN", "SPADES"),
+  card("ACE", "CLUBS"),
+  card("ACE", "DIAMONDS"),
 ];
+
+// A valid double-play trick that has gone around more than once (RULES.md - a
+// trick only ends after three consecutive passes), so GameTable's grid has
+// several columns and the interactive preview can show K♠/K♦ beating the
+// final J♥/J♠ play.
+export const mockCurrentTrick: CurrentTrick = [
+  { position: 0, play: [card("2", "HEARTS"), card("2", "SPADES")] },
+  { position: 1, play: PASS },
+  { position: 2, play: [card("4", "SPADES"), card("4", "CLUBS")] },
+  { position: 3, play: [card("6", "HEARTS"), card("6", "DIAMONDS")] },
+  { position: 0, play: PASS },
+  { position: 1, play: PASS },
+  { position: 2, play: [card("8", "SPADES"), card("8", "SPADES")] },
+  { position: 3, play: [card("JACK", "HEARTS"), card("JACK", "SPADES")] },
+];
+
+// Kept as a named alias so the preview makes its interactive fixture
+// dependency explicit while other callers can use the full trick fixture.
+export const mockInteractiveTrick: CurrentTrick = mockCurrentTrick;
 
 // Long enough to force real scrolling inside the history panel - the whole
 // point of this fixture is to prove the panel clips to the game table's
