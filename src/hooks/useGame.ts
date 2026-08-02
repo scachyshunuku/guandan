@@ -127,6 +127,10 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
   const hand = useGameStore((s) => s.hand);
   const currentTrick = useGameStore((s) => s.currentTrick);
   const currentPlayerTurn = useGameStore((s) => s.currentPlayerTurn);
+  // Exposed so GamePage can detect a fresh round starting (roundId changing)
+  // the same way this hook's own onRoundUpdate does, to know when to show a
+  // round-end placements summary.
+  const roundId = useGameStore((s) => s.roundId);
   const roundStatus = useGameStore((s) => s.roundStatus);
   const finishingPositions = useGameStore((s) => s.finishingPositions);
   const pendingTributeChoice = useGameStore((s) => s.pendingTributeChoice);
@@ -547,6 +551,7 @@ export function useGame({ gameId, playerId }: UseGameOptions) {
     myHandOrder: gameStateQuery.data?.myHandOrder ?? null,
     currentTrick,
     currentPlayerTurn,
+    roundId,
     roundStatus,
     finishingPositions,
     pendingTributeChoice,

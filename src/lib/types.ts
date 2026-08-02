@@ -169,6 +169,7 @@ export type GameActionType =
   | "pass"
   | "trick_end"
   | "player_finished"
+  | "round_ended"
   | "card_exchange"
   | "tribute_cancelled"
   | "join"
@@ -253,6 +254,19 @@ export interface PlayerFinishedActionData {
   place: 1 | 2 | 3 | 4;
 }
 
+// Logged by end-hand once a round concludes (RULES.md "Round End") - carries
+// every seat's finishing place (1st-4th) in one entry, unlike
+// PlayerFinishedActionData, which only fires for a seat that actually played
+// out its last card. A 1-2/1-3/1-4 finish always auto-assigns at least one
+// seat's place without them playing it out (RULES.md: "the 4th is
+// automatically placed last"; a 1-2 finish assigns 3rd/4th outright), so this
+// is the only entry that's guaranteed to account for all four seats.
+export interface RoundEndedActionData {
+  // Indexed by seat position; value is that seat's finishing place (1-4) -
+  // same shape as GameRound.finishingPositions.
+  finishingPositions: number[];
+}
+
 export interface CardExchangeActionData {
   from: PlayerPosition;
   to: PlayerPosition;
@@ -289,6 +303,7 @@ export type GameActionData =
   | PassActionData
   | TrickEndActionData
   | PlayerFinishedActionData
+  | RoundEndedActionData
   | CardExchangeActionData
   | TributeCancelledActionData
   | JoinActionData

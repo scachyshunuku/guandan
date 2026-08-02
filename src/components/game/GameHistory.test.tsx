@@ -273,6 +273,32 @@ describe("GameHistory", () => {
     );
   });
 
+  it("describes a round_ended action, listing all four seats' places at once", () => {
+    const participants = [
+      makeParticipant({ playerName: "Alice", position: 0 }),
+      makeParticipant({ id: "id-2", playerName: "Bob", position: 1 }),
+      makeParticipant({ id: "id-3", playerName: "Carol", position: 2 }),
+      makeParticipant({ id: "id-4", playerName: "Dave", position: 3 }),
+    ];
+    render(
+      <GameHistory
+        actions={[
+          makeAction({
+            actionType: "round_ended",
+            // Position 1 (Bob) never played out its last card - a 1-4 finish
+            // auto-places it 4th (RULES.md "Round End") - unlike
+            // player_finished, this still names them.
+            actionData: { finishingPositions: [1, 4, 2, 3] },
+          }),
+        ]}
+        participants={participants}
+      />,
+    );
+    expect(screen.getByTestId("game-history-entry")).toHaveTextContent(
+      "Round complete — 1st place: Alice, 2nd place: Carol, 3rd place: Dave, 4th place: Bob",
+    );
+  });
+
   it("renders the most recent action first", () => {
     render(
       <GameHistory
