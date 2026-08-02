@@ -65,19 +65,21 @@ function countRedJokers(hand: readonly CardWithWild[]): number {
   return hand.filter((card) => card.rank === "RED_JOKER").length;
 }
 
-// Every card in `hand` tied for the best (highest-`compareCards`) value —
-// RULES.md "Best card, when tied". Re-sorts every call rather than trusting
-// the hand's existing order — deck.ts's dealHands() sorts a hand once at
-// deal time for a nicer initial display, but that's a one-time
-// presentational sort, not an invariant: nothing keeps a hand sorted as
-// cards are added/removed by play or exchange, so this can't assume the
-// highest card is already at either end. Always returns at least one card
-// (never called with an empty hand — a giver always has cards left when
-// their round concludes with them in 3rd/4th). Exported so
+// Every eligible card in `hand` tied for the best (highest-`compareCards`)
+// value — RULES.md "Best card, when tied". A level-rank heart is a wild
+// card, so it is exempt from tribute and excluded before selecting the best
+// card. Re-sorts every call rather than trusting the hand's existing order
+// — deck.ts's dealHands() sorts a hand once at deal time for a nicer initial
+// display, but that's a one-time presentational sort, not an invariant:
+// nothing keeps a hand sorted as cards are added/removed by play or
+// exchange, so this can't assume the highest card is already at either end.
+// Always returns at least one card: a giver's 27-card double-deck hand
+// cannot consist only of the two possible level-rank hearts. Exported so
 // choose-giver-card/route.ts can re-validate a submitted card against this
 // same candidate set rather than trusting it outright.
 export function bestCardCandidates(hand: readonly CardWithWild[], levelRank: StandardRank): CardWithWild[] {
-  const sorted = sortCards(hand, levelRank);
+  const eligibleCards = hand.filter((card) => !(card.rank === levelRank && card.suit === "HEARTS"));
+  const sorted = sortCards(eligibleCards, levelRank);
   const best = sorted[sorted.length - 1];
   let start = sorted.length - 1;
   while (start > 0 && compareCards(sorted[start - 1], best, levelRank) === 0) start--;
