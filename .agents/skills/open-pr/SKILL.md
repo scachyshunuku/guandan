@@ -1,6 +1,6 @@
 ---
 name: open-pr
-description: "Open a PR for a completed Guandan implementation task. Use after verify-task has passed, or when the user asks to 'open a PR' / 'ship this task'. Writes a description with the task number, a summary of what was implemented, a verification summary (tests + focused review), a suggested file review order, UI screenshots and API request/response examples reused from the verify-task session (or captured fresh if missing) — then follows up with inline GitHub review comments annotating the harder-to-follow sections of the diff."
+description: "Open a PR for a completed Guandan implementation task. Use after verify-task has passed, or when the user asks to 'open a PR' / 'ship this task'. Writes a description with the task number, a summary of what was implemented, a verification summary (tests + subagent review), a suggested file review order, UI screenshots and API request/response examples reused from the verify-task session (or captured fresh if missing) — then follows up with inline GitHub review comments annotating the harder-to-follow sections of the diff."
 metadata:
   type: project-skill
 ---
@@ -17,7 +17,7 @@ If `verify-task` wasn't run earlier in this conversation, run it first — or ex
 
 - **Task number**: which `IMPLEMENTATION.md` task(s) this PR closes (e.g. "Task 2.2: Combination Validation").
 - **Summary**: 2-4 sentences on what was implemented and why, grounded in the actual diff — `git diff origin/main...HEAD` and `git log origin/main..HEAD`.
-- **Verification summary**: test results and the focused review's key findings from `verify-task`.
+- **Verification summary**: test results and the subagent review's key findings from `verify-task`.
 
 ## 3. Screenshots for UI changes
 
@@ -59,7 +59,7 @@ Task X.Y: <name> (IMPLEMENTATION.md)
 - [x] Unit tests passing
 - [ ] UI verified via agent-browser (screenshots below) — omit if no UI change
 - [ ] API verified via real requests (examples below) — omit if no API change
-- [x] Staff-engineer review: <one-line takeaway>
+- [x] Staff-engineer subagent review: <one-line takeaway>
 
 ## Screenshots
 <if applicable>
@@ -71,7 +71,7 @@ Task X.Y: <name> (IMPLEMENTATION.md)
 1. <file> — <why start here>
 2. ...
 
-🤖 Generated with Codex
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
 )"
 ```
