@@ -13,11 +13,12 @@ export interface CardComponentProps {
   card: CardWithWild;
   selected?: boolean;
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onKeyDown?: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
 }
 
 // Single card visual. Shows a wild-card badge when `actsAs` is present
 // (RULES.md "Level Cards & Wild Cards" — a level-rank heart played as another card).
-export default function Card({ card, selected = false, onClick }: CardComponentProps) {
+export default function Card({ card, selected = false, onClick, onKeyDown }: CardComponentProps) {
   const isJoker = card.rank === "BLACK_JOKER" || card.rank === "RED_JOKER";
   const red = isRedCard(card);
   const assetCode = encodeCard(card);
@@ -34,6 +35,7 @@ export default function Card({ card, selected = false, onClick }: CardComponentP
       data-testid="card"
       disabled={!onClick}
       onClick={onClick}
+      onKeyDown={onKeyDown}
       className={`relative flex h-20 w-14 overflow-hidden rounded-xl border bg-white shadow-sm transition-transform sm:h-24 sm:w-16 ${
         selected ? "-translate-y-2 border-blue-500 ring-2 ring-blue-100" : "border-gray-200"
       } ${red ? "text-red-600" : "text-gray-900"}`}

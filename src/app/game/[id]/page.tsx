@@ -5,7 +5,11 @@ import { useGameContext } from "./GameProvider";
 import { useGameHistory } from "@/hooks/useGameHistory";
 import type { ConnectionStatus as ConnectionStatusValue } from "@/hooks/useGame";
 import GameTable from "@/components/game/GameTable";
-import PlayerHand from "@/components/game/PlayerHand";
+import PlayerHand, {
+  remapCardIndices,
+  startHandPanelMarquee,
+  type PlayerHandHandle,
+} from "@/components/game/PlayerHand";
 import ScoreBoard from "@/components/game/ScoreBoard";
 import ActionButtons from "@/components/game/ActionButtons";
 import CardExchangeModal from "@/components/game/CardExchangeModal";
@@ -85,6 +89,16 @@ export default function GamePage() {
   } = useGameContext();
 
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
+  const playerHandRef = useRef<PlayerHandHandle>(null);
+  // Extends marquee box-select's hit area beyond PlayerHand's own tightly-
+  // wrapped bounds to the whole cards+action-buttons panel below, matching
+  // what visually reads as "the hand panel" - a press directly on a card or
+  // any button is excluded (those already have their own behavior), and so
+  // is any press that landed inside PlayerHand's own root: it already starts
+  // a marquee itself for a press on its own empty background (target ===
+  // its own currentTarget), so without this a press there would register
+  // the gesture twice - once here, once inside PlayerHand - each running its
+  // own independent set of window move/up listeners.
   // Keyed by hand index, one entry per level-rank heart the viewer has
   // already given a wild interpretation to (RULES.md "Level Cards & Wild
   // Cards") - a double deck (ARCHITECTURE.md) means a player can hold and
@@ -101,6 +115,25 @@ export default function GamePage() {
   // interpretation attached to a selection it was never chosen for.
   const [wildActsAsForSelection, setWildActsAsForSelection] =
     useState(selectedIndices);
+
+  // Selection is exposed as hand indices for the existing ActionButtons API,
+  // but realtime updates can remove a card before the next render (for
+  // example, after a successful play). Remap selected cards by identity so a
+  // removed card cannot make the next card appear selected, and clear wild
+  // interpretations because their index keys are no longer trustworthy.
+  const handSignature = hand.map((card) => encodeCard(card)).join(",");
+  const [previousHand, setPreviousHand] = useState(hand);
+  const [previousHandSignature, setPreviousHandSignature] = useState(handSignature);
+  if (previousHandSignature !== handSignature) {
+    const remapped = remapCardIndices(previousHand, hand, selectedIndices);
+    setPreviousHand(hand);
+    setPreviousHandSignature(handSignature);
+    if (remapped.some((index, i) => index !== selectedIndices[i]) || remapped.length !== selectedIndices.length) {
+      setSelectedIndices(remapped);
+    }
+    setWildActsAsByIndex({});
+    setWildActsAsForSelection(remapped);
+  }
   if (wildActsAsForSelection !== selectedIndices) {
     setWildActsAsForSelection(selectedIndices);
     setWildActsAsByIndex({});
@@ -278,11 +311,15 @@ export default function GamePage() {
   const needsWildChoice = pendingWildIndex !== undefined;
   // What actually gets validated/submitted: the raw selection, except every
   // wild-eligible card gets its own chosen actsAs attached once assigned.
-  const effectiveSelectedCards = selectedIndices.map((index) =>
-    wildActsAsByIndex[index]
-      ? { ...hand[index], actsAs: wildActsAsByIndex[index] }
-      : hand[index],
-  );
+  const effectiveSelectedCards = selectedIndices.flatMap((index) => {
+    const card = hand[index];
+    if (!card) return [];
+    return [
+      wildActsAsByIndex[index]
+        ? { ...card, actsAs: wildActsAsByIndex[index] }
+        : card,
+    ];
+  });
 
   function handlePlay(cards: CardWithWild[]) {
     setSelectedIndices([]);
@@ -485,8 +522,12 @@ export default function GamePage() {
             roundStatus === "awaiting_tribute_choice" && pendingTributeChoice
           ) &&
           (currentPlayerTurn !== null || isGivingTribute) && (
-            <div className="col-span-full flex w-full flex-col items-start gap-3">
+            <div
+              className="col-span-full flex w-full flex-col items-start gap-3"
+              onPointerDown={(event) => startHandPanelMarquee(event, playerHandRef)}
+            >
               <PlayerHand
+                ref={playerHandRef}
                 hand={hand}
                 selectedIndices={selectedIndices}
                 onSelectionChange={setSelectedIndices}

@@ -1,8 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Card from "@/components/game/Card";
-import PlayerHand from "@/components/game/PlayerHand";
+import PlayerHand, {
+  startHandPanelMarquee,
+  type PlayerHandHandle,
+} from "@/components/game/PlayerHand";
+import ActionButtons from "@/components/game/ActionButtons";
+import { STANDARD_RANK_ORDER } from "@/lib/cardUtils";
 import type { CardWithWild } from "@/lib/types";
 
 const hand: CardWithWild[] = [
@@ -14,8 +19,26 @@ const hand: CardWithWild[] = [
   { rank: "RED_JOKER" },
 ];
 
+// A realistically-sized hand (27 cards, matching what a player actually
+// holds mid-game - see the "21 cards" / "26 cards" counts in a real round)
+// for exercising multiselect drag, marquee select, and the FLIP reflow with
+// enough cards that a single-card-width gap is actually visible against the
+// rest of the row, not just a two-card demo hand.
+const bigHand: CardWithWild[] = [
+  ...STANDARD_RANK_ORDER.flatMap((rank) => [
+    { suit: "CLUBS", rank } as CardWithWild,
+    { suit: "HEARTS", rank } as CardWithWild,
+  ]),
+  { rank: "BLACK_JOKER" },
+];
+
 export default function DevPreviewPage() {
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
+  const [panelSelectedIndices, setPanelSelectedIndices] = useState<number[]>([]);
+  const [lastAction, setLastAction] = useState<string | null>(null);
+  const playerHandRef = useRef<PlayerHandHandle>(null);
+
+  const panelSelectedCards = panelSelectedIndices.map((i) => bigHand[i]);
 
   return (
     <main className="min-h-screen bg-slate-100 px-8 py-12 text-slate-900">
@@ -52,6 +75,43 @@ export default function DevPreviewPage() {
         <section className="rounded-2xl bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold">Opponent hand</h2>
           <PlayerHand hand={hand.slice(0, 4)} isOwnHand={false} />
+        </section>
+
+        <section className="rounded-2xl bg-white p-6 shadow-sm">
+          <h2 className="mb-1 text-lg font-semibold">Full panel (matches the real game layout)</h2>
+          <p className="mb-4 text-sm text-slate-600">
+            A {bigHand.length}-card hand wrapped exactly like{" "}
+            <code>app/game/[id]/page.tsx</code> - multiselect drag, the hold/drag
+            lift animation, and marquee box-select across the whole panel
+            (cards + Play/Pass, not just the card row) all work here without a
+            live game. Click to select, shift-click for a range, drag a
+            selected card to move the group, or drag from empty space in this
+            panel - including around/below the buttons - to box-select.
+          </p>
+          <div
+            data-testid="full-panel-demo"
+            className="flex w-full flex-col items-start gap-3 rounded-xl border border-dashed border-slate-300 p-4"
+            onPointerDown={(event) => startHandPanelMarquee(event, playerHandRef)}
+          >
+            <PlayerHand
+              ref={playerHandRef}
+              hand={bigHand}
+              selectedIndices={panelSelectedIndices}
+              onSelectionChange={setPanelSelectedIndices}
+            />
+            <ActionButtons
+              hand={bigHand}
+              selectedCards={panelSelectedCards}
+              currentTrick={[]}
+              levelRank="2"
+              isMyTurn
+              onPlay={(cards) => setLastAction(`Play: ${cards.length} card(s)`)}
+              onPass={() => setLastAction("Pass")}
+            />
+            {lastAction && (
+              <p className="text-sm text-slate-600">Last action: {lastAction}</p>
+            )}
+          </div>
         </section>
       </div>
     </main>

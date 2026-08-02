@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import GamePage from "./page";
 import type { GameContextValue } from "./GameProvider";
@@ -226,6 +226,23 @@ describe("GamePage", () => {
     expect(screen.getByTestId("score-board")).toBeInTheDocument();
     expect(screen.getByTestId("player-hand")).toBeInTheDocument();
     expect(screen.getByTestId("action-buttons")).toBeInTheDocument();
+  });
+
+  it("keeps selection attached to the same card when realtime hand updates remove a preceding card", () => {
+    const firstCard = { suit: "SPADES" as const, rank: "3" as const };
+    const selectedCard = { suit: "CLUBS" as const, rank: "4" as const };
+    useGameContextMock.mockReturnValue(
+      baseContext({ hand: [firstCard, selectedCard] }),
+    );
+    const { rerender } = render(<GamePage />);
+
+    fireEvent.click(screen.getByLabelText("4 of clubs"));
+    expect(screen.getByLabelText("4 of clubs")).toHaveAttribute("aria-pressed", "true");
+
+    useGameContextMock.mockReturnValue(baseContext({ hand: [selectedCard] }));
+    rerender(<GamePage />);
+
+    expect(screen.getByLabelText("4 of clubs")).toHaveAttribute("aria-pressed", "true");
   });
 
   it("renders the hand in the server-saved order when there's nothing in localStorage yet", () => {
