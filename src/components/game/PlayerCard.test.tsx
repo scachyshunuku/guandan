@@ -90,15 +90,17 @@ describe("PlayerCard", () => {
         isCurrentTurn
       />,
     );
-    expect(screen.getByTestId("current-turn-indicator")).toBeInTheDocument();
+    const indicator = screen.getByTestId("current-turn-indicator");
+    expect(indicator).toBeInTheDocument();
+    expect(indicator).not.toHaveAttribute("aria-hidden", "true");
   });
 
-  it("omits the current-turn indicator otherwise", () => {
+  it("hides the current-turn indicator otherwise, without removing it from layout", () => {
     render(
       <PlayerCard playerName="Bob" position={2} isConnected cardCount={7} />,
     );
-    expect(
-      screen.queryByTestId("current-turn-indicator"),
-    ).not.toBeInTheDocument();
+    const indicator = screen.getByTestId("current-turn-indicator");
+    expect(indicator).toBeInTheDocument();
+    expect(indicator).toHaveAttribute("aria-hidden", "true");
   });
 });

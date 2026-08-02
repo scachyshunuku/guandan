@@ -64,14 +64,16 @@ export default function PlayerCard({
       <span data-testid="card-count" className="text-xs text-gray-500">
         {pluralize(cardCount, "card")}
       </span>
-      {isCurrentTurn && (
-        <span
-          data-testid="current-turn-indicator"
-          className="text-xs font-medium text-amber-600"
-        >
-          Current turn
-        </span>
-      )}
+      <span
+        data-testid="current-turn-indicator"
+        aria-hidden={!isCurrentTurn}
+        // Always rendered (rather than conditionally mounted) so the row's
+        // height stays constant whether or not it's this player's turn —
+        // `invisible` reserves the space without showing the text.
+        className={`text-xs font-medium text-amber-600 ${isCurrentTurn ? "" : "invisible"}`}
+      >
+        Current turn
+      </span>
     </div>
   );
 }
