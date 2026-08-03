@@ -397,11 +397,10 @@ describe("GamePage", () => {
     render(<GamePage />);
 
     expect(screen.getByTestId("card-exchange-modal")).toBeInTheDocument();
-    // The draggable/reorderable PlayerHand isn't rendered during card
-    // exchange (kept simple: no reordering while the exchange UI - a
-    // different, read-only-except-for-the-return-selection hand display -
-    // is up). CardExchangeModal shows the hand itself instead.
-    expect(screen.queryByTestId("player-hand")).not.toBeInTheDocument();
+    // CardExchangeModal reuses the same draggable/reorderable PlayerHand as
+    // live play, so a player can rearrange their fresh hand before picking
+    // which card to give back.
+    expect(screen.getByTestId("player-hand")).toBeInTheDocument();
     const handCards = screen.getByTestId("return-card-options").querySelectorAll('[data-testid="card"]');
     await user.click(handCards[0]);
     await user.click(screen.getByTestId("submit-return-button"));
@@ -430,6 +429,9 @@ describe("GamePage", () => {
     render(<GamePage />);
 
     expect(screen.getByTestId("tribute-choice-modal")).toBeInTheDocument();
+    // The tribute choice floats above the player's own hand rather than
+    // replacing it, so they can compare against it while deciding.
+    expect(screen.getByTestId("player-hand")).toBeInTheDocument();
     const options = screen.getAllByTestId("tribute-choice-option");
     await user.click(within(options[0]).getByTestId("card"));
     expect(chooseTributeMock).toHaveBeenCalledWith(1);
@@ -451,6 +453,7 @@ describe("GamePage", () => {
     );
     render(<GamePage />);
     expect(screen.getByTestId("tribute-choice-waiting")).toBeInTheDocument();
+    expect(screen.getByTestId("player-hand")).toBeInTheDocument();
   });
 
   it("keeps a pending giver's full hand visible and lets them give a tied best card", async () => {
