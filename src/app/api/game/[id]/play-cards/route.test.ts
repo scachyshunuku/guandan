@@ -232,6 +232,48 @@ describe("POST /api/game/[id]/play-cards", () => {
     );
   });
 
+  it("stores and reflects a play sorted smallest-to-largest, regardless of the order the cards were submitted in", async () => {
+    const gameId = await seedGame();
+    const roundId = await seedRound(gameId);
+    await seedParticipant(gameId, 0, "p0", [
+      { rank: "8", suit: "CLUBS" },
+      { rank: "5", suit: "CLUBS" },
+      { rank: "7", suit: "CLUBS" },
+      { rank: "6", suit: "CLUBS" },
+      { rank: "9", suit: "CLUBS" },
+    ]);
+
+    // Submitted out of order: 8, 5, 7, 6, 9.
+    const response = await callPlayCards(gameId, {
+      cards: [
+        { rank: "8", suit: "CLUBS" },
+        { rank: "5", suit: "CLUBS" },
+        { rank: "7", suit: "CLUBS" },
+        { rank: "6", suit: "CLUBS" },
+        { rank: "9", suit: "CLUBS" },
+      ],
+      playerId: "p0",
+    });
+    expect(response.status).toBe(200);
+
+    const sortedStraight = [
+      { rank: "5", suit: "CLUBS" },
+      { rank: "6", suit: "CLUBS" },
+      { rank: "7", suit: "CLUBS" },
+      { rank: "8", suit: "CLUBS" },
+      { rank: "9", suit: "CLUBS" },
+    ];
+
+    const round = fake._tables.game_rounds.find((r) => r.id === roundId);
+    expect((round?.game_state as GameState).currentTrick).toEqual([
+      { position: 0, play: sortedStraight },
+    ]);
+    expect(fake._tables.game_actions[0]).toMatchObject({
+      action_type: "card_played",
+      action_data: { cards: sortedStraight, position: 0 },
+    });
+  });
+
   it("does not resolve the trick just because every position has acted once — a later play must still come back around", async () => {
     const gameId = await seedGame();
     const roundId = await seedRound(gameId, {

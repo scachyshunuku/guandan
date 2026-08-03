@@ -7,7 +7,7 @@
 // so both run identically.
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { levelRankForGame, resolveTurn, type ActiveRoundRow } from "@/lib/gameDb";
-import { removeCardsFromHand } from "@/lib/cardUtils";
+import { compareCards, removeCardsFromHand } from "@/lib/cardUtils";
 import { broadcastToGame } from "@/lib/realtimeBroadcast";
 import { canPlayCards } from "@/lib/gameRules/validation";
 import { detectRoundEnd } from "@/lib/gameRules/scoring";
@@ -45,12 +45,19 @@ export async function playCards(
     return invalidPlayResult(result.reason ?? "invalid play");
   }
 
+  // Store/display plays sorted smallest-to-largest, regardless of the order
+  // the player selected/clicked them in — RULES.md never assigns meaning to
+  // play order, so normalizing it here (after validation, which is already
+  // order-independent — see combinations.ts) keeps the trick, game_actions
+  // history, and every renderer of either in a consistent order for free.
+  const sortedCards = [...cards].sort((a, b) => compareCards(a, b, levelRank));
+
   // Captured now, before any write — `caller` is a reference to live
   // participant state (via resolveTurn/getParticipants), so reading
   // `caller.hand` again after the hand update below would see the
   // already-mutated value, not the pre-play hand a rollback needs.
   const originalHand = caller.hand;
-  const remainingHand = removeCardsFromHand(originalHand, cards);
+  const remainingHand = removeCardsFromHand(originalHand, sortedCards);
   const handEnded = remainingHand.length === 0;
 
   // A player going out takes no further turns (RULES.md), but the round
@@ -60,7 +67,7 @@ export async function playCards(
   // round-end check below.
   const newFinishOrder = handEnded ? [...round.game_state.finishOrder, position] : round.game_state.finishOrder;
 
-  const entry: TrickEntry = { position, play: cards };
+  const entry: TrickEntry = { position, play: sortedCards };
   const advanced = advanceTrick(
     round.game_state.currentTrick,
     entry,
@@ -102,7 +109,7 @@ export async function playCards(
     return invalidPlayResult("this turn was already resolved by another request", 409);
   }
 
-  const actionData: CardPlayedActionData = { cards, position };
+  const actionData: CardPlayedActionData = { cards: sortedCards, position };
   const [handUpdateResult, actionInsertResult] = await Promise.all([
     supabaseAdmin
       .from("game_participants")
