@@ -36,11 +36,8 @@ import type { EndHandResponse, RoundEndedActionData } from "@/lib/types";
 // them ever playing out (RULES.md: "the 4th is automatically placed last";
 // a 1-2 finish assigns 3rd/4th outright) - this is the only entry GameHistory
 // can rely on to show all four seats' places at once. Best-effort like
-// play-cards.ts's own trick_end/player_finished logging: called only once
-// the round's completion is already durably persisted (no rollback path left
-// that could strand an entry describing a transition that got reverted), so
-// a failure here only skips this supplementary log, never the transition
-// itself.
+// play-cards.ts's own trick_end/player_finished logging: a failure here only
+// skips this supplementary log, never the transition itself.
 async function logRoundEnded(
   gameId: string,
   roundId: string,
@@ -191,12 +188,13 @@ async function finalizeWonGame(
 // RULES.md "Card Exchange": claims the just-finished round straight to
 // 'completed' (there's no more play left in it, and no version of the
 // exchange happens on this round any more — see startNextRound), applies the
-// level promotion, then hands off to startNextRound to deal the next round's
-// cards and plan the tribute exchange against that new hand. startNextRound
-// creates the new round already in whatever status its plan lands on
-// ('in_progress' for a cancelled tribute, 'awaiting_giver_choice'/
-// 'awaiting_tribute_choice' for a tie, or 'card_exchange' once resolved) —
-// this function doesn't need to know or branch on which.
+// level promotion, logs the round_ended entry, then hands off to
+// startNextRound to deal the next round's cards and plan the tribute
+// exchange against that new hand. startNextRound creates the new round
+// already in whatever status its plan lands on ('in_progress' for a
+// cancelled tribute, 'awaiting_giver_choice'/'awaiting_tribute_choice' for a
+// tie, or 'card_exchange' once resolved) — this function doesn't need to
+// know or branch on which.
 async function finalizeContinuingHand(
   game: GameRow,
   playerId: string,
@@ -229,6 +227,34 @@ async function finalizeContinuingHand(
     return { status: 409, body: { error: "hand was already ended by another request" } };
   }
 
+  // Log (and broadcast) the just-finished round's own round_ended entry now
+  // — before startNextRound runs, not after. startNextRound is what creates
+  // the new round and, in the fully-resolved case, immediately makes an
+  // "initial" tribute return actionable (including by a bot polling
+  // drive-bots on another client, which can act within milliseconds with no
+  // human "thinking" delay). Logging round_ended any later than this lets
+  // that tribute action's game_actions row land — and its created_at get
+  // stamped — before this one, which is exactly the out-of-order History
+  // seen when a bot races the request that's still finishing endHand. If a
+  // step below this one fails and rolls the round back to 'in_progress', the
+  // rollback deletes this row too, so a reverted transition never leaves a
+  // stray "Round complete" entry behind.
+  const roundEndedRow = await logRoundEnded(game.id, round.id, playerId, finishingPositions);
+  if (roundEndedRow) {
+    await broadcastToGame(game.id, "game_action", roundEndedRow);
+  }
+
+  const rollbackRoundClaim = async () => {
+    await supabaseAdmin
+      .from("game_rounds")
+      .update({ finishing_positions: originalFinishingPositions, status: "in_progress" })
+      .eq("id", round.id)
+      .eq("status", "completed");
+    if (roundEndedRow) {
+      await supabaseAdmin.from("game_actions").delete().eq("id", roundEndedRow.id as string);
+    }
+  };
+
   const gameUpdateResult = await supabaseAdmin
     .from("games")
     .update({ team_a_level: teamALevel, team_b_level: teamBLevel })
@@ -240,11 +266,7 @@ async function finalizeContinuingHand(
       "Failed to persist level promotion after claiming the round transition; rolling back",
       gameUpdateResult.error,
     );
-    await supabaseAdmin
-      .from("game_rounds")
-      .update({ finishing_positions: originalFinishingPositions, status: "in_progress" })
-      .eq("id", round.id)
-      .eq("status", "completed");
+    await rollbackRoundClaim();
     return { status: 500, body: { error: "Failed to end hand" } };
   }
 
@@ -264,11 +286,7 @@ async function finalizeContinuingHand(
   if (outcome === "error") {
     console.error("Failed to start the next round after ending the hand; rolling back");
     await Promise.all([
-      supabaseAdmin
-        .from("game_rounds")
-        .update({ finishing_positions: originalFinishingPositions, status: "in_progress" })
-        .eq("id", round.id)
-        .eq("status", "completed"),
+      rollbackRoundClaim(),
       supabaseAdmin
         .from("games")
         .update({ team_a_level: originalTeamALevel, team_b_level: originalTeamBLevel })
@@ -277,17 +295,11 @@ async function finalizeContinuingHand(
     return { status: 500, body: { error: "Failed to end hand" } };
   }
 
-  // No rollback path remains past this point - startNextRound already
-  // succeeded, so it's safe to log the just-finished round's own round_ended
-  // entry now (tagged with *its* id, not the new round's - this describes
-  // the round that ended, same as trick_end/player_finished describe the
-  // round they occurred in).
-  const roundEndedRow = await logRoundEnded(game.id, round.id, playerId, finishingPositions);
-
-  // startNextRound already broadcasts the new round itself; only the game's
-  // level change (and this round_ended entry) are this function's own news
-  // to announce. Deliberately not also broadcasting the just-claimed round's
-  // own transition to 'completed': sending it before startNextRound risks
+  // startNextRound already broadcasts the new round itself; the game's level
+  // change is this function's only remaining news to announce (round_ended
+  // was already logged/broadcast above, before startNextRound ran).
+  // Deliberately not also broadcasting the just-claimed round's own
+  // transition to 'completed': sending it before startNextRound risks
   // announcing a state that a subsequent startNextRound failure then rolls
   // back with no correcting broadcast, and sending it after risks arriving
   // out of order relative to startNextRound's own broadcast for the new
@@ -295,14 +307,8 @@ async function finalizeContinuingHand(
   // spurious refetch (applyRoundUpdate treats any roundId change as a fresh
   // round). This single-broadcast-per-transition is the same tradeoff every
   // other transition in this app already makes (e.g. play-cards/pass) — a
-  // dropped broadcast self-heals via the next one or a reconnect, not a
-  // redundant send here. round_ended doesn't carry that same risk (it's a
-  // supplementary log entry, not round/game state a client applies), so it's
-  // broadcast alongside game_updated regardless of ordering.
-  await Promise.all([
-    broadcastToGame(game.id, "game_updated", gameUpdateResult.data[0]),
-    ...(roundEndedRow ? [broadcastToGame(game.id, "game_action", roundEndedRow)] : []),
-  ]);
+  // dropped broadcast self-heals via the next one or a reconnect.
+  await broadcastToGame(game.id, "game_updated", gameUpdateResult.data[0]);
 
   return { status: 200, body: { success: true } };
 }

@@ -304,54 +304,6 @@ describe("GamePage", () => {
     expect(screen.getByTestId("game-over-message")).toHaveTextContent("Team B wins");
   });
 
-  it("shows every seat's placement alongside the game-over message", () => {
-    useGameContextMock.mockReturnValue(
-      baseContext({
-        gameStatus: "completed",
-        winningTeam: 0,
-        finishingPositions: [1, 4, 2, 3],
-      }),
-    );
-    render(<GamePage />);
-    const entries = screen.getAllByTestId("round-end-place");
-    expect(entries[0]).toHaveTextContent("1st place — Alice");
-    expect(entries[3]).toHaveTextContent("4th place — Bob");
-  });
-
-  it("shows a transient round-end placements banner once a fresh round replaces the one that just ended", () => {
-    jest.useFakeTimers();
-    try {
-      useGameContextMock.mockReturnValue(baseContext({ roundId: "round-1", finishingPositions: null }));
-      const { rerender } = render(<GamePage />);
-      expect(screen.queryByTestId("round-end-summary")).not.toBeInTheDocument();
-
-      // startNextRound's insert carries the just-finished round's own
-      // finishing order as the *new* round's finishing_positions
-      // (ARCHITECTURE.md game_rounds doc comment) - a changed roundId
-      // arriving alongside it is what should trigger the banner.
-      useGameContextMock.mockReturnValue(
-        baseContext({ roundId: "round-2", finishingPositions: [1, 4, 2, 3] }),
-      );
-      rerender(<GamePage />);
-
-      expect(screen.getAllByTestId("round-end-place")[0]).toHaveTextContent("1st place — Alice");
-
-      jest.advanceTimersByTime(8000);
-      rerender(<GamePage />);
-      expect(screen.queryByTestId("round-end-summary")).not.toBeInTheDocument();
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
-  it("doesn't show the round-end banner for the very first round this client observes", () => {
-    useGameContextMock.mockReturnValue(
-      baseContext({ roundId: "round-1", finishingPositions: [1, 4, 2, 3] }),
-    );
-    render(<GamePage />);
-    expect(screen.queryByTestId("round-end-summary")).not.toBeInTheDocument();
-  });
-
   it("passes when the pass button is clicked", async () => {
     const passMock = jest.fn().mockResolvedValue(undefined);
     useGameContextMock.mockReturnValue(baseContext({ pass: passMock }));

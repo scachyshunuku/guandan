@@ -18,8 +18,25 @@ describe("pluralize", () => {
 });
 
 describe("gameShareLink", () => {
-  it("builds an absolute link using the current origin", () => {
+  const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  afterEach(() => {
+    process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
+  });
+
+  it("builds an absolute link using the current origin when NEXT_PUBLIC_APP_URL is unset", () => {
+    delete process.env.NEXT_PUBLIC_APP_URL;
     expect(gameShareLink("game-123")).toBe(`${window.location.origin}/game/game-123`);
+  });
+
+  it("prefers NEXT_PUBLIC_APP_URL over the current origin when set", () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://guandan.example.com";
+    expect(gameShareLink("game-123")).toBe("https://guandan.example.com/game/game-123");
+  });
+
+  it("strips a trailing slash from NEXT_PUBLIC_APP_URL", () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://guandan.example.com/";
+    expect(gameShareLink("game-123")).toBe("https://guandan.example.com/game/game-123");
   });
 });
 

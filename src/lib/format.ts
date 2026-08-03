@@ -42,12 +42,14 @@ export function teamTextClass(team: Team): string {
 }
 
 // The shareable join link for a game (Game.id doubles as the code - see
-// gameStore.ts's doc comment). Falls back to a relative path when there's no
-// `window` (server-rendered markup, before the client swaps in the full
-// origin) - shared by CreateGameForm.tsx and game/[id]/page.tsx's
-// WaitingRoom so both display the exact same link.
+// gameStore.ts's doc comment). Prefers NEXT_PUBLIC_APP_URL so the link is
+// stable behind proxies/custom domains; falls back to window.location.origin
+// when it's unset, then to a relative path when there's no `window` either
+// (server-rendered markup, before the client swaps in the full origin) -
+// shared by CreateGameForm.tsx and game/[id]/page.tsx's WaitingRoom so both
+// display the exact same link.
 export function gameShareLink(gameId: string): string {
-  return typeof window !== "undefined"
-    ? `${window.location.origin}/game/${gameId}`
-    : `/game/${gameId}`;
+  const configuredBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  const baseUrl = configuredBaseUrl || (typeof window !== "undefined" ? window.location.origin : "");
+  return `${baseUrl}/game/${gameId}`;
 }

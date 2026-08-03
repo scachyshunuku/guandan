@@ -373,9 +373,19 @@ describe("POST /api/game/[id]/end-hand", () => {
 
     expect(handOf(gameId, 0)).toEqual([]);
     expect(handOf(gameId, 2)).toEqual([{ rank: "KING", suit: "CLUBS" }]);
+    // round_ended is logged (and broadcast) right after the round claim,
+    // before startNextRound runs — see endHand.ts's comment on why that
+    // ordering matters — so the rollback here deletes that row rather than
+    // it never having been written. The broadcast itself can't be unsent,
+    // but the persisted log ends up consistent with the reverted round.
     expect(fake._tables.game_actions ?? []).toHaveLength(0);
     expect(newRoundOf(gameId)).toBeUndefined();
-    expect(mockBroadcastToGame).not.toHaveBeenCalled();
+    expect(mockBroadcastToGame).toHaveBeenCalledTimes(1);
+    expect(mockBroadcastToGame).toHaveBeenCalledWith(
+      gameId,
+      "game_action",
+      expect.objectContaining({ action_type: "round_ended" }),
+    );
 
     // A retry after the rollback resolves cleanly.
     const retry = await callEndHand(gameId, { playerId: "p0" });
