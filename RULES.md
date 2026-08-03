@@ -23,14 +23,13 @@ Guandan is a trick-taking partnership card game for 4 players (2 teams). It uses
 Red Joker > Black Joker > A > K > Q > J > 10 > 9 > 8 > 7 > 6 > 5 > 4 > 3 > 2
 ```
 
-Two cards of the same rank are otherwise equivalent — suit never breaks a tie, except among level cards (see below).
+Two cards of the same rank are otherwise equivalent. Suit never breaks a tie.
 
 ### Level Cards & Wild Cards
 - When a team plays at a specific level (e.g., level 5), all cards of that rank become "level cards"
 - Level cards rank above aces but below black jokers
 - **Hearts level cards are wild**: They can represent any card except a joker
   - Example: If level is 5, the 5 of hearts can be played as any card except a joker
-- **Among level cards, hearts ranks highest** when picking a single "best card" from a hand outside tribute — this reflects hearts' unique wild-card status. The other three suits remain equivalent to each other. This doesn't change trick-beating: a level card played as itself (not as a wild substitution) beats or loses to other plays purely by rank, regardless of suit.
 - **Wild hearts are exempt from tribute**: when a player must give their best card in the card exchange, a hearts card of the current level is not eligible and is never given. Their best eligible non-wild card is used instead.
 
 ## Dealing
@@ -44,10 +43,10 @@ Each round:
 ## Leader Selection
 
 - **First round**: A random player is chosen to lead the first trick
-- **Subsequent rounds**: Whoever gave up the tribute card that went to 1st place leads the first trick — not 1st place themselves. In a single-team lead, that's always 4th place (they're the only one who gives a card). In a two-team lead, it's whichever of 3rd/4th gave the higher card (the one routed to 1st place; see "Card Exchange")
+- **Subsequent rounds**: Whoever gave up the tribute card that went to 1st place leads the first trick, not 1st place themselves. In a single-team lead, that's always 4th place (they're the only one who gives a card). In a two-team lead, it's whichever of 3rd/4th gave the higher card (the one routed to 1st place; see "Card Exchange")
 - **Cancelled tribute**: If the tribute was cancelled (see "Card Exchange"), there's no card-giver to hand leadership to, so 1st place leads instead
 - **Within a round**: After each trick ends, the player who won that trick leads the next trick
-- **Winner out of cards**: If the trick winner has no cards left after their winning play (that play was their last), their partner leads the next trick instead — the round continues with the remaining active players until the round ends (see "Scoring" → "Round End")
+- **Winner out of cards**: If the trick winner has no cards left after their winning play (that play was their last), their partner leads the next trick instead. The round continues with the remaining active players until the round ends (see "Scoring" → "Round End")
 
 ## Play Structure
 
@@ -73,7 +72,7 @@ A trick works as follows:
 2. **Pair**: Two cards of the same rank
 3. **Triple**: Three cards of the same rank
 4. **Full house**: Three cards of one rank + two cards of another rank (e.g., 3-3-3-7-7)
-5. **Straight**: Exactly five consecutive cards in natural order (any suit) — no more, no fewer
+5. **Straight**: Exactly five consecutive cards in natural order (any suit), no more and no fewer
    - Ace can play low, as the card below 2 (e.g., A-2-3-4-5 is valid)
    - Cannot wrap around both ends at once (e.g., K-A-2 is not valid, J-Q-K-A-2 is not valid)
 6. **Tube**: Three consecutive pairs (e.g., 3-3-4-4-5-5); same ace-low/no-wraparound rules as Straight (e.g., A-A-2-2-3-3 is valid, K-K-A-A-2-2 is not)
@@ -94,7 +93,7 @@ Bombs are special combinations that can beat any other combination of the same t
 **Bomb Rules**:
 - Any bomb can be played in response to any ordinary combination
 - When playing a bomb in response to a bomb, it must be a higher-ranked bomb
-- Bombs cannot be played as a lead unless the leader plays a bomb
+- A bomb can also be played as the opening lead of a trick
 
 ### Playing Rules
 
@@ -118,9 +117,9 @@ Bombs are special combinations that can beat any other combination of the same t
 Teams earn **level promotions** based on their finishing position and whether they were "declarers" (the team that played at that level):
 
 ### Round End
-A hand ends as soon as its outcome is fully determined — there's no need for the remaining players to keep playing once nothing left to play can change the result:
+A hand ends as soon as its outcome is fully determined. There's no need for the remaining players to keep playing once nothing left to play can change the result:
 - **Three players have finished**: the 4th is automatically placed last; their remaining cards don't matter
-- **The first two to finish are partners (a 1-2 finish)**: the hand ends immediately, even before a 3rd player finishes — 1-2 is already the maximum promotion (see below), and the relative order of the remaining two players (3rd vs. 4th) can't change the outcome, so they're simply assigned 3rd and 4th
+- **The first two to finish are partners (a 1-2 finish)**: the hand ends immediately, even before a 3rd player finishes. A 1-2 is already the maximum promotion (see below), and the relative order of the remaining two players (3rd vs. 4th) can't change the outcome, so they're simply assigned 3rd and 4th
 
 ### Promotion Rules (per hand)
 - **1-4 finish**: Go up **1 level**
@@ -146,9 +145,9 @@ If a team reaches level A but fails to achieve 1-2 or 1-3, they remain at level 
 
 ## Card Exchange (After Each Round)
 
-The next round's 27 cards are **shuffled and dealt to each player immediately once a hand ends** — before any tribute card is given or returned. Tribute is exchanged based on finishing positions, but **against this freshly-dealt hand**, not whatever was left over from the hand that just ended: both the automatic "best card" giving and the both-Red-Jokers cancellation check (below) are evaluated on the new hand. **All card exchanges are visible to all players.** Actual play of the new hand doesn't begin until the full exchange (giving and returning) is resolved.
+The next round's 27 cards are **shuffled and dealt to each player immediately once a hand ends**, before any tribute card is given or returned. Tribute is exchanged based on finishing positions, but **against this freshly-dealt hand**, not whatever was left over from the hand that just ended. Both the automatic "best card" giving and the both-Red-Jokers cancellation check (below) are evaluated on the new hand. **All card exchanges are visible to all players.** Actual play of the new hand doesn't begin until the full exchange (giving and returning) is resolved.
 
-**Best card, when tied**: a hearts card of the current level is exempt and cannot be given as tribute. Among the remaining eligible cards, if the player giving their "best card" (4th place, or 3rd/4th place in a two-team lead) holds more than one card tied for that best rank, **they choose which one to give** — the same choice 1st place gets when 3rd's and 4th's cards tie against each other (see "Two-Team Lead" below). They might prefer to keep one of the tied cards for a combination (a pair, a straight, etc.) still in their hand.
+**Best card, when tied**: a hearts card of the current level is exempt and cannot be given as tribute. Among the remaining eligible cards, if the player giving their "best card" (4th place, or 3rd/4th place in a two-team lead) holds more than one card tied for that best rank, **they choose which one to give**. This is the same choice 1st place gets when 3rd's and 4th's cards tie against each other (see "Two-Team Lead" below). They might prefer to keep one of the tied cards for a combination (a pair, a straight, etc.) still in their hand.
 
 ### Single-Team Lead (1-3 or 1-4 finish)
 - **4th place** gives their **best card** to **1st place**
