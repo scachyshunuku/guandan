@@ -69,10 +69,10 @@ export default function MockGameFrame({
 
         <aside
           data-testid="game-history-panel"
-          className="w-full rounded-2xl bg-white shadow-sm lg:relative"
+          className="order-3 w-full rounded-2xl bg-white shadow-sm lg:relative lg:order-2"
         >
-          <div className="px-4 pb-4 lg:absolute lg:inset-x-0 lg:top-0 lg:bottom-4 lg:overflow-y-auto">
-            <h2 className="border-b border-slate-200 bg-white pt-4 pb-2 text-sm font-semibold text-slate-900 lg:sticky lg:top-0 lg:z-10">
+          <div className="max-h-80 overflow-y-auto px-4 pb-4 lg:max-h-none lg:absolute lg:inset-x-0 lg:top-0 lg:bottom-4">
+            <h2 className="sticky top-0 z-10 border-b border-slate-200 bg-white pt-4 pb-2 text-sm font-semibold text-slate-900">
               History
             </h2>
             <GameHistory
@@ -86,7 +86,7 @@ export default function MockGameFrame({
 
         <div
           data-testid="mock-player-area"
-          className="col-span-full flex w-full flex-col items-start gap-3 rounded-2xl bg-white p-4 shadow-sm"
+          className="col-span-full order-2 flex w-full flex-col items-start gap-3 rounded-2xl bg-white p-4 shadow-sm lg:order-3"
           onPointerDown={onHandPanelPointerDown}
         >
           {children}
