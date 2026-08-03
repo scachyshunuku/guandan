@@ -1,32 +1,27 @@
 "use client";
 
-// Interactive, DB-free rendering of the game page's layout (ScoreBoard + GameTable
-// + history panel) using fixed fixtures from src/mocks/gameFixtures.ts, so CSS
+// Interactive, DB-free rendering of the game page's layout (via
+// MockGameFrame) using fixed fixtures from src/mocks/gameFixtures.ts, so CSS
 // changes to that layout - like the history panel's height being pinned to
 // the game table's - can be eyeballed at /mocks/game-preview without going
 // through the real create-game/join/fill-with-bots/start flow. Select a card
 // below and Play to simulate a realtime broadcast; no API request is made.
 
 import { useRef, useState } from "react";
-import GameTable from "@/components/game/GameTable";
 import PlayerHand, {
   startHandPanelMarquee,
   type PlayerHandHandle,
 } from "@/components/game/PlayerHand";
 import ActionButtons from "@/components/game/ActionButtons";
-import ScoreBoard from "@/components/game/ScoreBoard";
-import SpectatorList from "@/components/game/SpectatorList";
-import GameHistory from "@/components/game/GameHistory";
 import { levelRankForLevels } from "@/lib/cardUtils";
 import type { CardWithWild, CurrentTrick, PlayerPosition } from "@/lib/types";
-import { filterSpectators } from "@/store/gameStore";
 import {
-  mockActions,
   mockGame,
   mockHand,
   mockInteractiveTrick,
   mockParticipants,
 } from "@/mocks/gameFixtures";
+import MockGameFrame from "../_components/MockGameFrame";
 
 export default function GamePreviewPage() {
   const [hand, setHand] = useState<CardWithWild[]>(mockHand);
@@ -39,7 +34,6 @@ export default function GamePreviewPage() {
   );
   const playerHandRef = useRef<PlayerHandHandle>(null);
 
-  const spectators = filterSpectators(participants);
   const round = {
     currentPlayerTurn,
     gameState: { currentTrick },
@@ -79,69 +73,36 @@ export default function GamePreviewPage() {
   }
 
   return (
-    <div
-      data-testid="game-page-layout"
-      className="flex flex-1 flex-col items-center gap-4 bg-slate-100 px-2 py-4 sm:gap-6 sm:px-4 sm:py-8"
+    <MockGameFrame
+      round={round}
+      participants={participants}
+      myPosition={0}
+      onHandPanelPointerDown={(event) => startHandPanelMarquee(event, playerHandRef)}
     >
-      <ScoreBoard game={mockGame} />
-
-      <div className="grid w-full grid-cols-1 gap-4 sm:gap-6 lg:w-fit lg:grid-cols-[36rem_20rem]">
-        <main
-          data-testid="game-page"
-          className="flex flex-col items-center gap-4 sm:gap-6"
-        >
-          <GameTable round={round} participants={participants} myPosition={0} />
-          <SpectatorList spectators={spectators} />
-        </main>
-
-        <aside
-          data-testid="game-history-panel"
-          className="order-3 w-full rounded-2xl bg-white shadow-sm lg:relative lg:order-2"
-        >
-          <div className="max-h-80 overflow-y-auto px-4 pb-4 lg:max-h-none lg:absolute lg:inset-x-0 lg:top-0 lg:bottom-4">
-            <h2 className="sticky top-0 z-10 border-b border-slate-200 bg-white pt-4 pb-2 text-sm font-semibold text-slate-900">
-              History
-            </h2>
-            <GameHistory
-              actions={mockActions}
-              participants={mockParticipants}
-              isLoading={false}
-              error={null}
-            />
-          </div>
-        </aside>
-
-        <div
-          data-testid="mock-player-area"
-          className="col-span-full order-2 flex w-full flex-col items-start gap-3 rounded-2xl bg-white p-4 shadow-sm lg:order-3"
-          onPointerDown={(event) => startHandPanelMarquee(event, playerHandRef)}
-        >
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900">Your hand</h2>
-            <p data-testid="mock-broadcast-status" className="text-xs text-slate-500">
-              {broadcastMessage}
-            </p>
-          </div>
-          <PlayerHand
-            ref={playerHandRef}
-            hand={hand}
-            selectedIndices={selectedIndices}
-            onSelectionChange={setSelectedIndices}
-          />
-          <ActionButtons
-            hand={hand}
-            selectedCards={selectedIndices.flatMap((index) => {
-              const selectedCard = hand[index];
-              return selectedCard ? [selectedCard] : [];
-            })}
-            currentTrick={currentTrick}
-            levelRank={levelRank}
-            isMyTurn={currentPlayerTurn === 0}
-            onPlay={handlePlay}
-            onPass={handlePass}
-          />
-        </div>
+      <div>
+        <h2 className="text-sm font-semibold text-slate-900">Your hand</h2>
+        <p data-testid="mock-broadcast-status" className="text-xs text-slate-500">
+          {broadcastMessage}
+        </p>
       </div>
-    </div>
+      <PlayerHand
+        ref={playerHandRef}
+        hand={hand}
+        selectedIndices={selectedIndices}
+        onSelectionChange={setSelectedIndices}
+      />
+      <ActionButtons
+        hand={hand}
+        selectedCards={selectedIndices.flatMap((index) => {
+          const selectedCard = hand[index];
+          return selectedCard ? [selectedCard] : [];
+        })}
+        currentTrick={currentTrick}
+        levelRank={levelRank}
+        isMyTurn={currentPlayerTurn === 0}
+        onPlay={handlePlay}
+        onPass={handlePass}
+      />
+    </MockGameFrame>
   );
 }

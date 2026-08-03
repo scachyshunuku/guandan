@@ -244,6 +244,8 @@ export default function GamePage() {
   const isMyTurn = myPosition !== null && currentPlayerTurn === myPosition;
   const levelRank = levelRankForLevels(teamLevels[0], teamLevels[1]);
   const isAwaitingGiverChoice = roundStatus === "awaiting_giver_choice" && pendingGiverChoice != null;
+  const isAwaitingTributeChoice =
+    roundStatus === "awaiting_tribute_choice" && pendingTributeChoice != null;
   const isGivingTribute =
     roundStatus === "awaiting_giver_choice" &&
     myPosition !== null &&
@@ -336,6 +338,28 @@ export default function GamePage() {
       <ConnectionStatus status={connectionStatus} />
       <ScoreBoard game={game} />
 
+      {/* Floating above everything (fixed, not part of the grid flow) so the
+          player's own hand stays visible and draggable underneath while
+          deciding which tied tribute card to take - RULES.md "Two-Team
+          Lead" ties are exactly the case where comparing against your own
+          hand matters. */}
+      {isAwaitingTributeChoice && myPosition !== null && pendingTributeChoice && (
+        <div className="pointer-events-none fixed inset-x-0 top-20 z-50 flex justify-center px-4">
+          <div className="pointer-events-auto w-full max-w-md">
+            <TributeChoiceModal
+              thirdPosition={pendingTributeChoice.thirdPosition}
+              thirdCard={pendingTributeChoice.thirdCard}
+              fourthPosition={pendingTributeChoice.fourthPosition}
+              fourthCard={pendingTributeChoice.fourthCard}
+              participants={participants}
+              isFirstPlace={finishingPositions?.indexOf(1) === myPosition}
+              onChoose={handleChooseTribute}
+              isSubmitting={isChoosingTribute}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Grid (not flex) so the cards-panel row below can col-span-full to
           exactly the width of main + aside - a fixed lg:grid-cols-[36rem_20rem]
           (matching main's old lg:max-w-xl and aside's old lg:w-80) gives the
@@ -381,6 +405,9 @@ export default function GamePage() {
                 .filter((d) => d.type === "initial")}
               onSubmitReturn={handleSubmitReturn}
               isSubmitting={isExchangingCards}
+              gameId={gameId}
+              initialServerOrder={myHandOrder}
+              onOrderChange={updateHandOrder}
             />
           ) : roundStatus === "awaiting_giver_choice" && pendingGiverChoice ? (
             !isGivingTribute ? (
@@ -393,18 +420,11 @@ export default function GamePage() {
                 card to give…
               </p>
             ) : null
-          ) : roundStatus === "awaiting_tribute_choice" &&
-            pendingTributeChoice ? (
-            <TributeChoiceModal
-              thirdPosition={pendingTributeChoice.thirdPosition}
-              thirdCard={pendingTributeChoice.thirdCard}
-              fourthPosition={pendingTributeChoice.fourthPosition}
-              fourthCard={pendingTributeChoice.fourthCard}
-              participants={participants}
-              isFirstPlace={finishingPositions?.indexOf(1) === myPosition}
-              onChoose={handleChooseTribute}
-              isSubmitting={isChoosingTribute}
-            />
+          ) : isAwaitingTributeChoice ? (
+            // Rendered as a floating overlay (below) instead, above the
+            // player's still-visible, still-draggable hand - not inline
+            // here.
+            null
           ) : currentPlayerTurn === null ? (
             <p
               data-testid="hand-ended-message"
@@ -500,10 +520,7 @@ export default function GamePage() {
           myPosition !== null &&
           roundStatus !== "card_exchange" &&
           (!isAwaitingGiverChoice || isGivingTribute) &&
-          !(
-            roundStatus === "awaiting_tribute_choice" && pendingTributeChoice
-          ) &&
-          (currentPlayerTurn !== null || isGivingTribute) && (
+          (currentPlayerTurn !== null || isGivingTribute || isAwaitingTributeChoice) && (
             <div
               className="col-span-full order-2 flex w-full flex-col items-start gap-3 lg:order-3"
               onPointerDown={(event) => startHandPanelMarquee(event, playerHandRef)}
@@ -537,7 +554,7 @@ export default function GamePage() {
                     </p>
                   )}
                 </div>
-              ) : needsWildChoice && pendingWildIndex !== undefined && (
+              ) : isAwaitingTributeChoice ? null : needsWildChoice && pendingWildIndex !== undefined && (
                 // Keyed by which card this prompt is for, so a second wild in
                 // the same selection (a double deck can hold two level-rank
                 // hearts) gets a fresh selector rather than one still showing
@@ -554,7 +571,7 @@ export default function GamePage() {
                   onCancel={() => setSelectedIndices([])}
                 />
               )}
-              {!isGivingTribute && <ActionButtons
+              {!isGivingTribute && !isAwaitingTributeChoice && <ActionButtons
                 hand={hand}
                 selectedCards={effectiveSelectedCards}
                 currentTrick={currentTrick}
@@ -565,7 +582,7 @@ export default function GamePage() {
                 hasPendingWildChoice={needsWildChoice}
                 isSubmitting={isPlayingCards || isPassing}
               />}
-              {!isGivingTribute && (playCardsError ?? passError) && (
+              {!isGivingTribute && !isAwaitingTributeChoice && (playCardsError ?? passError) && (
                 <p
                   data-testid="action-error"
                   className="text-xs text-red-500"

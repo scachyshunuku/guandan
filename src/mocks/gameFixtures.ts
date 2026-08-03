@@ -1,11 +1,13 @@
-// Fixtures for the interactive, DB-free game preview at /mocks/game-preview.
-// The preview uses these values to exercise the real table, hand, and action
-// components without spinning up the DB-backed game flow (create → join →
-// fill-with-bots → start) just to get pixels on screen.
+// Fixtures for the interactive, DB-free game previews at /mocks/game-preview
+// and /mocks/card-exchange-preview. The previews use these values to exercise
+// the real table, hand, and action components without spinning up the
+// DB-backed game flow (create → join → fill-with-bots → start) just to get
+// pixels on screen.
 
 import { PASS } from "@/lib/types";
 import type {
   Card,
+  CardExchangeActionData,
   CurrentTrick,
   Game,
   GameAction,
@@ -15,6 +17,7 @@ import type {
   CardWithWild,
   PlayerPosition,
   Rank,
+  StandardRank,
   Suit,
 } from "@/lib/types";
 
@@ -157,6 +160,15 @@ export const mockCurrentTrick: CurrentTrick = [
 // dependency explicit while other callers can use the full trick fixture.
 export const mockInteractiveTrick: CurrentTrick = mockCurrentTrick;
 
+// GameTable's `round` shape for the card-exchange-phase previews - no trick
+// is in progress and nobody's turn yet (RULES.md "Card Exchange" happens
+// before play starts each round), unlike mockInteractiveTrick's mid-round
+// state.
+export const mockIdleRound: { currentPlayerTurn: PlayerPosition | null; gameState: { currentTrick: CurrentTrick } } = {
+  currentPlayerTurn: null,
+  gameState: { currentTrick: [] },
+};
+
 // Long enough to force real scrolling inside the history panel - the whole
 // point of this fixture is to prove the panel clips to the game table's
 // height instead of growing to fit every entry.
@@ -205,3 +217,44 @@ function buildMockActions(count: number): GameAction[] {
 // Oldest-first, matching GET /api/game/[id]/history (GameHistory reverses it
 // for display) - see GameHistory.tsx's doc comment.
 export const mockActions: GameAction[] = buildMockActions(60);
+
+// The automatic `type: 'initial'` half of RULES.md "Card Exchange": 4th
+// place (Dave) gives their highest card to 1st place (Alice), 3rd place
+// (Carol) gives to 2nd place (Bob). Used by /mocks/card-exchange-preview to
+// exercise CardExchangeModal without a live round.
+export const mockCardExchangeInitial: CardExchangeActionData[] = [
+  { from: 3, to: 0, card: card("ACE", "SPADES"), type: "initial" },
+  { from: 2, to: 1, card: card("KING", "HEARTS"), type: "initial" },
+];
+
+// RULES.md "Two-Team Lead": 3rd (Carol) and 4th (Dave) place's best cards
+// tied in rank, so 1st place (Alice) chooses which one to take. Used by
+// /mocks/card-exchange-preview to exercise TributeChoiceModal without a
+// live round.
+export const mockTributeChoice = {
+  thirdPosition: 2 as PlayerPosition,
+  thirdCard: card("ACE", "CLUBS"),
+  fourthPosition: 3 as PlayerPosition,
+  fourthCard: card("ACE", "HEARTS"),
+};
+
+// A 4th-place player choosing between two tied best cards before the two-team
+// tribute is assigned to 1st/2nd place. The level is 2, so the 2 of hearts is
+// exempt from tribute and the two aces are the only eligible best-card
+// candidates. Used by /mocks/card-exchange-preview/giver-choice.
+export const mockGiverChoice: {
+  position: PlayerPosition;
+  levelRank: StandardRank;
+  hand: CardWithWild[];
+  otherGiverPosition: PlayerPosition;
+} = {
+  position: 3,
+  levelRank: "2",
+  hand: [
+    card("ACE", "SPADES"),
+    card("ACE", "DIAMONDS"),
+    card("KING", "CLUBS"),
+    card("2", "HEARTS"),
+  ],
+  otherGiverPosition: 2,
+};
