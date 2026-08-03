@@ -436,7 +436,13 @@ export default function GamePage() {
           )}
         </main>
 
-        {/* lg:relative + the child's lg:absolute lg:inset-x-0 lg:top-0 is
+        {/* order-3 lg:order-2 puts this panel below the cards on mobile
+            (where the grid collapses to one column and items stack by
+            order), while keeping it beside main in its usual second column
+            at lg - see the col-span-full div below, which is order-2
+            lg:order-3 to match.
+
+            lg:relative + the child's lg:absolute lg:inset-x-0 lg:top-0 is
             what pins this panel's height to main's without measuring
             anything in JS: an absolutely positioned box doesn't count
             toward its container's content height, so once the child drops
@@ -454,20 +460,23 @@ export default function GamePage() {
             even mid-scroll - closing it with inset-0 would only reserve
             that gap once the list happened to be scrolled to its true end.
             Below lg, main and aside stack into separate rows instead of
-            sharing one, so there's no height to match - the child stays
-            static and the panel is left to its natural height there. */}
+            sharing one, so there's no row height to match against - the
+            child instead falls back to its own max-h-80/overflow-y-auto so
+            a long history still scrolls internally there rather than
+            growing the page without bound. */}
         <aside
           data-testid="game-history-panel"
-          className="w-full rounded-2xl bg-white shadow-sm lg:relative"
+          className="order-3 w-full rounded-2xl bg-white shadow-sm lg:relative lg:order-2"
         >
-          <div className="px-4 pb-4 lg:absolute lg:inset-x-0 lg:top-0 lg:bottom-4 lg:overflow-y-auto">
+          <div className="max-h-80 overflow-y-auto px-4 pb-4 lg:max-h-none lg:absolute lg:inset-x-0 lg:top-0 lg:bottom-4">
             {/* pt-4/pb-2 live on the heading itself (not the scrolling div
-                above) so they travel with it once lg:sticky pins it in
-                place - otherwise the container's own top padding scrolls
-                away like any other content, and whatever entry ends up
-                underneath is left uncovered (no opaque box there to hide
-                it) rather than tucked behind a solid heading. */}
-            <h2 className="border-b border-slate-200 bg-white pt-4 pb-2 text-sm font-semibold text-slate-900 lg:sticky lg:top-0 lg:z-10">
+                above) so they travel with it once sticky pins it in place -
+                otherwise the container's own top padding scrolls away like
+                any other content, and whatever entry ends up underneath is
+                left uncovered (no opaque box there to hide it) rather than
+                tucked behind a solid heading. Sticky (not just lg:sticky)
+                since the div above now scrolls internally below lg too. */}
+            <h2 className="sticky top-0 z-10 border-b border-slate-200 bg-white pt-4 pb-2 text-sm font-semibold text-slate-900">
               History
             </h2>
             <GameHistory
@@ -483,7 +492,10 @@ export default function GamePage() {
             under the history panel too instead of wrapping into a narrow
             column, but stays capped to main + aside's combined width rather
             than the full screen (mirrors the last branch of the status
-            ternary above, which renders null in this exact case). */}
+            ternary above, which renders null in this exact case).
+            order-2 lg:order-3 (paired with the aside's order-3 lg:order-2
+            above) is what puts the cards above history on mobile but below
+            it at lg, matching this row's normal DOM position there. */}
         {gameStatus !== "completed" &&
           myPosition !== null &&
           roundStatus !== "card_exchange" &&
@@ -493,7 +505,7 @@ export default function GamePage() {
           ) &&
           (currentPlayerTurn !== null || isGivingTribute) && (
             <div
-              className="col-span-full flex w-full flex-col items-start gap-3"
+              className="col-span-full order-2 flex w-full flex-col items-start gap-3 lg:order-3"
               onPointerDown={(event) => startHandPanelMarquee(event, playerHandRef)}
             >
               <PlayerHand
