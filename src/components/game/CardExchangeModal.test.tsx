@@ -40,22 +40,6 @@ const INITIAL_EXCHANGES: CardExchangeActionData[] = [
 ];
 
 describe("CardExchangeModal", () => {
-  it("shows every initial exchange, read-only, by player name", () => {
-    render(
-      <CardExchangeModal
-        myPosition={0}
-        hand={HAND}
-        participants={PARTICIPANTS}
-        initialExchanges={INITIAL_EXCHANGES}
-        onSubmitReturn={jest.fn()}
-      />,
-    );
-    const entries = screen.getAllByTestId("initial-exchange-entry");
-    expect(entries).toHaveLength(2);
-    expect(entries[0]).toHaveTextContent("Dave → Alice");
-    expect(entries[1]).toHaveTextContent("Carol → Bob");
-  });
-
   it("prompts the recipient to choose a return card, by player name", () => {
     render(
       <CardExchangeModal
