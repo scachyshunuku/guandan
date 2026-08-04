@@ -41,13 +41,13 @@ export default function ActionButtons({
   const canPass = isMyTurn && !isSubmitting && currentTrick.length > 0;
 
   return (
-    <div data-testid="action-buttons" className="flex items-center gap-3">
+    <div data-testid="action-buttons" className="flex w-full items-center gap-3 sm:w-auto">
       <button
         type="button"
         data-testid="play-button"
         disabled={!canPlay}
         onClick={() => onPlay(selectedCards)}
-        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+        className="min-h-12 flex-1 rounded-lg bg-blue-600 px-5 py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300 sm:min-h-0 sm:flex-none sm:px-4 sm:py-2 sm:text-sm"
       >
         Play
       </button>
@@ -56,7 +56,7 @@ export default function ActionButtons({
         data-testid="pass-button"
         disabled={!canPass}
         onClick={onPass}
-        className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 disabled:cursor-not-allowed disabled:text-gray-300"
+        className="min-h-12 flex-1 rounded-lg border border-gray-300 px-5 py-3 text-base font-semibold text-gray-700 disabled:cursor-not-allowed disabled:text-gray-300 sm:min-h-0 sm:flex-none sm:px-4 sm:py-2 sm:text-sm"
       >
         Pass
       </button>

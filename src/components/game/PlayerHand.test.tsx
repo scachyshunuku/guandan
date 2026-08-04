@@ -689,6 +689,11 @@ describe("PlayerHand", () => {
       { rank: "RED_JOKER" },
       { suit: "DIAMONDS", rank: "5" },
     ];
+    const SIX_CARD_HAND: CardWithWild[] = [
+      ...FOUR_CARD_HAND,
+      { suit: "SPADES", rank: "9" },
+      { suit: "CLUBS", rank: "KING" },
+    ];
 
     function mockElementFromPoint(target: Element | null) {
       document.elementFromPoint = jest.fn().mockReturnValue(target);
@@ -697,9 +702,10 @@ describe("PlayerHand", () => {
     afterEach(() => {
       // @ts-expect-error - removing the test-only stub added above
       delete document.elementFromPoint;
+      jest.restoreAllMocks();
     });
 
-    it("moves the whole selection together, preserving relative order, opening only a single-card-width gap", () => {
+    it("moves the whole selection together, preserving relative order and the hand's grid footprint", () => {
       render(<PlayerHand hand={FOUR_CARD_HAND} />);
       const cards = screen.getAllByTestId("card");
       // Select "3 of clubs" and "red joker" (indices 0 and 2), leaving "7 of
@@ -715,12 +721,12 @@ describe("PlayerHand", () => {
       firePointerEvent("pointerdown", slots[0], { clientX: 0, clientY: 0 }); // grab "3 of clubs"
       firePointerEvent("pointermove", container, { clientX: 180, clientY: 0 }); // right half of "5 of diamonds"
 
-      // Only one card-width of space opens up for the two-card group -
-      // "7 of hearts" and "5 of diamonds" are the only two normal slots
-      // left, directly adjacent to the single drop-placeholder between/
-      // around them, not pushed two slots apart.
+      // The group retains its two card-slot footprint, keeping a wrapped hand
+      // the same height throughout the drag. Only its first slot is visibly
+      // marked as the logical drop target; the second is a transparent spacer.
       expect(screen.getAllByTestId("hand-card-slot")).toHaveLength(2);
       expect(screen.getByTestId("drop-placeholder")).toBeInTheDocument();
+      expect(screen.getAllByTestId("drop-placeholder-spacer")).toHaveLength(1);
       expect(screen.getAllByTestId("dragging-card")).toHaveLength(2);
 
       firePointerEvent("pointerup", container);
@@ -784,6 +790,12 @@ describe("PlayerHand", () => {
 
       firePointerEvent("pointerdown", slots[2], { clientX: 0, clientY: 0 }); // grab "red joker" this time
       firePointerEvent("pointermove", container, { clientX: 180, clientY: 0 });
+      // The floating group is packed around the grabbed card, so its initial
+      // placeholder footprint starts after the one unselected card that was
+      // before the grabbed card. This prevents the overlay from landing on
+      // that card when the original selection was non-adjacent.
+      expect(within(container.firstElementChild as HTMLElement).getByTestId("card"))
+        .toHaveAttribute("aria-label", "7 of hearts");
       firePointerEvent("pointerup", container);
 
       const reorderedLabels = screen
@@ -795,6 +807,32 @@ describe("PlayerHand", () => {
         "3 of clubs",
         "red joker",
       ]);
+    });
+
+    it("packs a group across the same rows as its multi-slot placeholder footprint", () => {
+      const getComputedStyle = jest.spyOn(window, "getComputedStyle").mockReturnValue({
+        columnGap: "10px",
+        rowGap: "10px",
+      } as CSSStyleDeclaration);
+      render(<PlayerHand hand={SIX_CARD_HAND} selectedIndices={[0, 1, 2, 3, 4]} />);
+      const slots = screen.getAllByTestId("hand-card-slot");
+      const container = screen.getByTestId("player-hand");
+      // 4 columns of 50px cards with 10px gaps: the fifth dragged card must
+      // occupy row two rather than remaining off-grid on the first row.
+      stubRect(container, { left: 0, top: 0, right: 230, bottom: 190 });
+      stubRect(slots[0], { left: 0, top: 0, right: 50, bottom: 90 });
+      mockElementFromPoint(slots[0]);
+
+      firePointerEvent("pointerdown", slots[0], { clientX: 0, clientY: 0 });
+      firePointerEvent("pointermove", container, { clientX: 10, clientY: 0 });
+
+      const overlays = screen.getAllByTestId("dragging-card");
+      expect(overlays).toHaveLength(5);
+      expect(overlays[4].style.left).toBe("10px");
+      expect(overlays[4].style.top).toBe("100px");
+
+      firePointerEvent("pointerup", container);
+      expect(getComputedStyle).toHaveBeenCalledWith(container);
     });
   });
 
@@ -1043,6 +1081,39 @@ describe("PlayerHand", () => {
       fireEvent.click(remainingCards[1], { shiftKey: true }); // shift-click "red joker"
 
       expect(remainingCards.map((c) => c.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
+    });
+  });
+
+  describe("touch-first gestures", () => {
+    const originalMatchMedia = window.matchMedia;
+
+    afterEach(() => {
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        value: originalMatchMedia,
+      });
+    });
+
+    it("does not start a marquee selection from empty hand space", () => {
+      const matchMedia = jest.fn().mockReturnValue({
+        matches: true,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+      });
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        value: matchMedia,
+      });
+      const onSelectionChange = jest.fn();
+      render(<PlayerHand hand={HAND} selectedIndices={[0]} onSelectionChange={onSelectionChange} />);
+
+      const hand = screen.getByTestId("player-hand");
+      firePointerEvent("pointerdown", hand, { clientX: 4, clientY: 4 });
+      firePointerEvent("pointermove", window, { clientX: 50, clientY: 50 });
+
+      expect(onSelectionChange).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("marquee-select-box")).not.toBeInTheDocument();
+      expect(matchMedia).toHaveBeenCalledWith("(hover: none) and (pointer: coarse)");
     });
   });
 });

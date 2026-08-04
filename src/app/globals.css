@@ -64,6 +64,15 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Buttons are controls, not selectable text. Besides avoiding an accidental
+   selection while tapping, the WebKit declaration suppresses iOS's long-press
+   lookup/callout UI on button labels without affecting selectable game text. */
+button {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 /* Tailwind's preflight resets button cursor to `default`; restore the
    clickable pointer for every non-disabled button app-wide. */
 button:not(:disabled) {
