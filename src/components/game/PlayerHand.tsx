@@ -78,6 +78,7 @@ export function startHandPanelMarquee(
   event: React.PointerEvent<HTMLDivElement>,
   playerHandRef: { current: PlayerHandHandle | null },
 ) {
+  if (isTouchFirstDevice()) return;
   if (event.pointerType === "mouse" && event.button !== 0) return;
   if (isHandPanelControlTarget(event.target)) return;
   playerHandRef.current?.startMarqueeFrom(event);
@@ -97,6 +98,25 @@ const STORAGE_PREFIX = "guandan:hand-order:";
 // whatever's underneath it instead of the card itself (see the drag-state
 // render logic below).
 const DRAG_ACTIVATION_THRESHOLD_PX = 4;
+
+// PlayerHand's `gap-1` is 0.25rem (4px at the browser's default root size).
+// The computed value is used when available so a customized root font size
+// still packs a floating multi-card group exactly like the hand grid; this is
+// only the safe fallback for layout-less test environments.
+const HAND_GAP_FALLBACK_PX = 4;
+
+// On touch-first devices, empty-panel drags compete with normal page
+// scrolling and make a marquee far too imprecise to be useful. This checks
+// input capability rather than viewport width, so a narrow desktop window
+// keeps its mouse/trackpad marquee behavior. Card slots retain `touch-action:
+// none`, so touch drag-and-drop remains available without the selection box.
+const TOUCH_FIRST_DEVICE_QUERY = "(hover: none) and (pointer: coarse)";
+
+function isTouchFirstDevice(): boolean {
+  return typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia(TOUCH_FIRST_DEVICE_QUERY).matches;
+}
 
 // jsdom (used by the component tests) doesn't implement
 // requestAnimationFrame, so the FLIP reflow effect below falls back to a
@@ -396,10 +416,11 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
 
   // Where the dragged group would land if dropped right now - an index into
   // the *other* (non-dragged) cards' visual order. Reorder is deferred
-  // until drop (see endDrag): while dragging, this only ever affects which
-  // single card-width gap is shown, never the underlying order, so a group
-  // of any size parts the hand by exactly one card-width instead of its own
-  // width. Same stale-closure concern as dragDelta above, same fix (a
+  // until drop (see endDrag): while dragging, this only ever affects where
+  // the group would land, never the underlying order. The visible dashed
+  // gap marks that one logical drop position, while invisible spacers reserve
+  // one grid slot per dragged card so the wrapped hand never changes height.
+  // Same stale-closure concern as dragDelta above, same fix (a
   // mirrored ref for endDrag to read).
   const [dropIndex, setDropIndexState] = useState<number | null>(null);
   const dropIndexRef = useRef<number | null>(null);
@@ -566,25 +587,59 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
       right: grabbedRect.right,
       bottom: grabbedRect.bottom,
     };
+    // A non-adjacent selection becomes a contiguous block when it is moved.
+    // Pack the floating cards to match the contiguous placeholder footprint
+    // instead of retaining their old, non-adjacent screen offsets - otherwise
+    // a floating card can sit on top of an unselected card that just reflowed
+    // into the selection's former gap.
+    const container = containerRef.current;
+    const computedStyle = container ? window.getComputedStyle(container) : null;
+    const configuredColumnGap = computedStyle
+      ? Number.parseFloat(computedStyle.columnGap)
+      : Number.NaN;
+    const configuredRowGap = computedStyle
+      ? Number.parseFloat(computedStyle.rowGap)
+      : Number.NaN;
+    const columnGap = Number.isFinite(configuredColumnGap)
+      ? configuredColumnGap
+      : HAND_GAP_FALLBACK_PX;
+    const rowGap = Number.isFinite(configuredRowGap)
+      ? configuredRowGap
+      : HAND_GAP_FALLBACK_PX;
+    const cardWidth = grabbedRect.right - grabbedRect.left;
+    const cardHeight = grabbedRect.bottom - grabbedRect.top;
+    const visualKeys = visualEntries.map((entry) => entry.key);
+    const grabbedVisualIndex = visualKeys.indexOf(key);
+    // The packed group begins wherever the grabbed card stays in its original
+    // grid slot. Counting only non-dragged cards before it supplies that
+    // insertion index among `remaining` cards.
+    const startIndex = visualKeys
+      .slice(0, grabbedVisualIndex)
+      .filter((candidate) => !group.includes(candidate)).length;
+    const containerWidth = container?.getBoundingClientRect().width ?? 0;
+    const columns = cardWidth > 0
+      ? Math.max(1, Math.floor((containerWidth + columnGap) / (cardWidth + columnGap)))
+      : 1;
+    const grabbedGroupIndex = group.indexOf(key);
+    const grabbedPackedIndex = startIndex + grabbedGroupIndex;
+    const grabbedRow = Math.floor(grabbedPackedIndex / columns);
+    const grabbedColumn = grabbedPackedIndex % columns;
     const offsets = new Map<string, Point>();
-    for (const groupKey of group) {
-      if (groupKey === key) {
-        offsets.set(groupKey, { x: 0, y: 0 });
-        continue;
-      }
-      const el = slotRefs.current.get(groupKey);
-      const rect = el?.getBoundingClientRect();
-      offsets.set(groupKey, rect ? { x: rect.left - grabbedRect.left, y: rect.top - grabbedRect.top } : { x: 0, y: 0 });
+    for (const [groupIndex, groupKey] of group.entries()) {
+      const packedIndex = startIndex + groupIndex;
+      const packedRow = Math.floor(packedIndex / columns);
+      const packedColumn = packedIndex % columns;
+      offsets.set(groupKey, {
+        x: (packedColumn - grabbedColumn) * (cardWidth + columnGap),
+        y: (packedRow - grabbedRow) * (cardHeight + rowGap),
+      });
     }
     dragOffsetsRef.current = offsets;
 
-    // Where the group currently sits, translated into an index among the
-    // *other* cards - keeps the drop placeholder starting exactly where the
-    // group already is, so crossing the drag-activation threshold below
-    // doesn't cause a visible jump.
-    const visualKeys = visualEntries.map((entry) => entry.key);
-    const leadingIndex = Math.min(...group.map((k) => visualKeys.indexOf(k)));
-    const startIndex = visualKeys.slice(0, leadingIndex).filter((k) => !group.includes(k)).length;
+    // Where the contiguous group starts, translated into an index among the
+    // *other* cards. It is chosen so the grabbed card keeps its original grid
+    // position as a non-adjacent selection is packed into one block, avoiding
+    // both a pointer jump and overlap with the reflowed unselected cards.
     dragStartIndexRef.current = startIndex;
     setDropIndex(startIndex);
 
@@ -810,6 +865,7 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
   }
 
   function handleContainerPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (isTouchFirstDevice()) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     // Only a press directly on the panel's empty space starts a marquee -
     // a press that bubbled up from a card slot (its target is deep inside
@@ -958,16 +1014,28 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
 
   type DisplayItem =
     | { type: "card"; key: string; handIndex: number }
-    | { type: "placeholder" };
+    | { type: "placeholder"; key: string; isVisible: boolean };
 
   let displayItems: DisplayItem[];
   if (isActivelyDragging && draggingKeys) {
     const remaining = visualEntries.filter((entry) => !draggingKeys.includes(entry.key));
     const clampedDropIndex = Math.max(0, Math.min(dropIndex ?? remaining.length, remaining.length));
     const asCards = remaining.map((entry) => ({ type: "card" as const, key: entry.key, handIndex: entry.handIndex }));
+    // The dragged group is rendered as a fixed overlay, so it would otherwise
+    // leave only one in-flow placeholder behind and shorten a wrapped hand
+    // whenever more than one card was selected. Keep one visible insertion
+    // gap and enough invisible same-sized spacers to retain every slot.
+    const draggedSlotCount = draggingKeys.filter((key) =>
+      visualEntries.some((entry) => entry.key === key),
+    ).length;
+    const placeholders = Array.from({ length: draggedSlotCount }, (_, index) => ({
+      type: "placeholder" as const,
+      key: `__drop-placeholder__${index}`,
+      isVisible: index === 0,
+    }));
     displayItems = [
       ...asCards.slice(0, clampedDropIndex),
-      { type: "placeholder" as const },
+      ...placeholders,
       ...asCards.slice(clampedDropIndex),
     ];
   } else {
@@ -1004,9 +1072,12 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
         if (item.type === "placeholder") {
           return (
             <div
-              key="__drop-placeholder__"
-              data-testid="drop-placeholder"
-              className="h-20 w-14 rounded-xl border-2 border-dashed border-blue-300 sm:h-24 sm:w-16"
+              key={item.key}
+              aria-hidden="true"
+              data-testid={item.isVisible ? "drop-placeholder" : "drop-placeholder-spacer"}
+              className={item.isVisible
+                ? "h-20 w-14 rounded-xl border-2 border-dashed border-blue-300 sm:h-24 sm:w-16"
+                : "pointer-events-none h-20 w-14 opacity-0 sm:h-24 sm:w-16"}
             />
           );
         }
