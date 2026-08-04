@@ -721,12 +721,11 @@ describe("PlayerHand", () => {
       firePointerEvent("pointerdown", slots[0], { clientX: 0, clientY: 0 }); // grab "3 of clubs"
       firePointerEvent("pointermove", container, { clientX: 180, clientY: 0 }); // right half of "5 of diamonds"
 
-      // The group retains its two card-slot footprint, keeping a wrapped hand
-      // the same height throughout the drag. Only its first slot is visibly
-      // marked as the logical drop target; the second is a transparent spacer.
+      // A single insertion gap marks the drop target regardless of how many
+      // cards are in the group - they land there together and the rest of
+      // the hand reflows to its natural wrap once dropped.
       expect(screen.getAllByTestId("hand-card-slot")).toHaveLength(2);
       expect(screen.getByTestId("drop-placeholder")).toBeInTheDocument();
-      expect(screen.getAllByTestId("drop-placeholder-spacer")).toHaveLength(1);
       expect(screen.getAllByTestId("dragging-card")).toHaveLength(2);
 
       firePointerEvent("pointerup", container);
@@ -809,30 +808,28 @@ describe("PlayerHand", () => {
       ]);
     });
 
-    it("packs a group across the same rows as its multi-slot placeholder footprint", () => {
-      const getComputedStyle = jest.spyOn(window, "getComputedStyle").mockReturnValue({
-        columnGap: "10px",
-        rowGap: "10px",
-      } as CSSStyleDeclaration);
+    it("condenses a multi-card drag into a single overlapping stack instead of spreading the cards out", () => {
       render(<PlayerHand hand={SIX_CARD_HAND} selectedIndices={[0, 1, 2, 3, 4]} />);
       const slots = screen.getAllByTestId("hand-card-slot");
       const container = screen.getByTestId("player-hand");
-      // 4 columns of 50px cards with 10px gaps: the fifth dragged card must
-      // occupy row two rather than remaining off-grid on the first row.
-      stubRect(container, { left: 0, top: 0, right: 230, bottom: 190 });
       stubRect(slots[0], { left: 0, top: 0, right: 50, bottom: 90 });
       mockElementFromPoint(slots[0]);
 
-      firePointerEvent("pointerdown", slots[0], { clientX: 0, clientY: 0 });
+      firePointerEvent("pointerdown", slots[0], { clientX: 0, clientY: 0 }); // grab the first card in the group
       firePointerEvent("pointermove", container, { clientX: 10, clientY: 0 });
 
       const overlays = screen.getAllByTestId("dragging-card");
       expect(overlays).toHaveLength(5);
-      expect(overlays[4].style.left).toBe("10px");
-      expect(overlays[4].style.top).toBe("100px");
+      // Each card sits a small, constant offset from the grabbed one (here,
+      // the first in the group) instead of spreading out at the hand grid's
+      // own spacing, and stacks front-to-back so the grabbed card is on top.
+      overlays.forEach((overlay, index) => {
+        expect(overlay.style.left).toBe(`${10 + index * 4}px`);
+        expect(overlay.style.top).toBe(`${index * 4}px`);
+      });
+      expect(Number(overlays[0].style.zIndex)).toBeGreaterThan(Number(overlays[4].style.zIndex));
 
       firePointerEvent("pointerup", container);
-      expect(getComputedStyle).toHaveBeenCalledWith(container);
     });
   });
 
@@ -1081,6 +1078,55 @@ describe("PlayerHand", () => {
       fireEvent.click(remainingCards[1], { shiftKey: true }); // shift-click "red joker"
 
       expect(remainingCards.map((c) => c.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
+    });
+  });
+
+  describe("deselect on outside click / Escape", () => {
+    it("clears the selection when clicking outside every card and control", () => {
+      render(<PlayerHand hand={HAND} />);
+      const cards = screen.getAllByTestId("card");
+      fireEvent.click(cards[0]);
+      expect(cards[0]).toHaveAttribute("aria-pressed", "true");
+
+      fireEvent.click(document.body);
+
+      expect(cards[0]).toHaveAttribute("aria-pressed", "false");
+    });
+
+    it("does not clear the selection when the click lands on a button elsewhere on the page", () => {
+      const outsideButton = document.createElement("button");
+      outsideButton.type = "button";
+      document.body.appendChild(outsideButton);
+      render(<PlayerHand hand={HAND} />);
+      const cards = screen.getAllByTestId("card");
+      fireEvent.click(cards[0]);
+
+      fireEvent.click(outsideButton);
+
+      expect(cards[0]).toHaveAttribute("aria-pressed", "true");
+      document.body.removeChild(outsideButton);
+    });
+
+    it("clears the selection when Escape is pressed", () => {
+      render(<PlayerHand hand={HAND} />);
+      const cards = screen.getAllByTestId("card");
+      fireEvent.click(cards[0]);
+      fireEvent.click(cards[1]);
+      expect(cards.map((c) => c.getAttribute("aria-pressed"))).toEqual(["true", "true", "false"]);
+
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(cards.map((c) => c.getAttribute("aria-pressed"))).toEqual(["false", "false", "false"]);
+    });
+
+    it("is a no-op on Escape or an outside click when nothing is selected", () => {
+      render(<PlayerHand hand={HAND} />);
+      const cards = screen.getAllByTestId("card");
+
+      fireEvent.keyDown(document, { key: "Escape" });
+      fireEvent.click(document.body);
+
+      expect(cards.map((c) => c.getAttribute("aria-pressed"))).toEqual(["false", "false", "false"]);
     });
   });
 

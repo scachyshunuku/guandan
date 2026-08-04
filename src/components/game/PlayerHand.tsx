@@ -99,11 +99,12 @@ const STORAGE_PREFIX = "guandan:hand-order:";
 // render logic below).
 const DRAG_ACTIVATION_THRESHOLD_PX = 4;
 
-// PlayerHand's `gap-1` is 0.25rem (4px at the browser's default root size).
-// The computed value is used when available so a customized root font size
-// still packs a floating multi-card group exactly like the hand grid; this is
-// only the safe fallback for layout-less test environments.
-const HAND_GAP_FALLBACK_PX = 4;
+// Multi-card drags are condensed into a single overlapping stack rather than
+// spread out at the hand grid's own spacing - this is the pixel offset (in
+// both axes) between each card in the stack and the one actually grabbed,
+// just enough to hint there's a group underneath without it reading as
+// several separate cards hovering at different positions.
+const DRAG_STACK_OFFSET_PX = 4;
 
 // On touch-first devices, empty-panel drags compete with normal page
 // scrolling and make a marquee far too imprecise to be useful. This checks
@@ -417,11 +418,13 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
   // Where the dragged group would land if dropped right now - an index into
   // the *other* (non-dragged) cards' visual order. Reorder is deferred
   // until drop (see endDrag): while dragging, this only ever affects where
-  // the group would land, never the underlying order. The visible dashed
-  // gap marks that one logical drop position, while invisible spacers reserve
-  // one grid slot per dragged card so the wrapped hand never changes height.
-  // Same stale-closure concern as dragDelta above, same fix (a
-  // mirrored ref for endDrag to read).
+  // the group would land, never the underlying order. A single dashed gap
+  // marks that one logical drop position, regardless of how many cards are
+  // in the group - they land there together and the rest of the hand
+  // reflows to its natural wrap once dropped, so nothing needs to reserve
+  // extra space for the group while just previewing the target. Same
+  // stale-closure concern as dragDelta above, same fix (a mirrored ref for
+  // endDrag to read).
   const [dropIndex, setDropIndexState] = useState<number | null>(null);
   const dropIndexRef = useRef<number | null>(null);
   function setDropIndex(next: number | null) {
@@ -489,6 +492,43 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
   // closed over at gesture start keeps hit-testing against the current
   // hand instead of one that may no longer match `hand[handIndex]`.
   const visualEntriesRef = useRef<{ key: string; handIndex: number }[]>([]);
+
+  // Mirrored into refs (rather than closed over) so the document-level
+  // listener below - registered once for the component's whole lifetime,
+  // not re-subscribed on every selection change - always reads the current
+  // selection/callback instead of whatever was current on mount.
+  const selectedRef = useRef(selected);
+  const applySelectionRef = useRef(applySelection);
+  useEffect(() => {
+    selectedRef.current = selected;
+    applySelectionRef.current = applySelection;
+  });
+
+  // Clicking/tapping anywhere outside the cards, or pressing Escape, clears
+  // the selection - Card renders every card as a real <button>, and every
+  // other actionable control on the page (Play/Pass/Give/etc.) is a
+  // <button> too, so excluding clicks inside any button also excludes
+  // clicking a card itself, without needing a separate check for that.
+  // "click" (not pointerdown) so a touch-scroll or drag that merely passes
+  // over some other part of the page doesn't clear a selection the player
+  // never meant to let go of - browsers only fire it for an actual tap/click.
+  useEffect(() => {
+    function handleDocumentClick(event: MouseEvent) {
+      if (selectedRef.current.length === 0) return;
+      if (event.target instanceof HTMLElement && event.target.closest("button")) return;
+      applySelectionRef.current([]);
+    }
+    function handleDocumentKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape" || selectedRef.current.length === 0) return;
+      applySelectionRef.current([]);
+    }
+    document.addEventListener("click", handleDocumentClick);
+    document.addEventListener("keydown", handleDocumentKeyDown);
+    return () => {
+      document.removeEventListener("click", handleDocumentClick);
+      document.removeEventListener("keydown", handleDocumentKeyDown);
+    };
+  }, []);
 
   function toggleCard(handIndex: number) {
     if (onSelectionChange) {
@@ -587,59 +627,33 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
       right: grabbedRect.right,
       bottom: grabbedRect.bottom,
     };
-    // A non-adjacent selection becomes a contiguous block when it is moved.
-    // Pack the floating cards to match the contiguous placeholder footprint
-    // instead of retaining their old, non-adjacent screen offsets - otherwise
-    // a floating card can sit on top of an unselected card that just reflowed
-    // into the selection's former gap.
-    const container = containerRef.current;
-    const computedStyle = container ? window.getComputedStyle(container) : null;
-    const configuredColumnGap = computedStyle
-      ? Number.parseFloat(computedStyle.columnGap)
-      : Number.NaN;
-    const configuredRowGap = computedStyle
-      ? Number.parseFloat(computedStyle.rowGap)
-      : Number.NaN;
-    const columnGap = Number.isFinite(configuredColumnGap)
-      ? configuredColumnGap
-      : HAND_GAP_FALLBACK_PX;
-    const rowGap = Number.isFinite(configuredRowGap)
-      ? configuredRowGap
-      : HAND_GAP_FALLBACK_PX;
-    const cardWidth = grabbedRect.right - grabbedRect.left;
-    const cardHeight = grabbedRect.bottom - grabbedRect.top;
     const visualKeys = visualEntries.map((entry) => entry.key);
     const grabbedVisualIndex = visualKeys.indexOf(key);
-    // The packed group begins wherever the grabbed card stays in its original
-    // grid slot. Counting only non-dragged cards before it supplies that
-    // insertion index among `remaining` cards.
+    // Where the contiguous group starts, translated into an index among the
+    // *other* cards - counting only non-dragged cards before the grabbed
+    // card's original position. Used both as the initial drop target (so a
+    // release with no further movement is a no-op) and to detect a no-op
+    // drop in endDrag.
     const startIndex = visualKeys
       .slice(0, grabbedVisualIndex)
       .filter((candidate) => !group.includes(candidate)).length;
-    const containerWidth = container?.getBoundingClientRect().width ?? 0;
-    const columns = cardWidth > 0
-      ? Math.max(1, Math.floor((containerWidth + columnGap) / (cardWidth + columnGap)))
-      : 1;
+
+    // Condenses the floating group into a single overlapping stack, offset
+    // from the grabbed card by a small constant per card (see
+    // DRAG_STACK_OFFSET_PX) rather than reproducing the group's original -
+    // or the hand grid's - spacing, which used to leave each card hovering
+    // at a visibly different position.
     const grabbedGroupIndex = group.indexOf(key);
-    const grabbedPackedIndex = startIndex + grabbedGroupIndex;
-    const grabbedRow = Math.floor(grabbedPackedIndex / columns);
-    const grabbedColumn = grabbedPackedIndex % columns;
     const offsets = new Map<string, Point>();
     for (const [groupIndex, groupKey] of group.entries()) {
-      const packedIndex = startIndex + groupIndex;
-      const packedRow = Math.floor(packedIndex / columns);
-      const packedColumn = packedIndex % columns;
+      const stackDelta = groupIndex - grabbedGroupIndex;
       offsets.set(groupKey, {
-        x: (packedColumn - grabbedColumn) * (cardWidth + columnGap),
-        y: (packedRow - grabbedRow) * (cardHeight + rowGap),
+        x: stackDelta * DRAG_STACK_OFFSET_PX,
+        y: stackDelta * DRAG_STACK_OFFSET_PX,
       });
     }
     dragOffsetsRef.current = offsets;
 
-    // Where the contiguous group starts, translated into an index among the
-    // *other* cards. It is chosen so the grabbed card keeps its original grid
-    // position as a non-adjacent selection is packed into one block, avoiding
-    // both a pointer jump and overlap with the reflowed unselected cards.
     dragStartIndexRef.current = startIndex;
     setDropIndex(startIndex);
 
@@ -1014,28 +1028,21 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
 
   type DisplayItem =
     | { type: "card"; key: string; handIndex: number }
-    | { type: "placeholder"; key: string; isVisible: boolean };
+    | { type: "placeholder"; key: string };
 
   let displayItems: DisplayItem[];
   if (isActivelyDragging && draggingKeys) {
     const remaining = visualEntries.filter((entry) => !draggingKeys.includes(entry.key));
     const clampedDropIndex = Math.max(0, Math.min(dropIndex ?? remaining.length, remaining.length));
     const asCards = remaining.map((entry) => ({ type: "card" as const, key: entry.key, handIndex: entry.handIndex }));
-    // The dragged group is rendered as a fixed overlay, so it would otherwise
-    // leave only one in-flow placeholder behind and shorten a wrapped hand
-    // whenever more than one card was selected. Keep one visible insertion
-    // gap and enough invisible same-sized spacers to retain every slot.
-    const draggedSlotCount = draggingKeys.filter((key) =>
-      visualEntries.some((entry) => entry.key === key),
-    ).length;
-    const placeholders = Array.from({ length: draggedSlotCount }, (_, index) => ({
-      type: "placeholder" as const,
-      key: `__drop-placeholder__${index}`,
-      isVisible: index === 0,
-    }));
+    // A single insertion gap, however many cards are in the group - they all
+    // land here together and the rest of the hand reflows to its natural
+    // wrap once dropped, so there's no extra space to reserve while just
+    // previewing the target.
+    const placeholder: DisplayItem = { type: "placeholder", key: "__drop-placeholder__" };
     displayItems = [
       ...asCards.slice(0, clampedDropIndex),
-      ...placeholders,
+      placeholder,
       ...asCards.slice(clampedDropIndex),
     ];
   } else {
@@ -1074,10 +1081,8 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
             <div
               key={item.key}
               aria-hidden="true"
-              data-testid={item.isVisible ? "drop-placeholder" : "drop-placeholder-spacer"}
-              className={item.isVisible
-                ? "h-20 w-14 rounded-xl border-2 border-dashed border-blue-300 sm:h-24 sm:w-16"
-                : "pointer-events-none h-20 w-14 opacity-0 sm:h-24 sm:w-16"}
+              data-testid="drop-placeholder"
+              className="h-20 w-14 rounded-xl border-2 border-dashed border-blue-300 sm:h-24 sm:w-16"
             />
           );
         }
@@ -1112,6 +1117,10 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
           if (!entry) return null;
           const offset = dragOffsetsRef.current.get(key) ?? { x: 0, y: 0 };
           const startRect = dragStartRectRef.current!;
+          // Stacks the grabbed card on top, with the rest descending in the
+          // same order as their DRAG_STACK_OFFSET_PX offset from it, so the
+          // stack reads front-to-back instead of overlapping in DOM order.
+          const stackDistance = Math.round(Math.abs(offset.x) / DRAG_STACK_OFFSET_PX);
           return (
             <div
               key={key}
@@ -1121,7 +1130,7 @@ const PlayerHand = forwardRef<PlayerHandHandle, PlayerHandProps>(function Player
                 position: "fixed",
                 left: startRect.left + dragDelta.x + offset.x,
                 top: startRect.top + dragDelta.y + offset.y,
-                zIndex: 50,
+                zIndex: 50 - stackDistance,
                 pointerEvents: "none",
                 transform: prefersReducedMotion ? undefined : "scale(1.06)",
               }}
